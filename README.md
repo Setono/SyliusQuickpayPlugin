@@ -11,4 +11,4 @@ Make sure the plugin is added to `bundles.php`
 
 ## Configuration
 
-Create a new Payment method
+Create a new Payment method of the type *Quickpay* and fill out the required form fields.
