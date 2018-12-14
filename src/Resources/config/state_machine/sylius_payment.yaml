@@ -4,5 +4,5 @@ winzou_state_machine:
       before:
         sylius_complete_payment:
           on: ["complete", "refund"]
-          do: ["@combine.payum_gateway.state_resolver", "onPostEvent"]
+          do: ["@setono.payum_gateway.state_resolver", "onPostEvent"]
           args: ["object.getOrder()"]

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\StateMachine;
 
 use Setono\SyliusQuickpayPlugin\Exception\UnsupportedPaymentTransitionException;
-use Combine\Payum\QuickPay\QuickPayGatewayFactory;
+use Setono\Payum\QuickPay\QuickPayGatewayFactory;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\Http\HttpException;
 use Payum\Core\Request\Capture;

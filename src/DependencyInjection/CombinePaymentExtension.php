@@ -12,7 +12,7 @@ use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 /**
  * @author jdk
  */
-class CombinePaymentExtension extends Extension
+class SetonoSyliusQuickpayExtension extends Extension
 {
     /**
      * {@inheritdoc}

@@ -1,2 +1,2 @@
 imports:
-  - { resource: "@CombinePaymentPlugin/Resources/config/state_machine/sylius_payment.yaml" }
+  - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/state_machine/sylius_payment.yaml" }

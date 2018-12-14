@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\EventListener;
 
-use Combine\Payum\QuickPay\QuickPayGatewayFactory;
+use Setono\Payum\QuickPay\QuickPayGatewayFactory;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;

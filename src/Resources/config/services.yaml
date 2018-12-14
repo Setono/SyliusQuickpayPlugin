@@ -1,20 +1,20 @@
 services:
-#    combine.payum_gateway_factory.object_change_listener:
+#    setono.payum_gateway_factory.object_change_listener:
 #        class: Setono\SyliusQuickpayPlugin\EventListener\PaymentEventListener
 #        tags:
 #            - { name: 'kernel.event_listener', method: 'onPostEvent', event: 'sylius.payment.post_complete' }
 #            - { name: 'kernel.event_listener', method: 'onPostEvent', event: 'sylius.payment.post_update' }
 
-    combine.payum_gateway.state_resolver:
+    setono.payum_gateway.state_resolver:
         class: Setono\SyliusQuickpayPlugin\EventListener\PaymentEventListener
 
-    combine.payum_gateway_form.quickpay_gateway_configuration:
+    setono.payum_gateway_form.quickpay_gateway_configuration:
         class: Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType
         tags:
-            - { name: 'sylius.gateway_configuration_type', type: 'quickpay', label: 'combine.payum_gateway_factory.quickpay' }
+            - { name: 'sylius.gateway_configuration_type', type: 'quickpay', label: 'setono.payum_gateway_factory.quickpay' }
 
-    combine.payum_gateway_factory.quickpay:
+    setono.payum_gateway_factory.quickpay:
         class: Payum\Core\Bridge\Symfony\Builder\GatewayFactoryBuilder
-        arguments: [Combine\Payum\QuickPay\QuickPayGatewayFactory]
+        arguments: [Setono\Payum\QuickPay\QuickPayGatewayFactory]
         tags:
             - { name: payum.gateway_factory_builder, factory: quickpay }
