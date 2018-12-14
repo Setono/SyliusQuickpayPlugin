@@ -1,0 +1,25 @@
+setono:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: Api nøgle
+                privatekey: Privat nøgle
+                merchant: Merchant id
+                agreement: Aftale id
+                order_prefix: Ordre prefiks
+                payment_methods: Betalingsmetoder
+                auto_capture: Auto capture
+                auto_capture_option:
+                    no: Nej
+                    yes: Ja
+            error:
+                apikey:
+                    not_blank: Api nøgle er påkrævet
+                privatekey:
+                    not_blank: Privat nøgle er påkrævet
+                merchant:
+                    not_blank: Merchant id er påkrævet
+                agreement:
+                    not_blank: Aftale id er påkrævet

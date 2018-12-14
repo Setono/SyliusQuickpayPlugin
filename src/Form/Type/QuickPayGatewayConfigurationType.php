@@ -23,52 +23,52 @@ class QuickPayGatewayConfigurationType extends AbstractType
     {
         $builder
             ->add('apikey', TextType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.apikey',
+                'label' => 'setono.form.gateway_configuration.quickpay.apikey',
                 'constraints' => [
                     new NotBlank([
-                        'message' => 'app.form.gateway_configuration.error.apikey.not_blank',
+                        'message' => 'setono.form.gateway_configuration.error.apikey.not_blank',
                         'groups' => 'sylius',
                     ]),
                 ],
             ])
             ->add('privatekey', TextType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.privatekey',
+                'label' => 'setono.form.gateway_configuration.quickpay.privatekey',
                 'constraints' => [
                     new NotBlank([
-                        'message' => 'app.form.gateway_configuration.error.privatekey.not_blank',
+                        'message' => 'setono.form.gateway_configuration.error.privatekey.not_blank',
                         'groups' => 'sylius',
                     ]),
                 ],
             ])
             ->add('merchant', TextType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.merchant',
+                'label' => 'setono.form.gateway_configuration.quickpay.merchant',
                 'constraints' => [
                     new NotBlank([
-                        'message' => 'app.form.gateway_configuration.error.merchant.not_blank',
+                        'message' => 'setono.form.gateway_configuration.error.merchant.not_blank',
                         'groups' => 'sylius',
                     ]),
                 ],
             ])
             ->add('agreement', TextType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.agreement',
+                'label' => 'setono.form.gateway_configuration.quickpay.agreement',
                 'constraints' => [
                     new NotBlank([
-                        'message' => 'app.form.gateway_configuration.error.agreement.not_blank',
+                        'message' => 'setono.form.gateway_configuration.error.agreement.not_blank',
                         'groups' => 'sylius',
                     ]),
                 ],
             ])
             ->add('order_prefix', TextType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.order_prefix',
+                'label' => 'setono.form.gateway_configuration.quickpay.order_prefix',
             ])
             ->add('payment_methods', TextType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.payment_methods',
+                'label' => 'setono.form.gateway_configuration.quickpay.payment_methods',
             ])
             ->add('auto_capture', ChoiceType::class, [
-                'label' => 'app.form.gateway_configuration.quickpay.auto_capture',
+                'label' => 'setono.form.gateway_configuration.quickpay.auto_capture',
                 'choices' => [
-                    'app.form.gateway_configuration.quickpay.auto_capture_option.no' => 0,
-                    'app.form.gateway_configuration.quickpay.auto_capture_option.yes' => 1,
+                    'setono.form.gateway_configuration.quickpay.auto_capture_option.no' => 0,
+                    'setono.form.gateway_configuration.quickpay.auto_capture_option.yes' => 1,
                 ],
             ])
             ->add('use_authorize', HiddenType::class, [

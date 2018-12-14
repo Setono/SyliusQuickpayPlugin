@@ -1,0 +1,25 @@
+setono:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: Api key
+                privatekey: Private key
+                merchant: Merchant id
+                agreement: Agreement id
+                order_prefix: Order prefix
+                payment_methods: Payment methods
+                auto_capture: Auto capture
+                auto_capture_option:
+                    no: No
+                    yes: Yes
+            error:
+                apikey:
+                    not_blank: Api key is required
+                privatekey:
+                    not_blank: Private key is required
+                merchant:
+                    not_blank: Merchant id is required
+                agreement:
+                    not_blank: Agreement id is required
