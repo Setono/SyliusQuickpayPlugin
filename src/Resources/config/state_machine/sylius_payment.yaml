@@ -1,8 +1,0 @@
-winzou_state_machine:
-  sylius_payment:
-    callbacks:
-      before:
-        sylius_complete_payment:
-          on: ["complete", "refund"]
-          do: ["@setono.payum_gateway.state_resolver", "onPostEvent"]
-          args: ["object.getOrder()"]

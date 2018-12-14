@@ -23,6 +23,5 @@ class SetonoSyliusQuickpayExtension extends Extension
     {
         $loader = new YamlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.yaml');
-        $loader->load('config.yaml');
     }
 }
