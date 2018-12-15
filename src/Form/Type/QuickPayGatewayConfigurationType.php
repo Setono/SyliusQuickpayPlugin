@@ -60,6 +60,7 @@ class QuickPayGatewayConfigurationType extends AbstractType
             ])
             ->add('order_prefix', TextType::class, [
                 'label' => 'setono.form.gateway_configuration.quickpay.order_prefix',
+                'required' => false,
             ])
             ->add('payment_methods', TextType::class, [
                 'label' => 'setono.form.gateway_configuration.quickpay.payment_methods',
