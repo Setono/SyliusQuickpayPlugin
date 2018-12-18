@@ -7,18 +7,18 @@ namespace Setono\SyliusQuickpayPlugin\StateMachine;
 use Setono\SyliusQuickpayPlugin\Exception\UnsupportedPaymentTransitionException;
 use Setono\Payum\QuickPay\QuickPayGatewayFactory;
 use Payum\Core\Bridge\Spl\ArrayObject;
-use Payum\Core\Exception\Http\HttpException;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;
-use Sylius\Component\Core\Model\OrderInterface;
-use Sylius\Component\Core\Model\Payment;
-use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\StateResolver\OrderPaymentStateResolver;
+use Sylius\Component\Core\OrderPaymentTransitions;
+use Sylius\Component\Order\Model\OrderInterface;
+use Sylius\Component\Order\StateResolver\StateResolverInterface;
+use Sylius\Component\Resource\Factory\FactoryInterface;
+use Webmozart\Assert\Assert;
 
 /**
  * @author jdk
  */
-final class Resolver implements OrderPaymentStateResolver
+final class Resolver implements StateResolverInterface
 {
     /**
      * @var FactoryInterface
@@ -36,7 +36,7 @@ final class Resolver implements OrderPaymentStateResolver
     /**
      * {@inheritdoc}
      */
-    public function resolve(BaseOrderInterface $order): void
+    public function resolve(OrderInterface $order): void
     {
         /** @var OrderInterface $order */
         Assert::isInstanceOf($order, OrderInterface::class);
