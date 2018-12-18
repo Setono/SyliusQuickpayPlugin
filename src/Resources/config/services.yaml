@@ -1,10 +1,4 @@
 services:
-#    setono.payum_gateway_factory.object_change_listener:
-#        class: Setono\SyliusQuickpayPlugin\EventListener\PaymentEventListener
-#        tags:
-#            - { name: 'kernel.event_listener', method: 'onPostEvent', event: 'sylius.payment.post_complete' }
-#            - { name: 'kernel.event_listener', method: 'onPostEvent', event: 'sylius.payment.post_update' }
-
     setono.payum_gateway.state_resolver:
         class: Setono\SyliusQuickpayPlugin\StateMachine\Resolver
         arguments: ['@sm.factory']
