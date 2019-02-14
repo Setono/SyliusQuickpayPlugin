@@ -1,7 +1,6 @@
 services:
     setono.payum_gateway.state_resolver:
         class: Setono\SyliusQuickpayPlugin\StateMachine\Resolver
-        arguments: ['@sm.factory']
         public: true
 
     setono.payum_gateway_form.quickpay_gateway_configuration:

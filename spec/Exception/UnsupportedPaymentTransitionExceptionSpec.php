@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace spec\Setono\SyliusPickupPointPlugin\Exception;
+namespace spec\Setono\SyliusQuickpayPlugin\Exception;
 
 use PhpSpec\ObjectBehavior;
 use Setono\SyliusQuickpayPlugin\Exception\UnsupportedPaymentTransitionException;

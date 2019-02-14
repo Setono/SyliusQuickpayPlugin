@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\StateMachine;
 
-use Setono\SyliusQuickpayPlugin\Exception\UnsupportedPaymentTransitionException;
-use Setono\Payum\QuickPay\QuickPayGatewayFactory;
+use Doctrine\Common\Collections\Collection;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;
+use Setono\Payum\QuickPay\QuickPayGatewayFactory;
+use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
+use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentTransitions;
-use Sylius\Component\Order\Model\OrderInterface;
+use Sylius\Component\Order\Model\OrderInterface as BaseOrderInterface;
 use Sylius\Component\Order\StateResolver\StateResolverInterface;
-use SM\Factory\FactoryInterface;
 use Webmozart\Assert\Assert;
-use Doctrine\Common\Collections\Collection;
 
 /**
  * @author jdk
@@ -23,30 +23,19 @@ use Doctrine\Common\Collections\Collection;
 final class Resolver implements StateResolverInterface
 {
     /**
-     * @var FactoryInterface
-     */
-    private $stateMachineFactory;
-
-    /**
-     * @param FactoryInterface $stateMachineFactory
-     */
-    public function __construct(FactoryInterface $stateMachineFactory)
-    {
-        $this->stateMachineFactory = $stateMachineFactory;
-    }
-
-    /**
      * {@inheritdoc}
      */
-    public function resolve(OrderInterface $order): void
+    public function resolve(BaseOrderInterface $order): void
     {
         /** @var OrderInterface $order */
         Assert::isInstanceOf($order, OrderInterface::class);
 
-        $stateMachine = $this->stateMachineFactory->get($order, OrderPaymentTransitions::GRAPH);
         $targetTransition = $this->getTargetTransition($order);
 
         $lastPayment = $order->getLastPayment();
+        if (null === $lastPayment) {
+            return;
+        }
 
         // Check if it's a QP payment
         $details = $lastPayment->getDetails();
@@ -54,52 +43,66 @@ final class Resolver implements StateResolverInterface
             return;
         }
 
-        $gatewayConfig = $lastPayment->getMethod()->getGatewayConfig();
+        /** @var PaymentMethodInterface $paymentMethod */
+        $paymentMethod = $lastPayment->getMethod();
+        if (null === $paymentMethod) {
+            return;
+        }
+
+        $gatewayConfig = $paymentMethod->getGatewayConfig();
+        if (null === $gatewayConfig) {
+            return;
+        }
+
         $factory = new QuickPayGatewayFactory();
         $gateway = $factory->create($gatewayConfig->getConfig());
 
         $model = new ArrayObject($details);
 
-        list($totalPayed) = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_COMPLETED);
+        [$totalPayed] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_COMPLETED);
         switch ($targetTransition) {
             case OrderPaymentTransitions::TRANSITION_PARTIALLY_PAY:
-                $model['amount'] = $model['amount'] - $totalPayed;
+                $model['amount'] -= $totalPayed;
                 if ($model['amount'] <= 0) {
                     return;
                 }
+                // no break
             case OrderPaymentTransitions::TRANSITION_PAY:
                 $gateway->execute(new Capture($model));
+
                 break;
             case OrderPaymentTransitions::TRANSITION_PARTIALLY_REFUND:
-                list($totalRefunded) = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_REFUNDED);
+                [$totalRefunded] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_REFUNDED);
                 $model['amount'] = $totalPayed - $totalRefunded;
                 if ($model['amount'] <= 0) {
                     return;
                 }
+                // no break
             case OrderPaymentTransitions::TRANSITION_REFUND:
                 $gateway->execute(new Refund($model));
+
                 break;
         }
     }
 
     /**
-     * @param OrderInterface $order
+     * @param OrderInterface|OrderInterface $order
      *
-     * @return null|string
+     * @return string|null
      */
     private function getTargetTransition(OrderInterface $order): ?string
     {
-        list($refundedPaymentTotal, $refundedPayments) = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_REFUNDED);
+        [$refundedPaymentTotal, $refundedPayments] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_REFUNDED);
 
         if (0 < $refundedPayments->count() && $refundedPaymentTotal >= $order->getTotal()) {
             return OrderPaymentTransitions::TRANSITION_REFUND;
         }
 
-        if ($refundedPaymentTotal < $order->getTotal() && 0 < $refundedPaymentTotal) {
+        if (0 < $refundedPaymentTotal && $refundedPaymentTotal < $order->getTotal()) {
             return OrderPaymentTransitions::TRANSITION_PARTIALLY_REFUND;
         }
 
-        list($completedPaymentTotal, $completedPayments) = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_COMPLETED);
+        [$completedPaymentTotal, $completedPayments] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_COMPLETED);
 
         if (
             (0 < $completedPayments->count() && $completedPaymentTotal >= $order->getTotal()) ||
@@ -108,23 +111,22 @@ final class Resolver implements StateResolverInterface
             return OrderPaymentTransitions::TRANSITION_PAY;
         }
 
-        if ($completedPaymentTotal < $order->getTotal() && 0 < $completedPaymentTotal) {
+        if (0 < $completedPaymentTotal && $completedPaymentTotal < $order->getTotal()) {
             return OrderPaymentTransitions::TRANSITION_PARTIALLY_PAY;
         }
 
-        list($authorizedPaymentTotal, $authorizedPayments) = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_AUTHORIZED);
+        [$authorizedPaymentTotal, $authorizedPayments] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_AUTHORIZED);
 
         if (0 < $authorizedPayments->count() && $authorizedPaymentTotal >= $order->getTotal()) {
             return OrderPaymentTransitions::TRANSITION_AUTHORIZE;
         }
 
-        if ($authorizedPaymentTotal < $order->getTotal() && 0 < $authorizedPaymentTotal) {
+        if (0 < $authorizedPaymentTotal && $authorizedPaymentTotal < $order->getTotal()) {
             return OrderPaymentTransitions::TRANSITION_PARTIALLY_AUTHORIZE;
         }
 
         return null;
     }
-
 
     /**
      * @param OrderInterface $order
@@ -141,17 +143,19 @@ final class Resolver implements StateResolverInterface
 
     /**
      * @param OrderInterface $order
+     * @param string             $state
      *
      * @return array
      */
     private function getPaymentTotalWithState(OrderInterface $order, string $state): array
     {
-        $paymentToal = 0;
+        $paymentTotal = 0;
         $payments = $this->getPaymentsWithState($order, $state);
 
         foreach ($payments as $payment) {
-            $paymentToal += $payment->getAmount();
+            $paymentTotal += $payment->getAmount();
         }
-        return [$paymentToal, $payments];
+
+        return [$paymentTotal, $payments];
     }
 }
