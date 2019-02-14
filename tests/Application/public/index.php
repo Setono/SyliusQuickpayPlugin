@@ -1,6 +1,6 @@
 <?php
 
-use Tests\Setono\SyliusTermsPlugin\Application\Kernel;
+use Tests\Setono\SyliusQuickpayPlugin\Application\Kernel;
 use Symfony\Component\Debug\Debug;
 use Symfony\Component\HttpFoundation\Request;
 
