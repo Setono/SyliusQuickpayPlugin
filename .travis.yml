@@ -31,7 +31,6 @@ install:
     - (cd tests/Application && yarn install)
 
 before_script:
-    - (cd tests/Application && chmod -x bin/console)
     - (cd tests/Application && php bin/console doctrine:database:create -vvv)
     - (cd tests/Application && php bin/console doctrine:schema:create -vvv)
     - (cd tests/Application && php bin/console assets:install public -vvv)
