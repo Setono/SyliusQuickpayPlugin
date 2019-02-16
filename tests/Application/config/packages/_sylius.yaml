@@ -5,6 +5,7 @@ imports:
     - { resource: "@SyliusAdminApiBundle/Resources/config/app/config.yml" }
 
     - { resource: "@SyliusShopBundle/Resources/config/app/config.yml" }
+
     - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/config.yaml" }
 
 parameters:
