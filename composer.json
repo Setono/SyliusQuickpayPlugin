@@ -42,6 +42,11 @@
             "Setono\\SyliusQuickpayPlugin\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\Setono\\SyliusQuickpayPlugin\\": "tests/Application/src/"
+        }
+    },
     "extra": {
         "branch-alias": {
             "dev-master": "1.0-dev"
