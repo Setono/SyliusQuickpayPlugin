@@ -44,7 +44,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Tests\Setono\\SyliusQuickpayPlugin\\": "tests/Application/src/"
+            "Tests\\Setono\\SyliusQuickpayPlugin\\": "tests/Application/src/"
         }
     },
     "extra": {
