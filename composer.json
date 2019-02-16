@@ -39,7 +39,7 @@
     "prefer-stable": true,
     "autoload": {
         "psr-4": {
-            "Setono\\SyliusQuickpayPlugin\\": "src/"
+            "Setono\\SyliusQuickpayPlugin\\": "src/",
             "Tests\\Setono\\SyliusQuickpayPlugin\\": "tests/"
         }
     },
