@@ -34,8 +34,7 @@ class ResolverSpec extends ObjectBehavior
     public function will_not_execute_if_payment_has_quickpay_id(
         OrderInterface $order,
         PaymentInterface $payment
-    ): void
-    {
+    ): void {
         $payment->getDetails()->willReturn([]);
         $order->getLastPayment()->willReturn($payment);
         $this->resolve($order);
@@ -44,8 +43,7 @@ class ResolverSpec extends ObjectBehavior
     public function will_not_execute_if_payment_has_no_payment_method(
         OrderInterface $order,
         PaymentInterface $payment
-    ): void
-    {
+    ): void {
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1]);
         $payment->getMethod()->willReturn(null);
         $order->getLastPayment()->willReturn($payment);
@@ -56,8 +54,7 @@ class ResolverSpec extends ObjectBehavior
         OrderInterface $order,
         PaymentInterface $payment,
         PaymentMethodInterface $paymentMethod
-    ): void
-    {
+    ): void {
         $paymentMethod->getGatewayConfig()->willReturn(null);
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1]);
         $payment->getMethod()->willReturn($paymentMethod);
@@ -70,8 +67,7 @@ class ResolverSpec extends ObjectBehavior
         PaymentInterface $payment,
         PaymentMethodInterface $paymentMethod,
         GatewayConfigInterface $gatewayConfig
-    ): void
-    {
+    ): void {
         $gatewayConfig->getConfig()->willReturn([]);
         $paymentMethod->getGatewayConfig()->willReturn($gatewayConfig);
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1, 'amount' => 50]);
@@ -87,8 +83,7 @@ class ResolverSpec extends ObjectBehavior
         PaymentInterface $payment,
         PaymentMethodInterface $paymentMethod,
         GatewayConfigInterface $gatewayConfig
-    ): void
-    {
+    ): void {
         $gatewayConfig->getConfig()->willReturn([]);
         $paymentMethod->getGatewayConfig()->willReturn($gatewayConfig);
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1, 'amount' => 50]);
@@ -104,8 +99,7 @@ class ResolverSpec extends ObjectBehavior
         PaymentInterface $payment,
         PaymentMethodInterface $paymentMethod,
         GatewayConfigInterface $gatewayConfig
-    ): void
-    {
+    ): void {
         $gatewayConfig->getConfig()->willReturn([]);
         $paymentMethod->getGatewayConfig()->willReturn($gatewayConfig);
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1, 'amount' => 50]);
@@ -121,8 +115,7 @@ class ResolverSpec extends ObjectBehavior
         PaymentInterface $payment,
         PaymentMethodInterface $paymentMethod,
         GatewayConfigInterface $gatewayConfig
-    ): void
-    {
+    ): void {
         $gatewayConfig->getConfig()->willReturn([]);
         $paymentMethod->getGatewayConfig()->willReturn($gatewayConfig);
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1, 'amount' => 50]);
@@ -138,8 +131,7 @@ class ResolverSpec extends ObjectBehavior
         PaymentInterface $payment,
         PaymentMethodInterface $paymentMethod,
         GatewayConfigInterface $gatewayConfig
-    ): void
-    {
+    ): void {
         $gatewayConfig->getConfig()->willReturn([]);
         $paymentMethod->getGatewayConfig()->willReturn($gatewayConfig);
         $payment->getDetails()->willReturn(['quickpayPaymentId' => 1, 'amount' => 50]);
