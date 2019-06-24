@@ -34,9 +34,9 @@ sylius_fixtures:
                 payment_method:
                     options:
                         custom:
-                            eu_quickpay:
-                                code: "eu_quickpay"
-                                name: "QuickPay EU"
+                            global_quickpay:
+                                code: "global_quickpay"
+                                name: "QuickPay Global"
                                 instructions: "Pay via QuickPay with credit card or PayPal"
                                 gatewayName: quickpay
                                 gatewayFactory: quickpay
@@ -57,6 +57,7 @@ sylius_fixtures:
                                         
                                     use_authorize: 1
                                 channels:
+                                    - "US_WEB"
                                     - "EU_WEB"
                                 enabled: true
                             dk_quickpay:
