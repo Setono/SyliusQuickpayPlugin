@@ -39,6 +39,14 @@ This plugin adds Quickpay as a payment option to Sylius.
         resource: "@PayumBundle/Resources/config/routing/all.xml"
     ```
 
+### 5. (Optional) Import fixtures to play in your app
+
+````yaml
+# config/packages/_sylius.yaml
+imports:
+    - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/fixtures.yaml" }    
+````
+
 ## Configuration
 
 Create a new Payment method of the type *Quickpay* and fill out the required form fields.
