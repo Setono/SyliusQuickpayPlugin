@@ -1,0 +1,2 @@
+payum_all:
+    resource: "@PayumBundle/Resources/config/routing/all.xml"
