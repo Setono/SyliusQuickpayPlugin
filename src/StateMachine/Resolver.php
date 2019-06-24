@@ -43,7 +43,7 @@ final class Resolver implements StateResolverInterface
             return;
         }
 
-        /** @var PaymentMethodInterface $paymentMethod */
+        /** @var PaymentMethodInterface|null $paymentMethod */
         $paymentMethod = $lastPayment->getMethod();
         if (null === $paymentMethod) {
             return;
