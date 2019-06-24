@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<container xmlns="http://symfony.com/schema/dic/services"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
+    <services>
+
+        <service id="setono_sylius_quickpay.state_machine_resolver"
+                 class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver">
+        </service>
+
+        <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
+                 class="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">
+
+            <tag name="sylius.gateway_configuration_type"
+                 type="quickpay"
+                 label="setono.payum_gateway_factory.quickpay" />
+        </service>
+
+        <service id="setono_sylius_quickpay.payum.gateway_factory_builder"
+                 class="Payum\Core\Bridge\Symfony\Builder\GatewayFactoryBuilder">
+
+            <argument>Setono\Payum\QuickPay\QuickPayGatewayFactory</argument>
+
+            <tag name="payum.gateway_factory_builder"
+                 factory="quickpay" />
+        </service>
+
+    </services>
+</container>
