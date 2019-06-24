@@ -2,7 +2,14 @@
     "name": "setono/sylius-quickpay-plugin",
     "type": "sylius-plugin",
     "description": "Quickpay Payment plugin for Sylius",
-    "keywords": ["sylius", "quickpay", "payum", "payment"],
+    "keywords": [
+        "sylius",
+        "quickpay",
+        "payum",
+        "payment",
+        "plugin",
+        "setono"
+    ],
     "license": "MIT",
     "require": {
         "php": "^7.2",
@@ -44,7 +51,9 @@
         }
     },
     "autoload-dev": {
-        "classmap": ["tests/Application/Kernel.php"]
+        "classmap": [
+            "tests/Application/Kernel.php"
+        ]
     },
     "extra": {
         "branch-alias": {
@@ -55,59 +64,60 @@
         "sort-packages": true
     },
     "scripts": {
-        "try": [
-            "@ensure-vendors-installed",
-            "@assets",
-            "@fixtures",
-            "@run"
+        "all": [
+            "@checks",
+            "@tests"
+        ],
+        "analyse": [
+            "@ensure-test-container-exists",
+            "./vendor/bin/phpstan analyse -c phpstan.neon -l max src"
         ],
         "assets": [
             "@ensure-assets-installed",
             "@ensure-assets-compiled"
         ],
+        "behat": [
+            "SYMFONY_ENV=test composer ensure-database-created",
+            "SYMFONY_ENV=test composer ensure-schema-updated",
+            "SYMFONY_ENV=test composer ensure-env-copied",
+            "php -d memory_limit=-1 ./vendor/bin/behat --no-interaction --format=progress"
+        ],
+        "check-style": "./vendor/bin/ecs check src/ spec/",
+        "checks": [
+            "composer validate --strict",
+            "composer normalize --dry-run",
+            "@check-style",
+            "@analyse"
+        ],
+        "ensure-assets-compiled": "[[ -d tests/Application/public/assets ]] || (cd tests/Application && yarn build && composer ensure-env-copied && bin/console assets:install --symlink --relative public -e ${SYMFONY_ENV:-'dev'})",
+        "ensure-assets-installed": "[[ -d tests/Application/node_modules ]] || (cd tests/Application && yarn install)",
+        "ensure-database-created": "composer ensure-env-copied && (cd tests/Application && bin/console doctrine:database:create --if-not-exists -e ${SYMFONY_ENV:-'dev'})",
+        "ensure-env-copied": "([[ ${SYMFONY_ENV:-'dev'} == 'dev' ]] && composer ensure-env-dev-copied) || ([[ ${SYMFONY_ENV:-'dev'} == 'test' ]] && composer ensure-env-test-copied) || echo 'Unknown environment ${SYMFONY_ENV}'",
+        "ensure-env-dev-copied": "(cd tests/Application && ([[ -f .env.dev.local ]] || cp .env  .env.dev.local))",
+        "ensure-env-test-copied": "(cd tests/Application && ([[ -f .env.test.local ]] || cp .env.test .env.test.local))",
+        "ensure-schema-updated": "composer ensure-env-copied && (cd tests/Application && bin/console doctrine:schema:update --force -e ${SYMFONY_ENV:-'dev'})",
+        "ensure-test-container-exists": "[[ -f tests/Application/var/cache/test/ApplicationTests_Setono_SyliusQuickpayPlugin_Application_KernelTestDebugContainer.xml ]] || (cd tests/Application && php -d memory_limit=-1 bin/console cache:clear --env=test)",
+        "ensure-vendors-installed": "[[ -f vendor/autoload.php ]] || php -d memory_limit=-1 /usr/local/bin/composer install",
+        "fix-style": "./vendor/bin/ecs check src/ spec/ --fix",
         "fixtures": [
             "@ensure-database-created",
             "@ensure-schema-updated",
             "(cd tests/Application && bin/console sylius:fixtures:load --no-interaction -e ${SYMFONY_ENV:-'dev'})"
         ],
+        "phpspec": "./vendor/bin/phpspec run -vvv",
         "run": [
             "@ensure-env-copied",
             "(cd tests/Application && bin/console server:run -d public -e ${SYMFONY_ENV:-'dev'})"
         ],
-        "all": [
-            "@checks",
-            "@tests"
-        ],
-        "checks": [
-            "@check-style",
-            "@analyse"
-        ],
         "tests": [
             "@phpspec",
-            "@phpunit"
+            "@behat"
         ],
-        "phpspec": "./vendor/bin/phpspec run -vvv",
-        "phpunit": "./vendor/bin/phpunit",
-        "behat": [
-            "SYMFONY_ENV=test composer ensure-database-created",
-            "SYMFONY_ENV=test composer ensure-schema-updated",
-            "SYMFONY_ENV=test composer ensure-env-copied",
-            "./vendor/bin/behat --tags=\"~@javascript\" --no-interaction --format=progress"
-        ],
-        "check-style": "./vendor/bin/ecs check src",
-        "fix-style": "./vendor/bin/ecs check src",
-        "analyse": [
-            "@ensure-test-container-exists",
-            "./vendor/bin/phpstan.phar analyse -c phpstan.neon -l max src"
-        ],
-        "ensure-vendors-installed": "[[ -f vendor/autoload.php ]] || php -d memory_limit=-1 /usr/local/bin/composer install",
-        "ensure-assets-installed": "[[ -d tests/Application/node_modules ]] || (cd tests/Application && yarn install)",
-        "ensure-assets-compiled": "[[ -d tests/Application/public/assets ]] || (cd tests/Application && yarn build && composer ensure-env-copied && bin/console assets:install public -e ${SYMFONY_ENV:-'dev'})",
-        "ensure-database-created": "composer ensure-env-copied && (cd tests/Application && bin/console doctrine:database:create --if-not-exists -e ${SYMFONY_ENV:-'dev'})",
-        "ensure-schema-updated": "composer ensure-env-copied && (cd tests/Application && bin/console doctrine:schema:update --force -e ${SYMFONY_ENV:-'dev'})",
-        "ensure-test-container-exists": "[[ -f tests/Application/var/cache/test/ApplicationTests_Setono_SyliusQuickpayPlugin_Application_KernelTestDebugContainer.xml ]] || (cd tests/Application && php -d memory_limit=-1 bin/console cache:clear --env=test)",
-        "ensure-env-copied": "([[ ${SYMFONY_ENV:-'dev'} == 'dev' ]] && composer ensure-env-dev-copied) || ([[ ${SYMFONY_ENV:-'dev'} == 'test' ]] && composer ensure-env-test-copied) || echo 'Unknown environment ${SYMFONY_ENV}'",
-        "ensure-env-test-copied": "(cd tests/Application && ([[ -f .env.test.local ]] || cp .env.test .env.test.local))",
-        "ensure-env-dev-copied":  "(cd tests/Application && ([[ -f .env.dev.local ]] || cp .env  .env.dev.local))"
+        "try": [
+            "@ensure-vendors-installed",
+            "@assets",
+            "@fixtures",
+            "@run"
+        ]
     }
 }

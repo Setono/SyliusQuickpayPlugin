@@ -1,16 +1,13 @@
 includes:
     - vendor/phpstan/phpstan-doctrine/extension.neon
-    - vendor/phpstan/phpstan-symfony/extension.neon
     - vendor/phpstan/phpstan-webmozart-assert/extension.neon
 
 parameters:
-    reportUnmatchedIgnoredErrors: true
-
-    symfony:
-        container_xml_path: tests/Application/var/cache/test/ApplicationTests_Setono_SyliusQuickpayPlugin_Application_KernelTestDebugContainer.xml
+    reportUnmatchedIgnoredErrors: false
 
     excludes_analyse:
         # Makes PHPStan crash
+        - 'src/DependencyInjection/Configuration.php'
 
         # Test dependencies
         - 'tests/Application/app/**.php'
