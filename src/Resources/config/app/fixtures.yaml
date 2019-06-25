@@ -53,7 +53,7 @@ sylius_fixtures:
                                     # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
                                     # in the payment link request, to capture the payment automatically after the authorize.
-                                    auto_capture: 1
+                                    auto_capture: 0
                                         
                                     use_authorize: 1
                                 channels:
@@ -79,7 +79,7 @@ sylius_fixtures:
                                     # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
                                     # in the payment link request, to capture the payment automatically after the authorize.
-                                    auto_capture: 1
+                                    auto_capture: 0
                                         
                                     use_authorize: 1
                                 channels:
