@@ -51,6 +51,16 @@ Run `composer tests`
 
 - Use credit card numbers from https://learn.quickpay.net/tech-talk/appendixes/test/#test-data
 
+## Troubleshooting
+
+- `{"message":"Not authorized: Not authorized to PUT /payments/:id/link","errors":null,"error_code":null}`
+  at `/payment/authorize/...`
+  
+  You should check at `https://manage.quickpay.net/account/{QUICKPAY_MERCHANT_ID}/settings/users`
+  that `System users` > `API User` > `User permissions` > `Create or update payment link` have `PUT`
+  checkbox checked. Also check `QUICKPAY_API_KEY` and `QUICKPAY_AGREEMENT_ID` is filled with `API User`'s 
+  api key amd agreement id rather than `Payment Window`'s.
+
 [ico-version]: https://img.shields.io/packagist/v/setono/sylius-quickpay-plugin.svg?style=flat-square
 [ico-license]: https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square
 [ico-travis]: https://travis-ci.com/Setono/SyliusQuickpayPlugin.svg?branch=master
