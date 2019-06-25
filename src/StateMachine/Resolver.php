@@ -17,9 +17,6 @@ use Sylius\Component\Order\Model\OrderInterface as BaseOrderInterface;
 use Sylius\Component\Order\StateResolver\StateResolverInterface;
 use Webmozart\Assert\Assert;
 
-/**
- * @author jdk
- */
 final class Resolver implements StateResolverInterface
 {
     /**
