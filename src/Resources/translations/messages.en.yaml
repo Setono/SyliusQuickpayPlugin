@@ -1,4 +1,4 @@
-setono:
+setono_sylius_quickpay:
     payum_gateway_factory:
         quickpay: Quickpay
     form:

@@ -1,0 +1,98 @@
+sylius_fixtures:
+    suites:
+        default:
+            fixtures:
+                
+                currency:
+                    options:
+                        currencies: 
+                            - "EUR"
+                            - "DKK"
+
+                channel:
+                    options:
+                        custom:
+                            eu_web_store:
+                                name: "EU Web Store"
+                                code: "EU_WEB"
+                                locales:
+                                    - "%locale%"
+                                currencies:
+                                    - "EUR"
+                                enabled: true
+                                hostname: "localhost"
+                            dk_web_store:
+                                name: "DK Web Store"
+                                code: "DK_WEB"
+                                locales:
+                                    - "%locale%"
+                                currencies:
+                                    - "DKK"
+                                enabled: true
+                                hostname: "localhost"
+
+                payment_method:
+                    options:
+                        custom:
+                            global_quickpay:
+                                code: "global_quickpay"
+                                name: "QuickPay Global"
+                                instructions: "Pay via QuickPay with credit card or PayPal"
+                                gatewayName: quickpay
+                                gatewayFactory: quickpay
+                                gatewayConfig:
+                                    apikey: '%env(resolve:QUICKPAY_API_KEY)%'
+                                    privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
+                                    merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
+                                    agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
+                                    order_prefix: qp_
+                                    
+                                    # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
+                                    payment_methods: creditcard, paypal, !viabill
+                                    
+                                    # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
+                                    # If you are selling a digital products, you can include "auto_capture":"true" 
+                                    # in the payment link request, to capture the payment automatically after the authorize.
+                                    auto_capture: 0
+                                        
+                                    use_authorize: 1
+                                channels:
+                                    - "US_WEB"
+                                    - "EU_WEB"
+                                enabled: true
+                            dk_quickpay:
+                                code: "dk_quickpay"
+                                name: "QuickPay DK"
+                                instructions: "Pay via QuickPay with credit card, PayPal or ViaBill"
+                                gatewayName: quickpay
+                                gatewayFactory: quickpay
+                                gatewayConfig:
+                                    apikey: '%env(resolve:QUICKPAY_API_KEY)%'
+                                    privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
+                                    merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
+                                    agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
+                                    order_prefix: qp_
+                                    
+                                    # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
+                                    payment_methods: creditcard, paypal, viabill
+                                    
+                                    # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
+                                    # If you are selling a digital products, you can include "auto_capture":"true" 
+                                    # in the payment link request, to capture the payment automatically after the authorize.
+                                    auto_capture: 0
+                                        
+                                    use_authorize: 1
+                                channels:
+                                    - "DK_WEB"
+                                enabled: true
+
+                shipping_method:
+                    options:
+                        custom:
+                            eu_courier:
+                                code: "eu_courier"
+                                name: "EU courier"
+                                enabled: true
+                                channels:
+                                    - "EU_WEB"
+                                    - "DK_WEB"
