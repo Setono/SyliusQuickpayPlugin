@@ -64,6 +64,7 @@ class QuickPayGatewayConfigurationType extends AbstractType
             ])
             ->add('payment_methods', TextType::class, [
                 'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.payment_methods',
+                'help' => 'https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods',
             ])
             ->add('auto_capture', ChoiceType::class, [
                 'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture',
@@ -71,6 +72,7 @@ class QuickPayGatewayConfigurationType extends AbstractType
                     'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture_option.no' => 0,
                     'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture_option.yes' => 1,
                 ],
+                'help' => 'https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments',
             ])
             ->add('use_authorize', HiddenType::class, [
                 'data' => 1,
