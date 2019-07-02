@@ -11,23 +11,24 @@ This plugin adds Quickpay as a payment option to Sylius.
 
 ### 1. Install plugin
  
-    ```bash
-    composer require setono/sylius-quickpay-plugin
-    ```
+```bash
+$ composer require setono/sylius-quickpay-plugin
+```
 
 ### 2. Make sure the plugin is added to `bundles.php`:
 
-    ```php
-    # config/bundles.php
-    Setono\SyliusQuickpayPlugin\SetonoSyliusQuickpayPlugin::class => ['all' => true],
-    ```
+```php
+# config/bundles.php
+Setono\SyliusQuickpayPlugin\SetonoSyliusQuickpayPlugin::class => ['all' => true],
+```
 
 ### 3. Import the config file
 
-    ```yaml
-    # config/packages/_sylius.yaml
+```yaml
+# config/packages/_sylius.yaml
+imports:
     - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/config.yaml" }
-    ```
+```
 
 ### 4. (Optional) Import fixtures to play in your app
 
