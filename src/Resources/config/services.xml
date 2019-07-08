@@ -6,7 +6,8 @@
     <services>
 
         <service id="setono_sylius_quickpay.state_machine_resolver"
-                 class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver">
+                 class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver"
+                 public="true">
         </service>
 
         <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
