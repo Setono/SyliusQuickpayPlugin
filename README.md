@@ -54,13 +54,27 @@ Run `composer tests`
 
 ## Troubleshooting
 
-- `{"message":"Not authorized: Not authorized to PUT /payments/:id/link","errors":null,"error_code":null}`
-  at `/payment/authorize/...`
+- `Not authorized: Not authorized to PUT /payments/:id/link`
+  at `/payment/authorize/...` url:
   
   You should check at `https://manage.quickpay.net/account/{QUICKPAY_MERCHANT_ID}/settings/users`
   that `System users` > `API User` > `User permissions` > `Create or update payment link` have `PUT`
   checkbox checked. Also check `QUICKPAY_API_KEY` and `QUICKPAY_AGREEMENT_ID` is filled with `API User`'s 
-  api key amd agreement id rather than `Payment Window`'s.
+  api key and agreement id rather than `Payment Window`'s.
+
+- `Validation error: order_id already exists on another payment`
+  
+  Make sure you changed your `QUICKPAY_ORDER_PREFIX` at `.env.*` to some unique string
+  like `qp_<projectname>_<date>_` (when `date` should be updated to actual 
+  every time you recreate dev database) whenever you:
+  
+  - Recreating your database on dev environment and your order IDs become same as they was before
+  - Use `SetonoSyliusQuickpayPlugin` at two different projects but with same QuickPay 
+    (developer) account credentials
+
+- `Validation error: order_id must have length between 4 and 20`
+
+  You should cut your `QUICKPAY_ORDER_PREFIX` to 11 chars or less.
 
 [ico-version]: https://img.shields.io/packagist/v/setono/sylius-quickpay-plugin.svg?style=flat-square
 [ico-license]: https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square
