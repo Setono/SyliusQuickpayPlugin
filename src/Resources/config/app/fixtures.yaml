@@ -62,7 +62,7 @@ sylius_fixtures:
                                     # in the payment link request, to capture the payment automatically after the authorize.
                                     auto_capture: 0
 
-                                    use_authorize: 1
+                                    use_authorize: true
                                 channels:
                                     - "FASHION_WEB"
                                     - "EU_WEB"
@@ -88,7 +88,7 @@ sylius_fixtures:
                                     # in the payment link request, to capture the payment automatically after the authorize.
                                     auto_capture: 0
 
-                                    use_authorize: 1
+                                    use_authorize: true
                                 channels:
                                     - "DK_WEB"
                                 enabled: true
