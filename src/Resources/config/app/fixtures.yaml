@@ -2,7 +2,7 @@ sylius_fixtures:
     suites:
         default:
             fixtures:
-                
+
                 currency:
                     options:
                         currencies: 
@@ -31,6 +31,13 @@ sylius_fixtures:
                                 enabled: true
                                 hostname: "localhost"
 
+                # Temporary fix for https://github.com/Sylius/Sylius/issues/10719
+                # @todo Remove this lines once issue will be fixed
+                order:
+                    options:
+                        amount: 20
+                        channel: FASHION_WEB
+
                 payment_method:
                     options:
                         custom:
@@ -46,18 +53,18 @@ sylius_fixtures:
                                     merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
-                                    
+
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
                                     payment_methods: creditcard, paypal, !viabill
-                                    
+
                                     # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
                                     # in the payment link request, to capture the payment automatically after the authorize.
                                     auto_capture: 0
-                                        
-                                    use_authorize: 1
+
+                                    use_authorize: true
                                 channels:
-                                    - "US_WEB"
+                                    - "FASHION_WEB"
                                     - "EU_WEB"
                                 enabled: true
                             dk_quickpay:
@@ -72,16 +79,16 @@ sylius_fixtures:
                                     merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
-                                    
+
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
                                     payment_methods: creditcard, paypal, viabill
-                                    
+
                                     # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
                                     # in the payment link request, to capture the payment automatically after the authorize.
                                     auto_capture: 0
-                                        
-                                    use_authorize: 1
+
+                                    use_authorize: true
                                 channels:
                                     - "DK_WEB"
                                 enabled: true

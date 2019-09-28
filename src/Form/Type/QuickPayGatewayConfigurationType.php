@@ -72,7 +72,7 @@ class QuickPayGatewayConfigurationType extends AbstractType
                 'help' => 'https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments',
             ])
             ->add('use_authorize', HiddenType::class, [
-                'data' => 1,
+                'data' => true,
             ])
         ;
     }

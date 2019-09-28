@@ -54,6 +54,15 @@ Run `composer tests`
 
 ## Troubleshooting
 
+- `Validation error: Transaction in wrong state for this operation` after upgrading to Sylius v1.6
+
+  After this [commit](https://github.com/Sylius/Sylius/commit/6c748c9aec878687c610bd440aac9635143df0c3#diff-063b340e70ed54a7454a9c76bd3ef84eR158),
+  `use_authorize` config option should be strictly `boolean` typed. Update your `payment_method` fixtures like done
+  at this [commit](https://github.com/Setono/SyliusQuickpayPlugin/commit/a23a9d8552ed4dda528a810ed2c7e062106cf470).
+  
+  At live app - open each quickpay payment method at admin and click save so hidden `use_authorize` form field
+  will be stored in database in new format.
+
 - `Not authorized: Not authorized to PUT /payments/:id/link`
   at `/payment/authorize/...` url:
   
