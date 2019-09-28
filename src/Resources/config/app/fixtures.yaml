@@ -45,7 +45,7 @@ sylius_fixtures:
                                     privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
                                     merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
-                                    order_prefix: qp_
+                                    order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
                                     
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
                                     payment_methods: creditcard, paypal, !viabill
@@ -71,7 +71,7 @@ sylius_fixtures:
                                     privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
                                     merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
-                                    order_prefix: qp_
+                                    order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
                                     
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
                                     payment_methods: creditcard, paypal, viabill
