@@ -19,12 +19,17 @@
         </service>
 
         <service id="setono_sylius_quickpay.payum.gateway_factory_builder"
-                 class="Payum\Core\Bridge\Symfony\Builder\GatewayFactoryBuilder">
-
+                 class="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
             <argument>Setono\Payum\QuickPay\QuickPayGatewayFactory</argument>
+            <argument type="service" id="setono_sylius_quickpay.guesser.language_guesser"/>
 
             <tag name="payum.gateway_factory_builder"
                  factory="quickpay" />
+        </service>
+
+        <service id="setono_sylius_quickpay.guesser.language_guesser"
+                 class="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">
+            <argument type="service" id="sylius.context.locale"/>
         </service>
 
     </services>
