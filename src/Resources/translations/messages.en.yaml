@@ -14,12 +14,3 @@ setono_sylius_quickpay:
                 auto_capture_option:
                     no: No
                     yes: Yes
-            error:
-                apikey:
-                    not_blank: Api key is required
-                privatekey:
-                    not_blank: Private key is required
-                merchant:
-                    not_blank: Merchant id is required
-                agreement:
-                    not_blank: Agreement id is required

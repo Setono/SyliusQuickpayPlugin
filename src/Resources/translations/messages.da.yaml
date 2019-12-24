@@ -14,12 +14,3 @@ setono_sylius_quickpay:
                 auto_capture_option:
                     no: Nej
                     yes: Ja
-            error:
-                apikey:
-                    not_blank: Api nøgle er påkrævet
-                privatekey:
-                    not_blank: Privat nøgle er påkrævet
-                merchant:
-                    not_blank: Merchant id er påkrævet
-                agreement:
-                    not_blank: Aftale id er påkrævet

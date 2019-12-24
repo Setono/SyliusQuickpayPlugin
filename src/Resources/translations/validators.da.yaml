@@ -1,0 +1,12 @@
+setono_sylius_quickpay:
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey:
+                    not_blank: Api nøgle er påkrævet.
+                privatekey:
+                    not_blank: Privat nøgle er påkrævet.
+                merchant:
+                    not_blank: Merchant id er påkrævet.
+                agreement:
+                    not_blank: Aftale id er påkrævet.
