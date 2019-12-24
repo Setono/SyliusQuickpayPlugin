@@ -19,10 +19,22 @@ class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
 
     public function guess(): string
     {
+        // Map both norwegian locales to no
+        // @see https://github.com/QuickPay/standard-branding/tree/master/locales
+        static $map = [
+            'nb' => 'no',
+            'nn' => 'no',
+        ];
+
         try {
             $locale = $this->localeContext->getLocaleCode();
 
-            return substr($locale, 0, 2);
+            $language = explode('_', $locale)[0];
+            if (isset($map[$language])) {
+                return $map[$language];
+            }
+
+            return $language;
         } catch (LocaleNotFoundException $e) {
         }
 
