@@ -23,7 +23,7 @@ sylius_fixtures:
                                 hostname: "localhost"
                             dk_web_store:
                                 name: "DK Web Store"
-                                code: "DK_WEB"
+                                code: 'DK_WEB'
                                 locales:
                                     - "%locale%"
                                 currencies:
@@ -64,7 +64,7 @@ sylius_fixtures:
 
                                     use_authorize: true
                                 channels:
-                                    - "FASHION_WEB"
+                                    - 'FASHION_WEB'
                                     - "EU_WEB"
                                 enabled: true
                             dk_quickpay:
@@ -90,7 +90,7 @@ sylius_fixtures:
 
                                     use_authorize: true
                                 channels:
-                                    - "DK_WEB"
+                                    - 'DK_WEB'
                                 enabled: true
 
                 shipping_method:
@@ -102,4 +102,4 @@ sylius_fixtures:
                                 enabled: true
                                 channels:
                                     - "EU_WEB"
-                                    - "DK_WEB"
+                                    - 'DK_WEB'
