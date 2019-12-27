@@ -31,6 +31,11 @@ sylius_fixtures:
                                 enabled: true
                                 hostname: "localhost"
 
+                setono_quickpay_klarna_test_shop_user:
+                    options:
+                        amount: 10
+                        country: DK
+
                 # Temporary fix for https://github.com/Sylius/Sylius/issues/10719
                 # @todo Remove this lines once issue will be fixed
                 order:
