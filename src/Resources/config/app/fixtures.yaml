@@ -46,11 +46,11 @@ sylius_fixtures:
                 payment_method:
                     options:
                         custom:
-                            global_quickpay:
-                                code: "global_quickpay"
-                                name: "QuickPay Global"
-                                instructions: "Pay via QuickPay with credit card or PayPal"
-                                gatewayName: quickpay
+                            cc_quickpay:
+                                code: 'cc_quickpay'
+                                name: 'Creditcard via QuickPay'
+                                instructions: 'Pay via QuickPay with credit card'
+                                gatewayName: 'cc_quickpay'
                                 gatewayFactory: quickpay
                                 gatewayConfig:
                                     apikey: '%env(resolve:QUICKPAY_API_KEY)%'
@@ -60,7 +60,7 @@ sylius_fixtures:
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
 
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
-                                    payment_methods: creditcard, paypal, !viabill
+                                    payment_methods: 'creditcard'
 
                                     # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
@@ -70,13 +70,14 @@ sylius_fixtures:
                                     use_authorize: true
                                 channels:
                                     - 'FASHION_WEB'
-                                    - "EU_WEB"
+                                    - 'EU_WEB'
+                                    - 'DK_WEB'
                                 enabled: true
-                            dk_quickpay:
-                                code: "dk_quickpay"
-                                name: "QuickPay DK"
-                                instructions: "Pay via QuickPay with credit card, PayPal or ViaBill"
-                                gatewayName: quickpay
+                            quickpay_klarna:
+                                code: 'quickpay_klarna'
+                                name: 'Klarna via QuickPay'
+                                instructions: 'Pay via QuickPay with Klarna account'
+                                gatewayName: 'quickpay_klarna'
                                 gatewayFactory: quickpay
                                 gatewayConfig:
                                     apikey: '%env(resolve:QUICKPAY_API_KEY)%'
@@ -86,7 +87,7 @@ sylius_fixtures:
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
 
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
-                                    payment_methods: creditcard, paypal, viabill
+                                    payment_methods: 'klarna'
 
                                     # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
@@ -102,9 +103,9 @@ sylius_fixtures:
                     options:
                         custom:
                             eu_courier:
-                                code: "eu_courier"
-                                name: "EU courier"
+                                code: 'eu_courier'
+                                name: 'EU courier'
                                 enabled: true
                                 channels:
-                                    - "EU_WEB"
+                                    - 'EU_WEB'
                                     - 'DK_WEB'
