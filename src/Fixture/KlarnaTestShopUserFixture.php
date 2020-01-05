@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Fixture;
 
 use Doctrine\ORM\EntityManagerInterface;
-use Sylius\Component\Core\Model\ShopUserInterface;
 use function Safe\preg_replace;
 use function Safe\sprintf;
 use Sylius\Bundle\CoreBundle\Fixture\Factory\ExampleFactoryInterface;
 use Sylius\Bundle\FixturesBundle\Fixture\AbstractFixture;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
+use Sylius\Component\Core\Model\ShopUserInterface;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 
 class KlarnaTestShopUserFixture extends AbstractFixture
