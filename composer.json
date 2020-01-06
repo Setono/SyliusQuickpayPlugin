@@ -5,6 +5,7 @@
     "keywords": [
         "sylius",
         "quickpay",
+        "klarna",
         "payum",
         "payment",
         "plugin",
@@ -13,7 +14,7 @@
     "license": "MIT",
     "require": {
         "php": "^7.2",
-        "setono/payum-quickpay": "dev-improvements",
+        "setono/payum-quickpay": "^1.2",
         "symfony/intl": "^4.3 || ^5.0",
         "sylius/sylius": "^1.5.0"
     },
