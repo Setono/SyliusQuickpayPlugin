@@ -20,8 +20,10 @@
         <service id="setono_sylius_quickpay.state_machine_resolver"
                  class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver"
                  public="true">
+            <argument type="service" id="payum"/>
         </service>
 
+        <!-- Form -->
         <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
                  class="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">
 
@@ -30,6 +32,7 @@
                  label="setono_sylius_quickpay.payum_gateway_factory.quickpay" />
         </service>
 
+        <!-- Factory builder -->
         <service id="setono_sylius_quickpay.payum.gateway_factory_builder"
                  class="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
             <argument>Setono\Payum\QuickPay\QuickPayGatewayFactory</argument>
