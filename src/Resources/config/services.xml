@@ -52,6 +52,10 @@
             <tag name="sylius_fixtures.fixture" />
         </service>
 
+        <!-- Etc -->
+        <service id="setono_sylius_quickpay.klarna.matcher.country_currency_matcher"
+                 class="Setono\SyliusQuickpayPlugin\Klarna\Matcher\CountryCurrencyMatcher"/>
+
         <service id="setono_sylius_quickpay.guesser.language_guesser"
                  class="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">
             <argument type="service" id="sylius.context.locale"/>
