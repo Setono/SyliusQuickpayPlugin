@@ -5,11 +5,25 @@
            xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
     <services>
 
+        <!-- Action -->
+        <service id="setono_sylius_quickpay.payum_action.quickpay.convert_payment"
+                 class="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction"
+                 public="true">
+            <argument type="service" id="payum"/>
+
+            <tag name="payum.action"
+                 factory="quickpay"
+                 alias="setono_sylius_quickpay.quickpay.convert_payment" />
+        </service>
+
+        <!-- State machine -->
         <service id="setono_sylius_quickpay.state_machine_resolver"
                  class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver"
                  public="true">
+            <argument type="service" id="payum"/>
         </service>
 
+        <!-- Form -->
         <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
                  class="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">
 
@@ -18,6 +32,7 @@
                  label="setono_sylius_quickpay.payum_gateway_factory.quickpay" />
         </service>
 
+        <!-- Factory builder -->
         <service id="setono_sylius_quickpay.payum.gateway_factory_builder"
                  class="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
             <argument>Setono\Payum\QuickPay\QuickPayGatewayFactory</argument>
@@ -26,6 +41,20 @@
             <tag name="payum.gateway_factory_builder"
                  factory="quickpay" />
         </service>
+
+        <!-- Fixtures -->
+        <service id="setono_sylius_quickpay.fixture.klarna_test_shop_user"
+                 class="Setono\SyliusQuickpayPlugin\Fixture\KlarnaTestShopUserFixture">
+            <argument type="service" id="sylius.fixture.example_factory.shop_user" />
+            <argument type="service" id="sylius.fixture.example_factory.address" />
+            <argument type="service" id="sylius.manager.shop_user" />
+
+            <tag name="sylius_fixtures.fixture" />
+        </service>
+
+        <!-- Etc -->
+        <service id="setono_sylius_quickpay.klarna.matcher.country_currency_matcher"
+                 class="Setono\SyliusQuickpayPlugin\Klarna\Matcher\CountryCurrencyMatcher"/>
 
         <service id="setono_sylius_quickpay.guesser.language_guesser"
                  class="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">

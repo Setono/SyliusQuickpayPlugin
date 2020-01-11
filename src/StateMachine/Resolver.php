@@ -6,9 +6,9 @@ namespace Setono\SyliusQuickpayPlugin\StateMachine;
 
 use Doctrine\Common\Collections\Collection;
 use Payum\Core\Bridge\Spl\ArrayObject;
+use Payum\Core\Registry\RegistryInterface;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;
-use Setono\Payum\QuickPay\QuickPayGatewayFactory;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -19,6 +19,14 @@ use Webmozart\Assert\Assert;
 
 final class Resolver implements StateResolverInterface
 {
+    /** @var RegistryInterface */
+    private $payum;
+
+    public function __construct(RegistryInterface $payum)
+    {
+        $this->payum = $payum;
+    }
+
     /**
      * {@inheritdoc}
      */
@@ -51,8 +59,8 @@ final class Resolver implements StateResolverInterface
             return;
         }
 
-        $factory = new QuickPayGatewayFactory();
-        $gateway = $factory->create($gatewayConfig->getConfig());
+        $gatewayFactory = $this->payum->getGatewayFactory('quickpay');
+        $gateway = $gatewayFactory->create($gatewayConfig->getConfig());
 
         $model = new ArrayObject($details);
 

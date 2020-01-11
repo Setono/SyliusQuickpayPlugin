@@ -4,3 +4,6 @@ includes:
 
 parameters:
     reportUnmatchedIgnoredErrors: true
+
+    ignoreErrors:
+        - '/Cannot call method .+ on .+\\NodeParentInterface\|null\./'

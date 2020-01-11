@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace spec\Setono\SyliusQuickpayPlugin\StateMachine;
 
+use Payum\Core\Payum;
 use PhpSpec\ObjectBehavior;
 use Setono\SyliusQuickpayPlugin\StateMachine\Resolver;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
@@ -15,6 +16,11 @@ use Sylius\Component\Order\StateResolver\StateResolverInterface;
 
 class ResolverSpec extends ObjectBehavior
 {
+    public function let(Payum $payum): void
+    {
+        $this->beConstructedWith($payum);
+    }
+
     public function it_is_initializable(): void
     {
         $this->shouldHaveType(Resolver::class);

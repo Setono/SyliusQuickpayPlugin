@@ -1,0 +1,14 @@
+setono_sylius_quickpay:
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey:
+                    not_blank: Api key is required.
+                privatekey:
+                    not_blank: Private key is required.
+                merchant:
+                    not_blank: Merchant id is required.
+                agreement:
+                    not_blank: Agreement id is required.
+                order_prefix:
+                    max_length: Shouldn't be more than 11 chars length.
