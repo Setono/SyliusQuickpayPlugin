@@ -46,11 +46,11 @@ sylius_fixtures:
                 payment_method:
                     options:
                         custom:
-                            cc_quickpay:
-                                code: 'cc_quickpay'
+                            quickpay_credit_card:
+                                code: 'quickpay_credit_card'
                                 name: 'Creditcard via QuickPay'
                                 instructions: 'Pay via QuickPay with credit card'
-                                gatewayName: 'cc_quickpay'
+                                gatewayName: 'quickpay_credit_card'
                                 gatewayFactory: quickpay
                                 gatewayConfig:
                                     apikey: '%env(resolve:QUICKPAY_API_KEY)%'

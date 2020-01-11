@@ -9,7 +9,7 @@ class CountryCurrencyMatcher implements CountryCurrencyMatcherInterface
     /** @var array */
     protected $map;
 
-    public function __construct(?array $map = null)
+    public function __construct(array $map = null)
     {
         if (null === $map) {
             // @see https://learn.quickpay.net/tech-talk/appendixes/acquirer-details/#acquirer-details

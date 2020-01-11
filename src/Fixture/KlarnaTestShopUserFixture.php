@@ -81,7 +81,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
             ->children()
                 ->integerNode('amount')->isRequired()->min(0)->end()
 
-                ->enumNode('country')->values(self::getSupportingCountries())->end()
+                ->enumNode('country')->values(self::getSupportedCountries())->end()
 
                 ->scalarNode('password')->defaultValue('klarna')->end()
 
@@ -90,7 +90,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
         ;
     }
 
-    protected static function getSupportingCountries(): array
+    protected static function getSupportedCountries(): array
     {
         return [
             'SE',
