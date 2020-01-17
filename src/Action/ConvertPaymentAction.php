@@ -14,6 +14,7 @@ use Payum\Core\Model\PaymentInterface as PayumPaymentInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\Convert;
 use Payum\Core\Security\TokenInterface;
+use function Safe\sprintf;
 use Setono\Payum\QuickPay\Action\Api\ApiAwareTrait;
 use Setono\Payum\QuickPay\Model\QuickPayPayment;
 use Sylius\Component\Core\Model\AddressInterface;
@@ -23,6 +24,7 @@ use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\PaymentInterface as SyliusPaymentInterface;
 use Sylius\Component\Core\Model\ProductVariantInterface;
 use Symfony\Component\Intl\Countries;
+use Webmozart\Assert\Assert;
 
 class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, GatewayAwareInterface
 {
@@ -38,7 +40,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
     }
 
     /**
-     * @param Convert $request
+     * @param Convert|mixed $request
      */
     public function execute($request): void
     {
@@ -70,19 +72,19 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
         $identity = $token->getDetails();
         $syliusPayment = $this->payum->getStorage($identity->getClass())->find($identity);
-        assert($syliusPayment instanceof SyliusPaymentInterface);
+        Assert::isInstanceOf($syliusPayment, SyliusPaymentInterface::class);
 
         $order = $syliusPayment->getOrder();
-        assert($order instanceof OrderInterface);
+        Assert::isInstanceOf($order, OrderInterface::class);
 
         $customer = $order->getCustomer();
-        assert($customer instanceof CustomerInterface);
+        Assert::isInstanceOf($customer, CustomerInterface::class);
 
         $shippingAddress = $order->getShippingAddress();
-        assert($shippingAddress instanceof AddressInterface);
+        Assert::isInstanceOf($shippingAddress, AddressInterface::class);
 
         $billingAddress = $order->getBillingAddress();
-        assert($billingAddress instanceof AddressInterface);
+        Assert::isInstanceOf($billingAddress, AddressInterface::class);
 
         $details['shipping_address'] = $this->convertAddress($shippingAddress, $customer);
         $details['invoice_address'] = $this->convertAddress($billingAddress, $customer);
@@ -96,7 +98,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
     protected function convertAddress(AddressInterface $address, CustomerInterface $customer): array
     {
         $countryCode = $address->getCountryCode();
-        assert(null !== $countryCode);
+        Assert::notNull($countryCode);
 
         $details = [];
         $details['name'] = sprintf(
@@ -117,14 +119,12 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
     /**
      * @param Collection|OrderItemInterface[] $items
-     *
-     * @return array
      */
     protected function convertOrderItems(Collection $items): array
     {
         return $items->map(function (OrderItemInterface $orderItem): array {
             $variant = $orderItem->getVariant();
-            assert($variant instanceof ProductVariantInterface);
+            Assert::isInstanceOf($variant, ProductVariantInterface::class);
 
             return [
                 'qty' => $orderItem->getQuantity(),
@@ -146,6 +146,6 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
             $request instanceof Convert &&
             $request->getSource() instanceof PayumPaymentInterface &&
             $request->getTo() === 'array'
-            ;
+        ;
     }
 }

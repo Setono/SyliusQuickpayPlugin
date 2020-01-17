@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Fixture;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Faker\Factory;
 use function Safe\preg_replace;
 use function Safe\sprintf;
 use Sylius\Bundle\CoreBundle\Fixture\Factory\ExampleFactoryInterface;
@@ -37,7 +38,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
         $this->addressExampleFactory = $addressExampleFactory;
         $this->shopUserManager = $shopUserManager;
 
-        $this->faker = \Faker\Factory::create();
+        $this->faker = Factory::create();
     }
 
     public function load(array $options): void
@@ -110,7 +111,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
     protected function getKlarnaTestDataByCountry(string $countryCode, array $options): array
     {
         $klarnaDefaultTestData = [
-            'first_name' => sprintf('Testperson-%s', strtolower($countryCode)),
+            'first_name' => sprintf('Testperson-%s', mb_strtolower($countryCode)),
             'email' => $options['approved'] ? $this->faker->email : preg_replace('@', '+denied@', $this->faker->email),
             'last_name' => $options['approved'] ? 'Approved' : 'Denied',
         ];

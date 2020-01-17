@@ -28,11 +28,10 @@ final class Resolver implements StateResolverInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @param OrderInterface|BaseOrderInterface $order
      */
     public function resolve(BaseOrderInterface $order): void
     {
-        /** @var OrderInterface $order */
         Assert::isInstanceOf($order, OrderInterface::class);
 
         $targetTransition = $this->getTargetTransition($order);
@@ -90,11 +89,6 @@ final class Resolver implements StateResolverInterface
         }
     }
 
-    /**
-     * @param OrderInterface|OrderInterface $order
-     *
-     * @return string|null
-     */
     private function getTargetTransition(OrderInterface $order): ?string
     {
         [$refundedPaymentTotal, $refundedPayments] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_REFUNDED);
@@ -134,24 +128,15 @@ final class Resolver implements StateResolverInterface
     }
 
     /**
-     * @param OrderInterface $order
-     * @param string         $state
-     *
      * @return Collection|PaymentInterface[]
      */
     private function getPaymentsWithState(OrderInterface $order, string $state): Collection
     {
-        return $order->getPayments()->filter(function (PaymentInterface $payment) use ($state) {
+        return $order->getPayments()->filter(function (PaymentInterface $payment) use ($state): bool {
             return $state === $payment->getState();
         });
     }
 
-    /**
-     * @param OrderInterface $order
-     * @param string             $state
-     *
-     * @return array
-     */
     private function getPaymentTotalWithState(OrderInterface $order, string $state): array
     {
         $paymentTotal = 0;
