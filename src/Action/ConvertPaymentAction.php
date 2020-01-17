@@ -14,6 +14,7 @@ use Payum\Core\Model\PaymentInterface as PayumPaymentInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\Convert;
 use Payum\Core\Security\TokenInterface;
+use function Safe\sprintf;
 use Setono\Payum\QuickPay\Action\Api\ApiAwareTrait;
 use Setono\Payum\QuickPay\Model\QuickPayPayment;
 use Sylius\Component\Core\Model\AddressInterface;
@@ -38,7 +39,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
     }
 
     /**
-     * @param Convert $request
+     * @param Convert|mixed $request
      */
     public function execute($request): void
     {
@@ -117,8 +118,6 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
     /**
      * @param Collection|OrderItemInterface[] $items
-     *
-     * @return array
      */
     protected function convertOrderItems(Collection $items): array
     {
