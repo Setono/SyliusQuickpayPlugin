@@ -9,4 +9,4 @@
 
 /behat.yml
 /phpspec.yml
-!/.phpunit.result.cache
+/.phpunit.result.cache
