@@ -89,9 +89,6 @@ final class Resolver implements StateResolverInterface
         }
     }
 
-    /**
-     * @param OrderInterface|OrderInterface $order
-     */
     private function getTargetTransition(OrderInterface $order): ?string
     {
         [$refundedPaymentTotal, $refundedPayments] = $this->getPaymentTotalWithState($order, PaymentInterface::STATE_REFUNDED);
