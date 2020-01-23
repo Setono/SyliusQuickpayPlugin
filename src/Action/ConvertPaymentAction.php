@@ -24,8 +24,12 @@ use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\PaymentInterface as SyliusPaymentInterface;
 use Sylius\Component\Core\Model\ProductVariantInterface;
 use Symfony\Component\Intl\Countries;
+use VIISON\AddressSplitter\AddressSplitter;
 use Webmozart\Assert\Assert;
 
+/**
+ * @see https://learn.quickpay.net/tech-talk/payments/form/#quickpay-form for field names reference
+ */
 class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, GatewayAwareInterface
 {
     use GatewayAwareTrait;
@@ -100,13 +104,20 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         $countryCode = $address->getCountryCode();
         Assert::notNull($countryCode);
 
+        $street = $address->getStreet();
+        Assert::notNull($street);
+
+        $splittedStreet = AddressSplitter::splitAddress($street);
+
         $details = [];
         $details['name'] = sprintf(
             '%s %s',
             $address->getFirstName(),
             $address->getLastName()
         );
-        $details['street'] = $address->getStreet();
+        $details['street'] = $splittedStreet['streetName'];
+        $details['house_number'] = $splittedStreet['houseNumberParts']['base'];
+        $details['house_extension'] = $splittedStreet['houseNumberParts']['extension'];
         $details['city'] = $address->getCity();
         $details['zip_code'] = $address->getPostcode();
         $details['region'] = $address->getProvinceName() ?? $address->getProvinceCode();
