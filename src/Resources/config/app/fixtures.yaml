@@ -3,6 +3,12 @@ sylius_fixtures:
         default:
             fixtures:
 
+                geographical:
+                    options:
+                        countries:
+                            - 'US'
+                            - 'DK'
+
                 currency:
                     options:
                         currencies: 
