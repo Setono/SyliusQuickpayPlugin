@@ -16,9 +16,6 @@ final class AddressStreetEligibility extends Constraint
         return 'setono_sylius_quickpay_address_street_eligibility_validator';
     }
 
-    /**
-     * {@inheritdoc}
-     */
     public function getTargets(): string
     {
         return self::CLASS_CONSTRAINT;
