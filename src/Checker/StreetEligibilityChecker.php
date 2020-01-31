@@ -22,26 +22,27 @@ class StreetEligibilityChecker implements StreetEligibilityCheckerInterface
         }
 
         try {
-            $splittedStreet = AddressSplitter::splitAddress($street);
+            switch (mb_strtoupper($countryCode)) {
+                case 'DE':
+                    $splittedStreet = AddressSplitter::splitAddress($street);
+                    if ('' === $splittedStreet['houseNumber']) {
+                        return false;
+                    }
+
+                    break;
+
+                case 'NL':
+                    $splittedStreet = AddressSplitter::splitAddress($street);
+                    if ('' === $splittedStreet['houseNumberParts']['base']) {
+                        return false;
+                    }
+
+                    if ('' === $splittedStreet['houseNumberParts']['extension']) {
+                        return false;
+                    }
+            }
         } catch (SplittingException $e) {
             return false;
-        }
-
-        switch (mb_strtoupper($countryCode)) {
-            case 'DE':
-                if ('' === $splittedStreet['houseNumber']) {
-                    return false;
-                }
-
-                break;
-            case 'NL':
-                if ('' === $splittedStreet['houseNumberParts']['base']) {
-                    return false;
-                }
-
-                if ('' === $splittedStreet['houseNumberParts']['extension']) {
-                    return false;
-                }
         }
 
         return true;
