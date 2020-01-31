@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<constraint-mapping xmlns="http://symfony.com/schema/dic/constraint-mapping"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="http://symfony.com/schema/dic/constraint-mapping http://symfony.com/schema/dic/services/constraint-mapping-1.0.xsd">
+    <class name="Sylius\Component\Addressing\Model\Address">
+        <constraint name="Setono\SyliusQuickpayPlugin\Validator\Constraints\AddressStreetEligibility">
+            <option name="message">setono_sylius_quickpay.address.street_eligibility</option>
+            <option name="groups">
+                <value>sylius_shipping_address_update</value>
+                <value>sylius_checkout_complete</value>
+                <value>sylius</value>
+            </option>
+        </constraint>
+    </class>
+</constraint-mapping>

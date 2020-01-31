@@ -12,3 +12,5 @@ setono_sylius_quickpay:
                     not_blank: Aftale id er påkrævet.
                 order_prefix:
                     max_length: Bør ikke være længere end 11 tegn.
+    address:
+        street_eligibility: Gaden skal indeholde husnummer (og udvidelse af husnummer for NL)

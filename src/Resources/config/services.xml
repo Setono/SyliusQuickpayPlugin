@@ -16,6 +16,20 @@
                  alias="setono_sylius_quickpay.quickpay.convert_payment" />
         </service>
 
+        <!-- Checker -->
+        <service id="setono_sylius_quickpay.street_eligibility_checker"
+                 class="Setono\SyliusQuickpayPlugin\Checker\StreetEligibilityChecker">
+        </service>
+
+        <!-- Validator -->
+        <service id="setono_sylius_quickpay.validator.eligible_street"
+                 class="Setono\SyliusQuickpayPlugin\Validator\AddressStreetEligibilityValidator">
+            <argument type="service" id="setono_sylius_quickpay.street_eligibility_checker" />
+
+            <tag name="validator.constraint_validator"
+                 alias="setono_sylius_quickpay_address_street_eligibility_validator" />
+        </service>
+
         <!-- State machine -->
         <service id="setono_sylius_quickpay.state_machine_resolver"
                  class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver"

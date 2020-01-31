@@ -12,3 +12,5 @@ setono_sylius_quickpay:
                     not_blank: Agreement id is required.
                 order_prefix:
                     max_length: Shouldn't be more than 11 chars length.
+    address:
+        street_eligibility: Street should contain house number (and extension for NL)
