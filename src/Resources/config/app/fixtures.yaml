@@ -134,3 +134,4 @@ sylius_fixtures:
                                 channels:
                                     - 'EU_WEB'
                                     - 'DK_WEB'
+                                    - 'NL_WEB'
