@@ -25,6 +25,7 @@ use Sylius\Component\Core\Model\PaymentInterface as SyliusPaymentInterface;
 use Sylius\Component\Core\Model\ProductVariantInterface;
 use Symfony\Component\Intl\Countries;
 use VIISON\AddressSplitter\AddressSplitter;
+use VIISON\AddressSplitter\Exceptions\SplittingException;
 use Webmozart\Assert\Assert;
 
 /**
@@ -107,17 +108,43 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         $street = $address->getStreet();
         Assert::notNull($street);
 
-        $splittedStreet = AddressSplitter::splitAddress($street);
-
         $details = [];
+        switch (mb_strtoupper($countryCode)) {
+            case 'DE':
+                try {
+                    $splittedStreet = AddressSplitter::splitAddress($street);
+
+                    $details['street'] = $splittedStreet['streetName'];
+                    $details['house_number'] = $splittedStreet['houseNumber'];
+                } catch (SplittingException $e) {
+                    $details['street'] = $street;
+                    $details['house_number'] = '';
+                }
+
+                break;
+            case 'NL':
+                try {
+                    $splittedStreet = AddressSplitter::splitAddress($street);
+
+                    $details['street'] = $splittedStreet['streetName'];
+                    $details['house_number'] = $splittedStreet['houseNumberParts']['base'];
+                    $details['house_extension'] = $splittedStreet['houseNumberParts']['extension'];
+                } catch (SplittingException $e) {
+                    $details['street'] = $street;
+                    $details['house_number'] = '';
+                    $details['house_extension'] = '';
+                }
+
+                break;
+            default:
+                $details['street'] = $street;
+        }
+
         $details['name'] = sprintf(
             '%s %s',
             $address->getFirstName(),
             $address->getLastName()
         );
-        $details['street'] = $splittedStreet['streetName'];
-        $details['house_number'] = $splittedStreet['houseNumberParts']['base'];
-        $details['house_extension'] = $splittedStreet['houseNumberParts']['extension'];
         $details['city'] = $address->getCity();
         $details['zip_code'] = $address->getPostcode();
         $details['region'] = $address->getProvinceName() ?? $address->getProvinceCode();
