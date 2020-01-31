@@ -135,3 +135,18 @@ sylius_fixtures:
                                     - 'EU_WEB'
                                     - 'DK_WEB'
                                     - 'NL_WEB'
+
+                cap_product_nl:
+                    name: product
+                    options:
+                        custom:
+                            -   name: 'Winter cap'
+                                tax_category: 'other'
+                                channels:
+                                    - 'NL_WEB'
+                                main_taxon: 'caps_with_pompons'
+                                taxons:
+                                    - 'caps'
+                                    - 'caps_with_pompons'
+                                images:
+                                    - { path: '@SyliusCoreBundle/Resources/fixtures/caps/cap_01.jpg', type: 'main' }
