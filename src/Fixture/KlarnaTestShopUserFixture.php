@@ -129,7 +129,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'city' => 'Hausmannstätten',
                 'postcode' => $options['approved'] ? '8071' : '8070',
                 'gender' => $options['approved'] ? CustomerInterface::MALE_GENDER : CustomerInterface::FEMALE_GENDER,
-                'birthday' => $options['approved'] ? '1960-04-14' : '1980-04-14',
+                'birthday' => $options['approved'] ? '1960-04-14 00:00:00' : '1980-04-14 00:00:00',
             ],
             'FI' => [
                 'phone_number' => '0401234567',
@@ -149,7 +149,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'city' => 'Neuss',
                 'postcode' => '41460',
                 'gender' => CustomerInterface::MALE_GENDER,
-                'birthday' => '1960-07-07',
+                'birthday' => '1960-07-07 00:00:00',
             ],
             'NO' => [
                 'phone_number' => '40 123 456',
@@ -163,7 +163,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'city' => 'Gravenhage',
                 'postcode' => '2521VA',
                 'gender' => CustomerInterface::MALE_GENDER,
-                'birthday' => '1960-07-10',
+                'birthday' => '1960-07-10 00:00:00',
             ],
             'CH' => [
                 'first_name' => $options['approved'] ? $this->faker->firstName : 'test',
@@ -173,7 +173,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'city' => 'Zürich',
                 'postcode' => '8001',
                 'gender' => CustomerInterface::MALE_GENDER,
-                'birthday' => '1960-01-01',
+                'birthday' => '1960-01-01 00:00:00',
             ],
         ];
 

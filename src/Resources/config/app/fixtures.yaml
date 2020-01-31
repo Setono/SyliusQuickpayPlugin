@@ -3,6 +3,19 @@ sylius_fixtures:
         default:
             fixtures:
 
+                geographical:
+                    options:
+                        countries:
+                            - 'US'
+                            - 'DK'
+                            - 'NL'
+                        zones:
+                            EU:
+                                name: "EU"
+                                scope: "all"
+                                countries:
+                                    - 'DK'
+                                    - 'NL'
                 currency:
                     options:
                         currencies: 
@@ -30,11 +43,27 @@ sylius_fixtures:
                                     - "DKK"
                                 enabled: true
                                 hostname: "localhost"
+                            nl_web_store:
+                                name: "NL Web Store"
+                                code: 'NL_WEB'
+                                locales:
+                                    - "%locale%"
+                                currencies:
+                                    - "EUR"
+                                enabled: true
+                                hostname: "localhost"
 
-                setono_quickpay_klarna_test_shop_user:
+                setono_quickpay_klarna_test_shop_user_dk:
+                    name: setono_quickpay_klarna_test_shop_user
                     options:
                         amount: 10
                         country: DK
+
+                setono_quickpay_klarna_test_shop_user_nl:
+                    name: setono_quickpay_klarna_test_shop_user
+                    options:
+                        amount: 10
+                        country: NL
 
                 # Temporary fix for https://github.com/Sylius/Sylius/issues/10719
                 # @todo Remove this lines once issue will be fixed
@@ -72,6 +101,7 @@ sylius_fixtures:
                                     - 'FASHION_WEB'
                                     - 'EU_WEB'
                                     - 'DK_WEB'
+                                    - 'NL_WEB'
                                 enabled: true
                             quickpay_klarna:
                                 code: 'quickpay_klarna'
@@ -97,6 +127,7 @@ sylius_fixtures:
                                     use_authorize: true
                                 channels:
                                     - 'DK_WEB'
+                                    - 'NL_WEB'
                                 enabled: true
 
                 shipping_method:
@@ -105,7 +136,24 @@ sylius_fixtures:
                             eu_courier:
                                 code: 'eu_courier'
                                 name: 'EU courier'
+                                zone: 'EU'
                                 enabled: true
                                 channels:
                                     - 'EU_WEB'
                                     - 'DK_WEB'
+                                    - 'NL_WEB'
+
+                cap_product_nl:
+                    name: product
+                    options:
+                        custom:
+                            -   name: 'Winter cap'
+                                tax_category: 'other'
+                                channels:
+                                    - 'NL_WEB'
+                                main_taxon: 'caps_with_pompons'
+                                taxons:
+                                    - 'caps'
+                                    - 'caps_with_pompons'
+                                images:
+                                    - { path: '@SyliusCoreBundle/Resources/fixtures/caps/cap_01.jpg', type: 'main' }
