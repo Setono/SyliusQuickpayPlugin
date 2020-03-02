@@ -7,14 +7,15 @@ namespace Setono\SyliusQuickpayPlugin\Checker;
 use Sylius\Component\Addressing\Model\AddressInterface;
 use VIISON\AddressSplitter\AddressSplitter;
 use VIISON\AddressSplitter\Exceptions\SplittingException;
-use Webmozart\Assert\Assert;
 
 class StreetEligibilityChecker implements StreetEligibilityCheckerInterface
 {
     public function isEligible(AddressInterface $address): bool
     {
         $countryCode = $address->getCountryCode();
-        Assert::notNull($countryCode);
+        if (null === $countryCode) {
+            return false;
+        }
 
         $street = $address->getStreet();
         if (null === $street) {
