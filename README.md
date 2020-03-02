@@ -38,7 +38,9 @@ imports:
     - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/fixtures.yaml" }    
 ````
 
-### 5: Add validator constraint 
+### 5: Add validator constraint (optional)
+
+Add this constraint if you are planning on using Klarna.
 
 Create `config/validator/Address.xml`:
 
