@@ -52,14 +52,10 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'enabled' => true,
             ] + $this->getOptions($testData, ['email', 'first_name', 'last_name', 'phone_number', 'gender', 'birthday']));
 
-            /** @var AddressInterface $address */
-            $address = $this->addressExampleFactory->create([
+            $this->addressExampleFactory->create([
                 'country_code' => $options['country'],
+                'customer' => $shopUser->getCustomer(),
             ] + $this->getOptions($testData, ['first_name', 'last_name', 'phone_number', 'postcode', 'city', 'street']));
-
-            /** @var CustomerInterface $customer */
-            $customer = $shopUser->getCustomer();
-            $customer->addAddress($address);
 
             $this->shopUserManager->persist($shopUser);
 
