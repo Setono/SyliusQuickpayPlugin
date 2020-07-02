@@ -14,3 +14,6 @@ setono_sylius_quickpay:
                 auto_capture_option:
                     no: No
                     yes: Yes
+    refund_plugin:
+        select_quickpay_payment: Select the corresponding QuickPay payment
+            

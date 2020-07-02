@@ -54,4 +54,7 @@ return [
     Symfony\Bundle\DebugBundle\DebugBundle::class => ['dev' => true, 'test' => true, 'test_cached' => true],
     Symfony\Bundle\WebProfilerBundle\WebProfilerBundle::class => ['dev' => true, 'test' => true, 'test_cached' => true],
     FriendsOfBehat\SymfonyExtension\Bundle\FriendsOfBehatSymfonyExtensionBundle::class => ['test' => true, 'test_cached' => true],
+    // KnpSnappyBundle is used by SyliusRefundPlugin to generate pdf credit memos
+    Knp\Bundle\SnappyBundle\KnpSnappyBundle::class => ['dev' => true, 'test' => true, 'test_cached' => true],
+    Sylius\RefundPlugin\SyliusRefundPlugin::class => ['dev' => true, 'test' => true, 'test_cached' => true],
 ];

@@ -15,5 +15,16 @@ class SetonoSyliusQuickpayExtension extends Extension
     {
         $loader = new XmlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.xml');
+
+        $configuration = $this->getConfiguration($configs, $container);
+        $config = $this->processConfiguration($configuration, $configs);
+
+        if ($this->isConfigEnabled($container, $config['sylius_refund_plugin'])) {
+            $gateways = $container->getParameter('sylius_refund.supported_gateways');
+            $gateways[] = 'quickpay';
+            $container->setParameter('sylius_refund.supported_gateways', $gateways);
+
+            $loader->load('sylius_refund_plugin.xml');
+        }
     }
 }

@@ -1,0 +1,5 @@
+sylius_refund:
+    resource: "@SyliusRefundPlugin/Resources/config/routing.yml"
+
+quickpay_refund:
+    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routing.yaml"

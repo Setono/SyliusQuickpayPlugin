@@ -1,0 +1,14 @@
+{% import '@SyliusAdmin/Common/Macro/money.html.twig' as money %}
+
+{% if quickpay_payments is not empty %}
+    <div class="field" id="quickpay-payment-wrapper">
+        <label for="quickpay-payment">{{ 'setono_sylius_quickpay.refund_plugin.select_quickpay_payment'|trans }}</label>
+        <select id="quickpay-payment" name="sylius_refund_quickpay_payment">
+            {% for payment in quickpay_payments %}
+                <option value="{{ payment.id }}">
+                    {{ payment.details.quickpayPaymentId}} - {{ money.format(payment.amount, payment.currencyCode) }} - {{ payment.method.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+{% endif %}

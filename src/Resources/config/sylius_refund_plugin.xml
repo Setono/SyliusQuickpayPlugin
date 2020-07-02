@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<container xmlns="http://symfony.com/schema/dic/services"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
+    <services>
+        <service id="setono_sylius_quickpay.action.order_refunds_list"
+                 class="Setono\SyliusQuickpayPlugin\Action\OrderRefundsListAction">
+            <argument type="service" id="sylius.repository.order" />
+            <argument type="service" id="Sylius\RefundPlugin\Checker\OrderRefundsListAvailabilityChecker" />
+            <argument type="service" id="Sylius\RefundPlugin\Provider\RefundPaymentMethodsProviderInterface" />
+            <argument type="service" id="twig" />
+            <argument type="service" id="session" />
+            <argument type="service" id="router" />
+            <tag name="controller.service_arguments" />
+        </service>
+
+        <service id="setono_sylius_quickpay.action.order_refund_units"
+                 class="Setono\SyliusQuickpayPlugin\Action\RefundUnitsAction">
+            <argument type="service" id="sylius_refund_plugin.command_bus" />
+            <argument type="service" id="session" />
+            <argument type="service" id="router" />
+            <argument type="service" id="setono_sylius_quickpay.command_factory.refund_units" />
+            <argument type="service" id="monolog.logger" />
+            <tag name="controller.service_arguments" />
+        </service>
+
+        <service id="setono_sylius_quickpay.command_factory.refund_units"
+                 class="Setono\SyliusQuickpayPlugin\Command\Factory\RefundUnitsCommandFactory">
+            <argument type="service" id="Sylius\RefundPlugin\Calculator\UnitRefundTotalCalculator" />
+        </service>
+
+        <service id="setono_sylius_quickpay.command_handler.refund_units"
+                 class="Setono\SyliusQuickpayPlugin\Command\Handler\RefundUnitsHandler">
+            <argument type="service" id="Sylius\RefundPlugin\Refunder\OrderItemUnitsRefunder" />
+            <argument type="service" id="Sylius\RefundPlugin\Refunder\OrderShipmentsRefunder" />
+            <argument type="service" id="sylius_refund_plugin.event_bus" />
+            <argument type="service" id="sylius.repository.order" />
+            <argument type="service" id="setono_sylius_quickpay.command_validator.refund_units" />
+            <tag name="messenger.message_handler" />
+        </service>
+
+        <service id="setono_sylius_quickpay.command_validator.refund_units"
+                 class="Setono\SyliusQuickpayPlugin\Command\Validator\RefundUnitsCommandValidator">
+            <argument type="service" id="Sylius\RefundPlugin\Validator\RefundUnitsCommandValidator" />
+            <argument type="service" id="sylius.repository.payment" />
+        </service>
+
+
+        <service id="setono_sylius_quickpay.listener.refund"
+                 class="Setono\SyliusQuickpayPlugin\EventListener\RefundListener">
+            <argument type="service" id="payum" />
+            <argument type="service" id="sylius.repository.payment" />
+            <tag name="messenger.message_handler" />
+        </service>
+    </services>
+</container>

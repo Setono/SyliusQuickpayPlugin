@@ -1,0 +1,10 @@
+sylius_refund_order_refunds_list:
+    path: /admin/orders/{orderNumber}/refunds
+    methods: [GET]
+    defaults:
+        _controller: setono_sylius_quickpay.action.order_refunds_list
+
+sylius_refund_refund_units:
+    path: /admin/orders/{orderNumber}/refund-units
+    defaults:
+        _controller: setono_sylius_quickpay.action.order_refund_units

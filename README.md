@@ -66,6 +66,25 @@ Create `config/validator/Address.xml`:
 
 Like it [configured](tests/Application/config/validator/Address.xml) at example application.
 
+### 6. Refunds via [Sylius Refund Plugin](https://github.com/Sylius/RefundPlugin) (optional)
+
+This plugin also enables refunds through [Sylius Refund Plugin](https://github.com/Sylius/RefundPlugin).
+
+### 6.1 Enable the integration
+
+Install and configure Sylius Refund Plugin following its [instructions](https://github.com/Sylius/RefundPlugin#installation),
+then the plugin integrates automatically.
+
+#### 6.1 Disable the integration
+
+To disable the integation, add the following configuration:
+
+`config/packages/setono_quickpay_plugin.yaml`
+```
+setono_quickpay_plugin:
+    sylius_refund_plugin: false
+```
+
 ## Configuration
 
 Create a new Payment method of the type *Quickpay* and fill out the required form fields.

@@ -1,0 +1,162 @@
+{
+    "doctrine/event-manager": {
+        "version": "1.1.0"
+    },
+    "doctrine/persistence": {
+        "version": "1.3.7"
+    },
+    "doctrine/reflection": {
+        "version": "1.2.1"
+    },
+    "hamcrest/hamcrest-php": {
+        "version": "v2.0.0"
+    },
+    "knplabs/knp-snappy": {
+        "version": "v1.2.1"
+    },
+    "knplabs/knp-snappy-bundle": {
+        "version": "1.5",
+        "recipe": {
+            "repo": "github.com/symfony/recipes-contrib",
+            "branch": "master",
+            "version": "1.5",
+            "ref": "c81bdcf4a9d4e7b1959071457f9608631865d381"
+        },
+        "files": [
+            "./tests/Application/config/packages/knp_snappy.yaml"
+        ]
+    },
+    "league/uri-components": {
+        "version": "1.8.2"
+    },
+    "league/uri-hostname-parser": {
+        "version": "1.1.1"
+    },
+    "league/uri-interfaces": {
+        "version": "1.1.1"
+    },
+    "league/uri-manipulations": {
+        "version": "1.5.0"
+    },
+    "league/uri-parser": {
+        "version": "1.4.1"
+    },
+    "league/uri-schemes": {
+        "version": "1.2.1"
+    },
+    "myclabs/php-enum": {
+        "version": "1.7.6"
+    },
+    "php": {
+        "version": "7.4"
+    },
+    "psr/http-client": {
+        "version": "1.0.0"
+    },
+    "ralouphie/getallheaders": {
+        "version": "3.0.3"
+    },
+    "sebastian/type": {
+        "version": "1.1.3"
+    },
+    "sonata-project/doctrine-extensions": {
+        "version": "1.6.0"
+    },
+    "sonata-project/form-extensions": {
+        "version": "1.0.0"
+    },
+    "sonata-project/twig-extensions": {
+        "version": "1.3.0"
+    },
+    "sylius-labs/polyfill-symfony-event-dispatcher": {
+        "version": "v1.0.0"
+    },
+    "sylius/refund-plugin": {
+        "version": "0.4",
+        "recipe": {
+            "repo": "github.com/symfony/recipes-contrib",
+            "branch": "master",
+            "version": "0.4",
+            "ref": "a3f813f608c6f04bd7d0b4cefd73a96bf378c390"
+        },
+        "files": [
+            "./tests/Application/config/packages/sylius_refund.yaml",
+            "./tests/Application/config/routes/sylius_refund.yaml"
+        ]
+    },
+    "symfony/cache-contracts": {
+        "version": "v2.1.2"
+    },
+    "symfony/deprecation-contracts": {
+        "version": "v2.1.2"
+    },
+    "symfony/error-handler": {
+        "version": "v4.4.10"
+    },
+    "symfony/flex": {
+        "version": "1.0",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "master",
+            "version": "1.0",
+            "ref": "c0eeb50665f0f77226616b6038a9b06c03752d8e"
+        },
+        "files": [
+            "./.env"
+        ]
+    },
+    "symfony/messenger": {
+        "version": "4.3",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "master",
+            "version": "4.3",
+            "ref": "8a2675c061737658bed85102e9241c752620e575"
+        },
+        "files": [
+            "./tests/Application/config/packages/messenger.yaml"
+        ]
+    },
+    "symfony/mime": {
+        "version": "v5.1.2"
+    },
+    "symfony/polyfill-intl-grapheme": {
+        "version": "v1.17.1"
+    },
+    "symfony/polyfill-intl-idn": {
+        "version": "v1.17.1"
+    },
+    "symfony/polyfill-intl-normalizer": {
+        "version": "v1.17.1"
+    },
+    "symfony/polyfill-php73": {
+        "version": "v1.17.1"
+    },
+    "symfony/polyfill-php80": {
+        "version": "v1.17.1"
+    },
+    "symfony/service-contracts": {
+        "version": "v2.1.2"
+    },
+    "symfony/string": {
+        "version": "v5.1.2"
+    },
+    "symfony/translation-contracts": {
+        "version": "v1.1.7"
+    },
+    "symfony/var-exporter": {
+        "version": "v5.1.2"
+    },
+    "symplify/set-config-resolver": {
+        "version": "v7.1.3"
+    },
+    "symplify/smart-file-system": {
+        "version": "v7.1.3"
+    },
+    "twig/intl-extra": {
+        "version": "v2.12.5"
+    },
+    "webimpress/safe-writer": {
+        "version": "2.0.1"
+    }
+}
