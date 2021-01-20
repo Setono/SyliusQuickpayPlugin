@@ -19,8 +19,7 @@ use Webmozart\Assert\Assert;
 
 final class Resolver implements StateResolverInterface
 {
-    /** @var RegistryInterface */
-    private $payum;
+    private RegistryInterface $payum;
 
     public function __construct(RegistryInterface $payum)
     {

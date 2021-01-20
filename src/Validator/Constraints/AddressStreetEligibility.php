@@ -8,8 +8,7 @@ use Symfony\Component\Validator\Constraint;
 
 final class AddressStreetEligibility extends Constraint
 {
-    /** @var string */
-    public $message = 'setono_sylius_quickpay.address.street_eligibility';
+    public string $message = 'setono_sylius_quickpay.address.street_eligibility';
 
     public function validatedBy(): string
     {

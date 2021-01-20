@@ -36,8 +36,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
     use GatewayAwareTrait;
     use ApiAwareTrait;
 
-    /** @var Payum */
-    protected $payum;
+    protected Payum $payum;
 
     public function __construct(Payum $payum)
     {
