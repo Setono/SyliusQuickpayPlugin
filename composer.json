@@ -68,6 +68,7 @@
             "@tests"
         ],
         "analyse": "phpstan analyse",
+        "analyse-baseline": "phpstan analyse --generate-baseline",
         "assets": [
             "@ensure-assets-installed",
             "@ensure-assets-compiled"
