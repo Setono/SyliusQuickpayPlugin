@@ -35,6 +35,7 @@
                  class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver"
                  public="true">
             <argument type="service" id="payum"/>
+            <argument>%setono_sylius_quickpay.disable_capture%</argument>
         </service>
 
         <!-- Form -->
