@@ -21,9 +21,14 @@ final class Resolver implements StateResolverInterface
 {
     private RegistryInterface $payum;
 
-    public function __construct(RegistryInterface $payum)
-    {
+    private bool $disableCapture;
+
+    public function __construct(
+        RegistryInterface $payum,
+        bool $disableCapture = false
+    ) {
         $this->payum = $payum;
+        $this->disableCapture = $disableCapture;
     }
 
     /**
@@ -71,7 +76,12 @@ final class Resolver implements StateResolverInterface
                 }
                 // no break
             case OrderPaymentTransitions::TRANSITION_PAY:
-                $gateway->execute(new Capture($model));
+                if ($this->disableCapture) {
+                    // @todo Do we need to do something here to trigger
+                    // update payment state to captured & update order state to paid
+                } else {
+                    $gateway->execute(new Capture($model));
+                }
 
                 break;
             case OrderPaymentTransitions::TRANSITION_PARTIALLY_REFUND:
