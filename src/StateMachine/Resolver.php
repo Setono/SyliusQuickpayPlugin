@@ -25,7 +25,7 @@ final class Resolver implements StateResolverInterface
 
     public function __construct(
         RegistryInterface $payum,
-        bool $disableCapture
+        bool $disableCapture = false
     ) {
         $this->payum = $payum;
         $this->disableCapture = $disableCapture;
