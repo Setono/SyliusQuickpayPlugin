@@ -14,10 +14,21 @@
     "license": "MIT",
     "require": {
         "php": "^7.4",
+        "ext-mbstring": "*",
+        "doctrine/collections": "^1.6",
+        "doctrine/orm": "^2.7",
+        "fzaninotto/faker": "^1.9",
+        "payum/payum": "^1.6",
         "setono/payum-quickpay": "^1.2",
+        "symfony/config": "^4.4 || ^5.0",
+        "symfony/dependency-injection": "^4.4 || ^5.0",
+        "symfony/form": "^4.4 || ^5.0",
+        "symfony/http-kernel": "^4.4 || ^5.1.5",
         "symfony/intl": "^4.4 || ^5.0",
+        "symfony/validator": "^4.4 || ^5.0",
         "thecodingmachine/safe": "^1.0",
-        "viison/address-splitter": "^0.3.4"
+        "viison/address-splitter": "^0.3.4",
+        "webmozart/assert": "^1.9"
     },
     "require-dev": {
         "phpspec/phpspec": "^6.3",
