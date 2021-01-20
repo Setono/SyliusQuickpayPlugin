@@ -6,8 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Klarna\Matcher;
 
 class CountryCurrencyMatcher implements CountryCurrencyMatcherInterface
 {
-    /** @var array */
-    protected $map;
+    protected ?array $map = null;
 
     public function __construct(array $map = null)
     {

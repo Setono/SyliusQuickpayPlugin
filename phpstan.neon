@@ -1,14 +1,13 @@
 includes:
-	- vendor/korbeil/phpstan-generic-rules/extension.neon
-	- vendor/phpstan/phpstan-doctrine/extension.neon
-	- vendor/phpstan/phpstan-strict-rules/rules.neon
-	- vendor/phpstan/phpstan-webmozart-assert/extension.neon
-	- vendor/thecodingmachine/phpstan-safe-rule/phpstan-safe-rule.neon
+	- phpstan-baseline.neon
 
 parameters:
-    reportUnmatchedIgnoredErrors: true
-    checkMissingIterableValueType: false
-    checkGenericClassInNonGenericObjectType: false
+	checkGenericClassInNonGenericObjectType: false
+	checkMissingIterableValueType: false
 
-    ignoreErrors:
-        - '/Cannot call method .+ on .+\\NodeParentInterface\|null\./'
+	level: max
+
+	paths:
+		- src/
+
+	reportUnmatchedIgnoredErrors: true

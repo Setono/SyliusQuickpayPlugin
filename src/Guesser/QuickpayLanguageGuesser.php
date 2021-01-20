@@ -9,8 +9,7 @@ use Sylius\Component\Locale\Context\LocaleNotFoundException;
 
 class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
 {
-    /** @var LocaleContextInterface */
-    protected $localeContext;
+    protected LocaleContextInterface $localeContext;
 
     public function __construct(LocaleContextInterface $localeContext)
     {

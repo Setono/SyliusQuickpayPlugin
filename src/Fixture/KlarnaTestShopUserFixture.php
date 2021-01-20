@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Fixture;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Faker\Factory;
+use Faker\Generator;
 use function Safe\preg_replace;
 use function Safe\sprintf;
 use Sylius\Bundle\CoreBundle\Fixture\Factory\ExampleFactoryInterface;
@@ -17,17 +18,13 @@ use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 
 class KlarnaTestShopUserFixture extends AbstractFixture
 {
-    /** @var ExampleFactoryInterface */
-    protected $shopUserExampleFactory;
+    protected ExampleFactoryInterface $shopUserExampleFactory;
 
-    /** @var ExampleFactoryInterface */
-    protected $addressExampleFactory;
+    protected ExampleFactoryInterface $addressExampleFactory;
 
-    /** @var EntityManagerInterface */
-    protected $shopUserManager;
+    protected EntityManagerInterface $shopUserManager;
 
-    /** @var \Faker\Generator */
-    private $faker;
+    private Generator $faker;
 
     public function __construct(
         ExampleFactoryInterface $shopUserExampleFactory,
@@ -81,11 +78,8 @@ class KlarnaTestShopUserFixture extends AbstractFixture
         $optionsNode
             ->children()
                 ->integerNode('amount')->isRequired()->min(0)->end()
-
                 ->enumNode('country')->values(self::getSupportedCountries())->end()
-
                 ->scalarNode('password')->defaultValue('klarna')->end()
-
                 ->booleanNode('approved')->defaultTrue()->end()
             ->end()
         ;

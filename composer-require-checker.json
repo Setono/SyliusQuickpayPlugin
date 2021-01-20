@@ -1,0 +1,33 @@
+{
+  "symbol-whitelist": [
+    "array",
+    "bool",
+    "callable",
+    "false",
+    "float",
+    "int",
+    "iterable",
+    "null",
+    "object",
+    "parent",
+    "self",
+    "static",
+    "string",
+    "true",
+    "void",
+    "Sylius\\Bundle\\CoreBundle\\Application\\SyliusPluginTrait",
+    "Sylius\\Bundle\\CoreBundle\\Fixture\\Factory\\ExampleFactoryInterface",
+    "Sylius\\Bundle\\FixturesBundle\\Fixture\\AbstractFixture",
+    "Sylius\\Component\\Addressing\\Model\\AddressInterface",
+    "Sylius\\Component\\Core\\Model\\AddressInterface",
+    "Sylius\\Component\\Core\\Model\\CustomerInterface",
+    "Sylius\\Component\\Core\\Model\\OrderInterface",
+    "Sylius\\Component\\Core\\Model\\PaymentInterface",
+    "Sylius\\Component\\Core\\Model\\ProductVariantInterface",
+    "Sylius\\Component\\Core\\OrderPaymentTransitions",
+    "Sylius\\Component\\Locale\\Context\\LocaleContextInterface",
+    "Sylius\\Component\\Locale\\Context\\LocaleNotFoundException",
+    "Sylius\\Component\\Order\\Model\\OrderInterface",
+    "Sylius\\Component\\Order\\StateResolver\\StateResolverInterface"
+  ]
+}
