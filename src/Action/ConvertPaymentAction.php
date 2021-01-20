@@ -171,7 +171,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
                     $orderItem->getProductName(),
                     $orderItem->getVariantName()
                 ),
-                'item_price' => $orderItem->getUnitPrice(),
+                'item_price' => $orderItem->getFullDiscountedUnitPrice(),
                 'vat_rate' => 25 / 100, // @todo Fix
             ];
         })->toArray();
