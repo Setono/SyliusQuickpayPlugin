@@ -67,6 +67,14 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
         $details['continue_url'] = $details['cancel_url'] = $token->getAfterUrl();
 
+        if (!isset($details['callback_url']) || null === $details['callback_url'] || '' === $details['callback_url']) {
+            $notifyToken = $this->payum->getTokenFactory()->createNotifyToken(
+                $token->getGatewayName(),
+                $token->getDetails()
+            );
+            $details['callback_url'] = $notifyToken->getTargetUrl();
+        }
+
         $request->setResult((array) $details);
     }
 
