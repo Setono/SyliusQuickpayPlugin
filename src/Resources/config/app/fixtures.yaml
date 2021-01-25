@@ -3,10 +3,10 @@ sylius_fixtures:
         default:
             fixtures:
 
-                geographical:
+                setono_quickpay_geographical:
+                    name: geographical
                     options:
                         countries:
-                            - 'US'
                             - 'DK'
                             - 'NL'
                         zones:
@@ -16,13 +16,14 @@ sylius_fixtures:
                                 countries:
                                     - 'DK'
                                     - 'NL'
-                currency:
+                setono_quickpay_currency:
+                    name: currency
                     options:
                         currencies: 
-                            - "EUR"
                             - "DKK"
 
-                channel:
+                setono_quickpay_channel:
+                    name: channel
                     options:
                         custom:
                             eu_web_store:
@@ -65,14 +66,8 @@ sylius_fixtures:
                         amount: 10
                         country: NL
 
-                # Temporary fix for https://github.com/Sylius/Sylius/issues/10719
-                # @todo Remove this lines once issue will be fixed
-                order:
-                    options:
-                        amount: 20
-                        channel: FASHION_WEB
-
-                payment_method:
+                setono_quickpay_payment_method:
+                    name: payment_method
                     options:
                         custom:
                             quickpay_credit_card:
@@ -130,7 +125,8 @@ sylius_fixtures:
                                     - 'NL_WEB'
                                 enabled: true
 
-                shipping_method:
+                setono_quickpay_shipping_method:
+                    name: shipping_methody
                     options:
                         custom:
                             eu_courier:
@@ -143,7 +139,7 @@ sylius_fixtures:
                                     - 'DK_WEB'
                                     - 'NL_WEB'
 
-                cap_product_nl:
+                setono_quickpay_cap_product_nl:
                     name: product
                     options:
                         custom:

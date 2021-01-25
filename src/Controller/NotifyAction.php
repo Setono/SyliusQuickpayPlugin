@@ -1,0 +1,108 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Setono\SyliusQuickpayPlugin\Controller;
+
+use Payum\Core\Payum;
+use Payum\Core\Request\Notify;
+use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
+use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Core\Model\PaymentMethodInterface;
+use Sylius\Component\Core\Repository\OrderRepositoryInterface;
+use Sylius\Component\Payment\Model\PaymentInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+
+/**
+ * Handles callbacks from QuickPay @see https://learn.quickpay.net/tech-talk/api/callback/
+ */
+final class NotifyAction
+{
+    private Payum $payum;
+
+    private OrderRepositoryInterface $orderRepository;
+
+    private string $orderPrefix;
+
+    public function __construct(Payum $payum, OrderRepositoryInterface $orderRepository, string $orderPrefix)
+    {
+        $this->payum = $payum;
+        $this->orderRepository = $orderRepository;
+        $this->orderPrefix = $orderPrefix;
+    }
+
+    public function __invoke(Request $request): Response
+    {
+        $type = (string) $request->headers->get('QuickPay-Resource-Type');
+
+        // only handle payments for now
+        if ($type !== 'Payment') {
+            return new Response();
+        }
+
+        if (!($request->request->has('id') && $request->request->has('order_id'))) {
+            throw new BadRequestHttpException();
+        }
+
+        $orderId = (string) $request->request->get('order_id');
+
+        // an attempt to remove the order prefix in non-prod environments
+        // it's optimistic because the prefix saved in the database might be different
+        // TODO: better ideas are very welcome
+        if (0 === mb_strpos($orderId, $this->orderPrefix)) {
+            $orderId = str_replace($this->orderPrefix, '', $orderId);
+        }
+
+        /** @var OrderInterface|null $order */
+        $order = $this->orderRepository->find($orderId);
+
+        if (null === $order) {
+            return new Response();
+        }
+
+        $quickpayPaymentId = (int) $request->request->get('id');
+
+        $payment = $this->getPaymentFromOrder($order, $quickpayPaymentId);
+
+        if (null === $payment) {
+            throw new BadRequestHttpException();
+        }
+
+        /** @var PaymentMethodInterface $method */
+        $method = $payment->getMethod();
+
+        /** @var GatewayConfigInterface $gatewayConfig */
+        $gatewayConfig = $method->getGatewayConfig();
+
+        $gateway = $this->payum->getGateway($gatewayConfig->getGatewayName());
+
+        // validates request checksum and set the request data
+        $gateway->execute(new Notify($payment));
+        $gateway->execute(new Notify($payment->getDetails()));
+
+        return new Response();
+    }
+
+    /**
+     * @TODO: maybe move this code somewhere outside?
+     */
+    private function getPaymentFromOrder(OrderInterface $order, int $quickpayPaymentId): ?PaymentInterface
+    {
+        $quickpayPayment = $order
+            ->getPayments()
+            ->filter(
+                static function (PaymentInterface $payment) use ($quickpayPaymentId): bool {
+                    if (!isset($payment->getDetails()['quickpayPaymentId'])) {
+                        return false;
+                    }
+
+                    return (int) $payment->getDetails()['quickpayPaymentId'] === $quickpayPaymentId;
+                }
+            )
+            ->last();
+
+        return false === $quickpayPayment ? null : $quickpayPayment;
+    }
+}

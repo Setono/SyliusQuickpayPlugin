@@ -19,16 +19,18 @@
         "doctrine/orm": "^2.7",
         "fzaninotto/faker": "^1.9",
         "payum/payum": "^1.6",
-        "setono/payum-quickpay": "^1.2",
+        "setono/payum-quickpay": "^1.3",
         "symfony/config": "^4.4 || ^5.0",
         "symfony/dependency-injection": "^4.4 || ^5.0",
         "symfony/form": "^4.4 || ^5.0",
+        "symfony/http-foundation": "^4.4 || ^5.0.7",
         "symfony/http-kernel": "^4.4 || ^5.1.5",
         "symfony/intl": "^4.4 || ^5.0",
         "symfony/validator": "^4.4 || ^5.0",
         "thecodingmachine/safe": "^1.0",
         "viison/address-splitter": "^0.3.4",
-        "webmozart/assert": "^1.9"
+        "webmozart/assert": "^1.9",
+        "winzou/state-machine": "^0.3"
     },
     "require-dev": {
         "phpspec/phpspec": "^6.3",
@@ -63,11 +65,15 @@
     },
     "prefer-stable": true,
     "scripts": {
+        "post-install-cmd": "@node-symlink",
+        "post-update-cmd": "@node-symlink",
+        "post-create-project-cmd": "@node-symlink",
         "all": [
             "@checks",
             "@tests"
         ],
         "analyse": "phpstan analyse",
+        "analyse-baseline": "phpstan analyse --generate-baseline",
         "assets": [
             "@ensure-assets-installed",
             "@ensure-assets-compiled"
@@ -99,8 +105,9 @@
             "@ensure-schema-updated",
             "(cd tests/Application && bin/console sylius:fixtures:load --no-interaction -e ${SYMFONY_ENV:-'dev'})"
         ],
-        "phpspec": "./vendor/bin/phpspec run -vvv",
-        "phpunit": "./vendor/bin/phpunit",
+        "node-symlink": "php bin/create_node_symlink.php",
+        "phpspec": "phpspec run -vvv",
+        "phpunit": "phpunit",
         "run": [
             "@ensure-env-copied",
             "(cd tests/Application && bin/console server:run -d public -e ${SYMFONY_ENV:-'dev'})"

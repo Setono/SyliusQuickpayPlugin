@@ -17,7 +17,9 @@ final class Configuration implements ConfigurationInterface
         $rootNode
             ->addDefaultsIfNotSet()
             ->children()
-                ->booleanNode('disable_capture')->defaultFalse()
+                ->booleanNode('disable_capture')->defaultFalse()->end()
+                ->booleanNode('disable_refund')->defaultFalse()->end()
+                ->booleanNode('disable_cancel')->defaultFalse()->end()
         ;
 
         return $treeBuilder;

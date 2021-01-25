@@ -1,0 +1,5 @@
+setono_sylius_quickpay_notify:
+    path: /payment/quickpay/notify
+    methods: [POST]
+    defaults:
+        _controller: setono_sylius_quickpay.controller.notify

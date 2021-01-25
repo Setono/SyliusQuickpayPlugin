@@ -1,6 +1,16 @@
 parameters:
 	ignoreErrors:
 		-
+			message: "#^Strict comparison using \\=\\=\\= between null and mixed will always evaluate to false\\.$#"
+			count: 1
+			path: src/Action/ConvertPaymentAction.php
+
+		-
+			message: "#^Access to an undefined property Payum\\\\Core\\\\Request\\\\GetHttpRequest\\:\\:\\$headers\\.$#"
+			count: 1
+			path: src/Action/NotifyAction.php
+
+		-
 			message: "#^Call to an undefined method Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\NodeDefinition\\:\\:addDefaultsIfNotSet\\(\\)\\.$#"
 			count: 1
 			path: src/DependencyInjection/Configuration.php
@@ -14,14 +24,3 @@ parameters:
 			message: "#^Cannot call method enumNode\\(\\) on Symfony\\\\Component\\\\Config\\\\Definition\\\\Builder\\\\NodeParentInterface\\|null\\.$#"
 			count: 1
 			path: src/Fixture/KlarnaTestShopUserFixture.php
-
-		-
-			message: "#^Method Setono\\\\SyliusQuickpayPlugin\\\\StateMachine\\\\Resolver\\:\\:getPaymentsWithState\\(\\) should return Doctrine\\\\Common\\\\Collections\\\\Collection&iterable\\<Sylius\\\\Component\\\\Core\\\\Model\\\\PaymentInterface\\> but returns Doctrine\\\\Common\\\\Collections\\\\Collection\\<\\(int\\|string\\), Sylius\\\\Component\\\\Payment\\\\Model\\\\PaymentInterface\\>\\.$#"
-			count: 1
-			path: src/StateMachine/Resolver.php
-
-		-
-			message: "#^Parameter \\#1 \\$p of method Doctrine\\\\Common\\\\Collections\\\\Collection\\<\\(int\\|string\\),Sylius\\\\Component\\\\Payment\\\\Model\\\\PaymentInterface\\>\\:\\:filter\\(\\) expects Closure\\(Sylius\\\\Component\\\\Payment\\\\Model\\\\PaymentInterface\\)\\: bool, Closure\\(Sylius\\\\Component\\\\Core\\\\Model\\\\PaymentInterface\\)\\: bool given\\.$#"
-			count: 1
-			path: src/StateMachine/Resolver.php
-

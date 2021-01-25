@@ -25,9 +25,11 @@
     "Sylius\\Component\\Core\\Model\\PaymentInterface",
     "Sylius\\Component\\Core\\Model\\ProductVariantInterface",
     "Sylius\\Component\\Core\\OrderPaymentTransitions",
+    "Sylius\\Component\\Core\\Repository\\OrderRepositoryInterface",
     "Sylius\\Component\\Locale\\Context\\LocaleContextInterface",
     "Sylius\\Component\\Locale\\Context\\LocaleNotFoundException",
     "Sylius\\Component\\Order\\Model\\OrderInterface",
-    "Sylius\\Component\\Order\\StateResolver\\StateResolverInterface"
+    "Sylius\\Component\\Order\\StateResolver\\StateResolverInterface",
+    "Sylius\\Component\\Payment\\PaymentTransitions"
   ]
 }
