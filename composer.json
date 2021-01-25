@@ -19,7 +19,7 @@
         "doctrine/orm": "^2.7",
         "fzaninotto/faker": "^1.9",
         "payum/payum": "^1.6",
-        "setono/payum-quickpay": "^1.2",
+        "setono/payum-quickpay": "^1.3",
         "symfony/config": "^4.4 || ^5.0",
         "symfony/dependency-injection": "^4.4 || ^5.0",
         "symfony/form": "^4.4 || ^5.0",
@@ -63,6 +63,9 @@
     },
     "prefer-stable": true,
     "scripts": {
+        "post-install-cmd": "@node-symlink",
+        "post-update-cmd": "@node-symlink",
+        "post-create-project-cmd": "@node-symlink",
         "all": [
             "@checks",
             "@tests"
@@ -100,8 +103,9 @@
             "@ensure-schema-updated",
             "(cd tests/Application && bin/console sylius:fixtures:load --no-interaction -e ${SYMFONY_ENV:-'dev'})"
         ],
-        "phpspec": "./vendor/bin/phpspec run -vvv",
-        "phpunit": "./vendor/bin/phpunit",
+        "node-symlink": "php bin/create_node_symlink.php",
+        "phpspec": "phpspec run -vvv",
+        "phpunit": "phpunit",
         "run": [
             "@ensure-env-copied",
             "(cd tests/Application && bin/console server:run -d public -e ${SYMFONY_ENV:-'dev'})"

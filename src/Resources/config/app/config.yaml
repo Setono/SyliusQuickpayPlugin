@@ -1,8 +1,0 @@
-winzou_state_machine:
-    sylius_order_payment:
-        callbacks:
-            before:
-                sylius_complete_payment:
-                    on: ["pay", "refund"]
-                    do: ["@setono_sylius_quickpay.state_machine_resolver", "resolve"]
-                    args: ["object"]

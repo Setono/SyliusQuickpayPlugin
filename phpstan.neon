@@ -11,3 +11,5 @@ parameters:
 		- src/
 
 	reportUnmatchedIgnoredErrors: true
+	ignoreErrors:
+		- '#Access to an undefined property Payum\\Core\\Request\\GetHttpRequest::\$headers#'

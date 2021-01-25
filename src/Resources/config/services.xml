@@ -5,7 +5,35 @@
            xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
     <services>
 
+        <!-- Controllers -->
+        <service id="setono_sylius_quickpay.controller.notify"
+                 class="Setono\SyliusQuickpayPlugin\Controller\NotifyAction" public="true">
+            <argument type="service" id="payum"/>
+            <argument type="service" id="sylius.repository.order"/>
+            <argument>%env(QUICKPAY_ORDER_PREFIX)%</argument>
+        </service>
+
         <!-- Action -->
+        <service id="setono_sylius_quickpay.payum_action.notify"
+                 class="Setono\SyliusQuickpayPlugin\Action\NotifyAction"
+                 public="true">
+            <argument type="service" id="payum"/>
+
+            <tag name="payum.action"
+                 factory="quickpay"
+                 alias="setono_sylius_quickpay.notify"/>
+        </service>
+
+        <service id="setono_sylius_quickpay.payum_action.status"
+                 class="Setono\SyliusQuickpayPlugin\Action\StatusAction"
+                 public="true">
+            <argument type="service" id="payum"/>
+
+            <tag name="payum.action"
+                 factory="quickpay"
+                 alias="setono_sylius_quickpay.status"/>
+        </service>
+
         <service id="setono_sylius_quickpay.payum_action.quickpay.convert_payment"
                  class="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction"
                  public="true">
@@ -28,14 +56,6 @@
 
             <tag name="validator.constraint_validator"
                  alias="setono_sylius_quickpay_address_street_eligibility_validator"/>
-        </service>
-
-        <!-- State machine -->
-        <service id="setono_sylius_quickpay.state_machine_resolver"
-                 class="Setono\SyliusQuickpayPlugin\StateMachine\Resolver"
-                 public="true">
-            <argument type="service" id="payum"/>
-            <argument>%setono_sylius_quickpay.disable_capture%</argument>
         </service>
 
         <!-- Form -->
