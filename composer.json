@@ -33,7 +33,7 @@
         "winzou/state-machine": "^0.3"
     },
     "require-dev": {
-        "phpspec/phpspec": "^6.3",
+        "phpspec/phpspec": "^6.3 || ^7.0",
         "phpunit/phpunit": "^8.5",
         "roave/security-advisories": "dev-master",
         "setono/code-quality-pack": "^1.5",
