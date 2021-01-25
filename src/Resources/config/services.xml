@@ -58,6 +58,16 @@
                  alias="setono_sylius_quickpay_address_street_eligibility_validator"/>
         </service>
 
+        <!-- State machine -->
+        <service id="setono_sylius_quickpay.state_machine.payment_processor"
+                 class="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor"
+                 public="true">
+            <argument type="service" id="payum"/>
+            <argument>%setono_sylius_quickpay.disable_capture%</argument>
+            <argument>%setono_sylius_quickpay.disable_refund%</argument>
+            <argument>%setono_sylius_quickpay.disable_cancel%</argument>
+        </service>
+
         <!-- Form -->
         <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
                  class="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">
