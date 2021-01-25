@@ -8,6 +8,8 @@ use Payum\Core\Payum;
 use Payum\Core\Request\Cancel;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;
+use Setono\Payum\QuickPay\Model\QuickPayPayment;
+use Setono\Payum\QuickPay\Model\QuickPayPaymentOperation;
 use SM\Event\TransitionEvent;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -49,7 +51,8 @@ final class PaymentProcessor
 
         switch ($event->getTransition()) {
             case PaymentTransitions::TRANSITION_COMPLETE:
-                if ($this->disableCapture) {
+                if ($this->disableCapture
+                    || $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CAPTURE)) {
                     return;
                 }
 
@@ -57,7 +60,8 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_REFUND:
-                if ($this->disableRefund) {
+                if ($this->disableRefund
+                    || $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_REFUND)) {
                     return;
                 }
 
@@ -65,7 +69,8 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_CANCEL:
-                if ($this->disableCancel) {
+                if ($this->disableCancel
+                    || $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CANCEL)) {
                     return;
                 }
 
@@ -73,5 +78,22 @@ final class PaymentProcessor
 
                 break;
         }
+    }
+
+    private function isLastOperationApproved(PaymentInterface $payment, string $state): bool
+    {
+        $quickpayPayment = $payment->getDetails()['quickpayPayment'] ?? null;
+
+        if (!$quickpayPayment instanceof QuickPayPayment) {
+            return false;
+        }
+
+        $operation = $quickpayPayment->getLatestOperation();
+
+        if (null === $operation) {
+            return false;
+        }
+
+        return $operation->getType() === $state && $operation->isApproved();
     }
 }
