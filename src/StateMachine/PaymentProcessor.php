@@ -18,8 +18,11 @@ use Sylius\Component\Payment\PaymentTransitions;
 final class PaymentProcessor
 {
     private Payum $payum;
+
     private bool $disableCapture;
+
     private bool $disableRefund;
+
     private bool $disableCancel;
 
     public function __construct(Payum $payum, bool $disableCapture, bool $disableRefund, bool $disableCancel)

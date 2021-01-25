@@ -29,7 +29,8 @@
         "symfony/validator": "^4.4 || ^5.0",
         "thecodingmachine/safe": "^1.0",
         "viison/address-splitter": "^0.3.4",
-        "webmozart/assert": "^1.9"
+        "webmozart/assert": "^1.9",
+        "winzou/state-machine": "^0.3"
     },
     "require-dev": {
         "phpspec/phpspec": "^6.3",
