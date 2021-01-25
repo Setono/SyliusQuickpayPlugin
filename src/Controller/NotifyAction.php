@@ -54,17 +54,17 @@ final class NotifyAction
             throw new BadRequestHttpException();
         }
 
-        $orderId = (string) $data->order_id;
+        $orderNumber = (string) $data->order_id;
 
         // an attempt to remove the order prefix in non-prod environments
         // it's optimistic because the prefix saved in the database might be different
         // TODO: better ideas are very welcome
-        if (0 === mb_strpos($orderId, $this->orderPrefix)) {
-            $orderId = str_replace($this->orderPrefix, '', $orderId);
+        if (0 === mb_strpos($orderNumber, $this->orderPrefix)) {
+            $orderNumber = str_replace($this->orderPrefix, '', $orderNumber);
         }
 
         /** @var OrderInterface|null $order */
-        $order = $this->orderRepository->find($orderId);
+        $order = $this->orderRepository->findOneByNumber($orderNumber);
 
         if (null === $order) {
             return new Response('', 204);
