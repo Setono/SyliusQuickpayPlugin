@@ -15,6 +15,7 @@ use Payum\Core\Request\Notify;
 use Safe\Exceptions\JsonException;
 use Setono\Payum\QuickPay\Action\Api\ApiAwareTrait;
 use Setono\Payum\QuickPay\Model\QuickPayPayment;
+use Setono\Payum\QuickPay\Request\Api\ConfirmPayment;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
@@ -32,13 +33,9 @@ class NotifyAction implements ActionInterface, ApiAwareInterface, GatewayAwareIn
 
         $this->gateway->execute($httpRequest = new GetHttpRequest());
 
-        $checksum = $httpRequest->headers['quickpay-checksum-sha256'] ?? '';
+        $checksum = (string) ($httpRequest->headers['quickpay-checksum-sha256'][0] ?? '');
 
-        if (is_array($checksum)) {
-            $checksum = current($checksum);
-        }
-
-        if (!$this->api->validateChecksum($httpRequest->content, (string) $checksum)) {
+        if (!$this->api->validateChecksum($httpRequest->content, $checksum)) {
             throw new HttpResponse('', 400);
         }
 
@@ -54,6 +51,8 @@ class NotifyAction implements ActionInterface, ApiAwareInterface, GatewayAwareIn
         $details = $payment->getDetails();
         $details['quickpayPayment'] = QuickPayPayment::createFromObject($data);
         $payment->setDetails($details);
+
+        $this->gateway->execute(new ConfirmPayment($payment));
     }
 
     public function supports($request): bool

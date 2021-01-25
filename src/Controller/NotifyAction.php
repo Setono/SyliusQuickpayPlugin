@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Controller;
 
 use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
+use Safe\Exceptions\JsonException;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -39,14 +40,21 @@ final class NotifyAction
 
         // only handle payments for now
         if ($type !== 'Payment') {
-            return new Response();
+            return new Response('', 204);
         }
 
-        if (!($request->request->has('id') && $request->request->has('order_id'))) {
+        try {
+            // https://learn.quickpay.net/tech-talk/api/callback/#request-example
+            $data = \Safe\json_decode((string) $request->getContent());
+        } catch (JsonException $e) {
             throw new BadRequestHttpException();
         }
 
-        $orderId = (string) $request->request->get('order_id');
+        if (!isset($data->id, $data->order_id)) {
+            throw new BadRequestHttpException();
+        }
+
+        $orderId = (string) $data->order_id;
 
         // an attempt to remove the order prefix in non-prod environments
         // it's optimistic because the prefix saved in the database might be different
@@ -59,12 +67,10 @@ final class NotifyAction
         $order = $this->orderRepository->find($orderId);
 
         if (null === $order) {
-            return new Response();
+            return new Response('', 204);
         }
 
-        $quickpayPaymentId = (int) $request->request->get('id');
-
-        $payment = $this->getPaymentFromOrder($order, $quickpayPaymentId);
+        $payment = $this->getPaymentFromOrder($order, (int) $data->id);
 
         if (null === $payment) {
             throw new BadRequestHttpException();
@@ -80,9 +86,8 @@ final class NotifyAction
 
         // validates request checksum and set the request data
         $gateway->execute(new Notify($payment));
-        $gateway->execute(new Notify($payment->getDetails()));
 
-        return new Response();
+        return new Response('', 204);
     }
 
     /**
