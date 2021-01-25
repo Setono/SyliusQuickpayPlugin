@@ -29,8 +29,6 @@
     "Sylius\\Component\\Locale\\Context\\LocaleContextInterface",
     "Sylius\\Component\\Locale\\Context\\LocaleNotFoundException",
     "Sylius\\Component\\Order\\Model\\OrderInterface",
-    "Sylius\\Component\\Order\\StateResolver\\StateResolverInterface",
-    "Symfony\\Component\\HttpFoundation\\Request",
-    "Symfony\\Component\\HttpFoundation\\Response"
+    "Sylius\\Component\\Order\\StateResolver\\StateResolverInterface"
   ]
 }
