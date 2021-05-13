@@ -30,7 +30,7 @@
         "thecodingmachine/safe": "^1.0",
         "viison/address-splitter": "^0.3.4",
         "webmozart/assert": "^1.9",
-        "winzou/state-machine": "^0.3"
+        "winzou/state-machine": "^0.3 || ^0.4"
     },
     "require-dev": {
         "phpspec/phpspec": "^6.3",
