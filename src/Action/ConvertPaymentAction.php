@@ -14,9 +14,9 @@ use Payum\Core\Model\PaymentInterface as PayumPaymentInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\Convert;
 use Payum\Core\Security\TokenInterface;
-use function Safe\sprintf;
 use Setono\Payum\QuickPay\Action\Api\ApiAwareTrait;
 use Setono\Payum\QuickPay\Model\QuickPayPayment;
+use function sprintf;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
 use Sylius\Component\Core\Model\OrderInterface;
@@ -44,7 +44,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
     }
 
     /**
-     * @param Convert|mixed $request
+     * @param Convert $request
      */
     public function execute($request): void
     {
@@ -56,13 +56,17 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         $details['payment'] = $payumPayment;
 
         $token = $request->getToken();
+        Assert::notNull($token);
+
         if (!isset($details['quickpayPayment']) || !$details['quickpayPayment'] instanceof QuickPayPayment) {
             $details->replace(
                 $this->getRelatedOrderDetails($token)
             );
 
-            $details['quickpayPayment'] = $this->api->getPayment($details);
-            $details['quickpayPaymentId'] = $details['quickpayPayment']->getId();
+            $payment = $this->api->getPayment($details);
+
+            $details['quickpayPayment'] = $payment;
+            $details['quickpayPaymentId'] = $payment->getId();
         }
 
         $details['continue_url'] = $details['cancel_url'] = $token->getAfterUrl();
@@ -119,6 +123,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         switch (mb_strtoupper($countryCode)) {
             case 'DE':
                 try {
+                    /** @var array<string, string> $splittedStreet */
                     $splittedStreet = AddressSplitter::splitAddress($street);
 
                     $details['street'] = $splittedStreet['streetName'];
@@ -131,6 +136,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
                 break;
             case 'NL':
                 try {
+                    /** @var array<string, string> $splittedStreet */
                     $splittedStreet = AddressSplitter::splitAddress($street);
 
                     $details['street'] = $splittedStreet['streetName'];
@@ -149,8 +155,8 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
         $details['name'] = sprintf(
             '%s %s',
-            $address->getFirstName(),
-            $address->getLastName()
+            (string) $address->getFirstName(),
+            (string) $address->getLastName()
         );
         $details['city'] = $address->getCity();
         $details['zip_code'] = $address->getPostcode();
@@ -164,6 +170,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
     /**
      * @param Collection|OrderItemInterface[] $items
+     * @psalm-param Collection<array-key, OrderItemInterface> $items
      */
     protected function convertOrderItems(Collection $items): array
     {
@@ -176,8 +183,8 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
                 'item_no' => $variant->getCode(),
                 'item_name' => sprintf(
                     '%s %s',
-                    $orderItem->getProductName(),
-                    $orderItem->getVariantName()
+                    (string) $orderItem->getProductName(),
+                    (string) $orderItem->getVariantName()
                 ),
                 'item_price' => $orderItem->getFullDiscountedUnitPrice(),
                 'vat_rate' => 25 / 100, // @todo Fix

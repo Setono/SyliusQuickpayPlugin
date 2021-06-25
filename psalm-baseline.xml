@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<files psalm-version="4.8.1@f73f2299dbc59a3e6c4d66cff4605176e728ee69">
+  <file src="src/Action/ConvertPaymentAction.php">
+    <DeprecatedClass occurrences="1">
+      <code>$this-&gt;payum-&gt;getTokenFactory()</code>
+    </DeprecatedClass>
+    <InvalidArrayOffset occurrences="2">
+      <code>$splittedStreet['houseNumberParts']['base']</code>
+      <code>$splittedStreet['houseNumberParts']['extension']</code>
+    </InvalidArrayOffset>
+    <MixedAssignment occurrences="2">
+      <code>$details['house_extension']</code>
+      <code>$details['house_number']</code>
+    </MixedAssignment>
+    <PropertyNotSetInConstructor occurrences="2">
+      <code>ConvertPaymentAction</code>
+      <code>ConvertPaymentAction</code>
+    </PropertyNotSetInConstructor>
+    <RedundantConditionGivenDocblockType occurrences="1">
+      <code>notNull</code>
+    </RedundantConditionGivenDocblockType>
+  </file>
+  <file src="src/Action/NotifyAction.php">
+    <MixedArrayAccess occurrences="1">
+      <code>$httpRequest-&gt;headers['quickpay-checksum-sha256']</code>
+    </MixedArrayAccess>
+  </file>
+  <file src="src/Checker/StreetEligibilityChecker.php">
+    <MixedArrayAccess occurrences="2">
+      <code>$splittedStreet['houseNumberParts']['base']</code>
+      <code>$splittedStreet['houseNumberParts']['extension']</code>
+    </MixedArrayAccess>
+  </file>
+</files>

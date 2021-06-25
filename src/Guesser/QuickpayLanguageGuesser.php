@@ -9,6 +9,18 @@ use Sylius\Component\Locale\Context\LocaleNotFoundException;
 
 class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
 {
+    private const DEFAULT_LANGUAGE = 'en';
+
+    /**
+     * Map both norwegian locales to no
+     *
+     * @see https://github.com/QuickPay/standard-branding/tree/master/locales
+     */
+    private const MAPPING = [
+        'nb' => 'no',
+        'nn' => 'no',
+    ];
+
     protected LocaleContextInterface $localeContext;
 
     public function __construct(LocaleContextInterface $localeContext)
@@ -18,25 +30,24 @@ class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
 
     public function guess(): string
     {
-        // Map both norwegian locales to no
-        // @see https://github.com/QuickPay/standard-branding/tree/master/locales
-        static $map = [
-            'nb' => 'no',
-            'nn' => 'no',
-        ];
-
         try {
             $locale = $this->localeContext->getLocaleCode();
 
-            $language = explode('_', $locale)[0];
-            if (isset($map[$language])) {
-                return $map[$language];
-            }
-
-            return $language;
+            return self::resolveLanguage($locale);
         } catch (LocaleNotFoundException $e) {
+            return self::DEFAULT_LANGUAGE;
+        }
+    }
+
+    private static function resolveLanguage(string $locale): string
+    {
+        $localeParts = explode('_', $locale);
+        if (!isset($localeParts[0])) {
+            return self::DEFAULT_LANGUAGE;
         }
 
-        return 'en';
+        $language = $localeParts[0];
+
+        return self::MAPPING[$language] ?? $language;
     }
 }

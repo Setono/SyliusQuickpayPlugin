@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Action;
 
+use const JSON_THROW_ON_ERROR;
+use JsonException;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\ApiAwareInterface;
 use Payum\Core\Exception\RequestNotSupportedException;
@@ -12,10 +14,10 @@ use Payum\Core\GatewayAwareTrait;
 use Payum\Core\Reply\HttpResponse;
 use Payum\Core\Request\GetHttpRequest;
 use Payum\Core\Request\Notify;
-use Safe\Exceptions\JsonException;
 use Setono\Payum\QuickPay\Action\Api\ApiAwareTrait;
 use Setono\Payum\QuickPay\Model\QuickPayPayment;
 use Setono\Payum\QuickPay\Request\Api\ConfirmPayment;
+use stdClass;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
@@ -25,7 +27,7 @@ class NotifyAction implements ActionInterface, ApiAwareInterface, GatewayAwareIn
     use GatewayAwareTrait;
 
     /**
-     * @param Notify|mixed $request
+     * @param Notify $request
      */
     public function execute($request): void
     {
@@ -40,8 +42,12 @@ class NotifyAction implements ActionInterface, ApiAwareInterface, GatewayAwareIn
         }
 
         try {
-            // https://learn.quickpay.net/tech-talk/api/callback/#request-example
-            $data = \Safe\json_decode($httpRequest->content);
+            /**
+             * https://learn.quickpay.net/tech-talk/api/callback/#request-example
+             *
+             * @var stdClass $data
+             */
+            $data = json_decode($httpRequest->content, false, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             throw new BadRequestHttpException();
         }
