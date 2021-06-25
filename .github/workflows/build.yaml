@@ -161,9 +161,6 @@ jobs:
             -   name: "Run phpspec"
                 run: "composer phpspec"
 
-            -   name: "Run phpunit"
-                run: "composer phpunit"
-
     integration-tests:
         name: "Integration tests"
 
