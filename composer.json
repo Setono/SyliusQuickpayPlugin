@@ -31,11 +31,9 @@
         "webmozart/assert": "^1.9",
         "winzou/state-machine": "^0.3 || ^0.4"
     },
-    "conflict": {
-        "ocramius/proxy-manager": "2.13.0"
-    },
     "require-dev": {
         "fzaninotto/faker": "^1.9",
+        "ocramius/proxy-manager": "~2.12.0",
         "phpspec/phpspec": "^7.1",
         "psalm/plugin-symfony": "^2.3",
         "roave/security-advisories": "dev-latest",
