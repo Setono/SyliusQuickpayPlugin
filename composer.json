@@ -14,6 +14,7 @@
     "license": "MIT",
     "require": {
         "php": ">=7.4",
+        "ext-json": "*",
         "ext-mbstring": "*",
         "doctrine/collections": "^1.6",
         "doctrine/orm": "^2.7",
@@ -26,16 +27,19 @@
         "symfony/http-kernel": "^4.4 || ^5.1.5",
         "symfony/intl": "^4.4 || ^5.0",
         "symfony/validator": "^4.4 || ^5.0",
-        "thecodingmachine/safe": "^1.0",
         "viison/address-splitter": "^0.3.4",
         "webmozart/assert": "^1.9",
         "winzou/state-machine": "^0.3"
     },
+    "conflict": {
+        "ocramius/proxy-manager": "2.13.0"
+    },
     "require-dev": {
         "fzaninotto/faker": "^1.9",
         "phpspec/phpspec": "^7.1",
+        "psalm/plugin-symfony": "^2.3",
         "roave/security-advisories": "dev-latest",
-        "setono/code-quality-pack": "^1.5",
+        "setono/code-quality-pack": "^2.1",
         "sylius/sylius": "~1.7.11",
         "symfony/debug-bundle": "^5.1",
         "symfony/dotenv": "^5.3",
@@ -74,8 +78,10 @@
             "@checks",
             "@tests"
         ],
-        "analyse": "phpstan analyse",
-        "analyse-baseline": "phpstan analyse --generate-baseline",
+        "analyse": [
+            "@ensure-test-container-exists",
+            "psalm"
+        ],
         "assets": [
             "@ensure-assets-installed",
             "@ensure-assets-compiled"
@@ -86,7 +92,7 @@
             "SYMFONY_ENV=test composer ensure-env-copied",
             "php -d memory_limit=-1 ./vendor/bin/behat --no-interaction --format=progress"
         ],
-        "check-style": "ecs check src/ spec/",
+        "check-style": "ecs check",
         "checks": [
             "composer validate --strict",
             "composer normalize --dry-run",
@@ -100,8 +106,9 @@
         "ensure-env-dev-copied": "(cd tests/Application && ([[ -f .env.dev.local ]] || cp .env  .env.dev.local))",
         "ensure-env-test-copied": "(cd tests/Application && ([[ -f .env.test.local ]] || cp .env.test .env.test.local))",
         "ensure-schema-updated": "composer ensure-env-copied && (cd tests/Application && bin/console doctrine:schema:update --force -e ${SYMFONY_ENV:-'dev'})",
+        "ensure-test-container-exists": "[[ -f tests/Application/var/cache/test/ApplicationTests_Setono_SyliusQuickpayPlugin_Application_KernelTestDebugContainer.xml ]] || tests/Application/bin/console cache:warmup --env=test",
         "ensure-vendors-installed": "[[ -f vendor/autoload.php ]] || php -d memory_limit=-1 /usr/local/bin/composer install",
-        "fix-style": "ecs check src/ spec/ --fix",
+        "fix-style": "ecs check --fix",
         "fixtures": [
             "@ensure-database-created",
             "@ensure-schema-updated",

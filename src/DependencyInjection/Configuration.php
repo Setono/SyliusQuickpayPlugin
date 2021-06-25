@@ -14,6 +14,12 @@ final class Configuration implements ConfigurationInterface
         $treeBuilder = new TreeBuilder('setono_sylius_quickpay');
 
         $rootNode = $treeBuilder->getRootNode();
+
+        /**
+         * @psalm-suppress MixedMethodCall
+         * @psalm-suppress PossiblyUndefinedMethod
+         * @psalm-suppress PossiblyNullReference
+         */
         $rootNode
             ->addDefaultsIfNotSet()
             ->children()

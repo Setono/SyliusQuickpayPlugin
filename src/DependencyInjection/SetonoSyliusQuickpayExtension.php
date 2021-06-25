@@ -11,9 +11,10 @@ use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 
 class SetonoSyliusQuickpayExtension extends Extension
 {
-    public function load(array $config, ContainerBuilder $container): void
+    public function load(array $configs, ContainerBuilder $container): void
     {
-        $config = $this->processConfiguration($this->getConfiguration([], $container), $config);
+        /** @psalm-suppress PossiblyNullArgument */
+        $config = $this->processConfiguration($this->getConfiguration([], $container), $configs);
         $loader = new XmlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
 
         $container->setParameter('setono_sylius_quickpay.disable_capture', $config['disable_capture']);

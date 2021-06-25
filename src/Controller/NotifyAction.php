@@ -6,7 +6,6 @@ namespace Setono\SyliusQuickpayPlugin\Controller;
 
 use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
-use Safe\Exceptions\JsonException;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -44,9 +43,13 @@ final class NotifyAction
         }
 
         try {
-            // https://learn.quickpay.net/tech-talk/api/callback/#request-example
-            $data = \Safe\json_decode((string) $request->getContent());
-        } catch (JsonException $e) {
+            /**
+             * https://learn.quickpay.net/tech-talk/api/callback/#request-example
+             *
+             * @var \stdClass $data
+             */
+            $data = json_decode($request->getContent(), false, 512, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
             throw new BadRequestHttpException();
         }
 

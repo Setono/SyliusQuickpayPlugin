@@ -20,12 +20,12 @@ final class AddressStreetEligibilityValidator extends ConstraintValidator
         $this->streetEligibilityChecker = $streetEligibilityChecker;
     }
 
-    public function validate($address, Constraint $constraint): void
+    public function validate($value, Constraint $constraint): void
     {
-        Assert::isInstanceOf($address, AddressInterface::class);
+        Assert::isInstanceOf($value, AddressInterface::class);
         Assert::isInstanceOf($constraint, AddressStreetEligibility::class);
 
-        if (!$this->streetEligibilityChecker->isEligible($address)) {
+        if (!$this->streetEligibilityChecker->isEligible($value)) {
             $this->context
                 ->buildViolation($constraint->message)
                 ->atPath('street')
