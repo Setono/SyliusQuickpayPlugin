@@ -11,7 +11,7 @@ This plugin adds Quickpay as a payment option to Sylius.
 ### 1. Install plugin
  
 ```bash
-$ composer require setono/sylius-quickpay-plugin
+composer require setono/sylius-quickpay-plugin
 ```
 
 ### 2. Make sure the plugin is added to `bundles.php`:
