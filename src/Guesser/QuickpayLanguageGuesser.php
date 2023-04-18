@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Guesser;
 
 use Sylius\Component\Locale\Context\LocaleContextInterface;
-use Sylius\Component\Locale\Context\LocaleNotFoundException;
+use Throwable;
 
 class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
 {
@@ -34,7 +34,7 @@ class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
             $locale = $this->localeContext->getLocaleCode();
 
             return self::resolveLanguage($locale);
-        } catch (LocaleNotFoundException $e) {
+        } catch (Throwable) {
             return self::DEFAULT_LANGUAGE;
         }
     }

@@ -29,7 +29,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
     public function __construct(
         ExampleFactoryInterface $shopUserExampleFactory,
         ExampleFactoryInterface $addressExampleFactory,
-        EntityManagerInterface $shopUserManager
+        EntityManagerInterface $shopUserManager,
     ) {
         $this->shopUserExampleFactory = $shopUserExampleFactory;
         $this->addressExampleFactory = $addressExampleFactory;

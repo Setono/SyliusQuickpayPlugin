@@ -3,32 +3,35 @@ on:
     push:
         branches:
             - "master"
-    pull_request: ~
-    schedule:
-        - cron: "5 8 * * 1"
+        paths-ignore:
+            - "**/*.md"
+    pull_request:
+        paths-ignore:
+            - "**/*.md"
+    workflow_dispatch: ~
 
 env:
     APP_ENV: "test"
-    DATABASE_URL: "mysql://root:root@127.0.0.1/sylius?serverVersion=5.7"
+    DATABASE_URL: "mysql://root:root@127.0.0.1/sylius?serverVersion=8.0"
     PHP_EXTENSIONS: "intl, mbstring"
 
 jobs:
     coding-standards:
-        name: "Coding Standards"
+        name: "Coding Standards (PHP${{ matrix.php-version }} | Deps: ${{ matrix.dependencies }})"
 
         runs-on: "ubuntu-latest"
 
         strategy:
             matrix:
                 php-version:
-                    - "7.4"
+                    - "8.1" # Always use the lowest version of PHP since a higher version could create actual syntax errors in lower versions
 
                 dependencies:
                     - "highest"
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v2"
+                uses: "actions/checkout@v3"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -36,13 +39,12 @@ jobs:
                     php-version: "${{ matrix.php-version }}"
                     extensions: "${{ env.PHP_EXTENSIONS }}"
                     coverage: "none"
-                    tools: "composer:v1"
 
             -   name: "Install composer dependencies"
-                uses: "ramsey/composer-install@v1"
+                uses: "ramsey/composer-install@v2"
                 with:
                     dependency-versions: "${{ matrix.dependencies }}"
-            
+
             -   name: "Validate composer"
                 run: "composer validate --strict"
 
@@ -52,6 +54,9 @@ jobs:
             -   name: "Check style"
                 run: "composer check-style"
 
+            -   name: "Rector"
+                run: "vendor/bin/rector process --dry-run"
+
             -   name: "Lint yaml files"
                 run: "(cd tests/Application && bin/console lint:yaml ../../src/Resources)"
 
@@ -59,21 +64,26 @@ jobs:
                 run: "(cd tests/Application && bin/console lint:twig ../../src/Resources)"
 
     dependency-analysis:
-        name: "Dependency Analysis"
+        name: "Dependency Analysis (PHP${{ matrix.php-version }} | Deps: ${{ matrix.dependencies }} | SF${{ matrix.symfony }})"
 
         runs-on: "ubuntu-latest"
 
         strategy:
             matrix:
                 php-version:
-                    - "7.4"
+                    - "8.1"
+                    - "8.2"
 
                 dependencies:
                     - "highest"
+                
+                symfony:
+                    - "^5.4"
+                    - "^6.0"
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v2.3.2"
+                uses: "actions/checkout@v3"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -81,80 +91,101 @@ jobs:
                     coverage: "none"
                     extensions: "${{ env.PHP_EXTENSIONS }}"
                     php-version: "${{ matrix.php-version }}"
-                    tools: "composer:v1, composer-require-checker, composer-unused"
-                    
+                    tools: "composer-require-checker, composer-unused, flex"
+
             -   name: "Install composer dependencies"
-                uses: "ramsey/composer-install@v1"
+                uses: "ramsey/composer-install@v2"
+                env:
+                    SYMFONY_REQUIRE: "${{ matrix.symfony }}"
                 with:
                     dependency-versions: "${{ matrix.dependencies }}"
 
             -   name: "Run maglnet/composer-require-checker"
                 run: "composer-require-checker check --config-file=$(pwd)/composer-require-checker.json"
-                
+
             -   name: "Run composer-unused/composer-unused"
                 run: "composer-unused"
+
+            -   name: "Run composer audit"
+                run: "composer audit"
     
     static-code-analysis:
-        name: "Static Code Analysis"
+        name: "Static Code Analysis (PHP${{ matrix.php-version }} | Deps: ${{ matrix.dependencies }} | SF${{ matrix.symfony }})"
 
         runs-on: "ubuntu-latest"
 
         strategy:
             matrix:
                 php-version:
-                    - "7.4"
+                    - "8.1"
+                    - "8.2"
 
                 dependencies:
                     - "highest"
 
+                symfony:
+                    - "^5.4"
+                    - "^6.0"
+
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v2"
+                uses: "actions/checkout@v3"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
                 with:
-                    php-version: "${{ matrix.php-version }}"
-                    extensions: "${{ env.PHP_EXTENSIONS }}"
                     coverage: "none"
-                    tools: "composer:v1"
+                    extensions: "${{ env.PHP_EXTENSIONS }}"
+                    php-version: "${{ matrix.php-version }}"
+                    tools: "flex"
 
             -   name: "Install composer dependencies"
-                uses: "ramsey/composer-install@v1"
+                uses: "ramsey/composer-install@v2"
+                env:
+                    SYMFONY_REQUIRE: "${{ matrix.symfony }}"
                 with:
                     dependency-versions: "${{ matrix.dependencies }}"
 
+            -   name: "Cache warmup"
+                run: "(cd tests/Application && bin/console cache:warmup)"
+
             -   name: "Static analysis"
-                run: "composer analyse"
+                run: "vendor/bin/psalm --php-version=${{ matrix.php-version }}"
 
     unit-tests:
-        name: "Unit tests"
+        name: "Unit tests (PHP${{ matrix.php-version }} | Deps: ${{ matrix.dependencies }} | SF${{ matrix.symfony }})"
 
         runs-on: "ubuntu-latest"
 
         strategy:
             matrix:
                 php-version:
-                    - "7.4"
-                        
+                    - "8.1"
+                    - "8.2"
+                
                 dependencies:
-                    - "lowest"
                     - "highest"
+
+                symfony:
+                    - "^5.4"
+                    - "^6.0"
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v2"
+                uses: "actions/checkout@v3"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
                 with:
-                    php-version: "${{ matrix.php-version }}"
-                    extensions: "${{ env.PHP_EXTENSIONS }}"
                     coverage: "none"
-                    tools: "composer:v1"
+                    extensions: "${{ env.PHP_EXTENSIONS }}"
+                    php-version: "${{ matrix.php-version }}"
+                    tools: "flex"
 
             -   name: "Install composer dependencies"
-                uses: "ramsey/composer-install@v1"
+                uses: "ramsey/composer-install@v2"
+                env:
+                    SYMFONY_REQUIRE: "${{ matrix.symfony }}"
                 with:
                     dependency-versions: "${{ matrix.dependencies }}"
 
@@ -162,46 +193,53 @@ jobs:
                 run: "composer phpspec"
 
     integration-tests:
-        name: "Integration tests"
+        name: "Integration tests (PHP${{ matrix.php-version }} | Deps: ${{ matrix.dependencies }} | SF${{ matrix.symfony }})"
 
         runs-on: "ubuntu-latest"
 
         strategy:
             matrix:
                 php-version:
-                    - "7.4"
+                    - "8.1"
+                    - "8.2"
 
                 dependencies:
                     - "highest"
+                
+                symfony:
+                    - "^5.4"
+                    - "^6.0"
 
         steps:
             -   name: "Start MySQL"
                 run: "sudo /etc/init.d/mysql start"
 
             -   name: "Checkout"
-                uses: "actions/checkout@v2"
+                uses: "actions/checkout@v3"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
                 with:
-                    php-version: "${{ matrix.php-version }}"
-                    extensions: "${{ env.PHP_EXTENSIONS }}"
                     coverage: "none"
-                    tools: "composer:v1"
+                    extensions: "${{ env.PHP_EXTENSIONS }}"
+                    php-version: "${{ matrix.php-version }}"
+                    tools: "flex"
 
             -   name: "Install composer dependencies"
-                uses: "ramsey/composer-install@v1"
+                uses: "ramsey/composer-install@v2"
+                env:
+                    SYMFONY_REQUIRE: "${{ matrix.symfony }}"
                 with:
                     dependency-versions: "${{ matrix.dependencies }}"
-                
+
             -   name: "Lint container"
-                run: "(cd tests/Application && bin/console lint:container)"
+                run: '(cd tests/Application && bin/console lint:container)'
 
             -   name: "Create database"
-                run: "(cd tests/Application && bin/console doctrine:database:create -vvv)"
+                run: "(cd tests/Application && bin/console doctrine:database:create)"
 
             -   name: "Create database schema"
-                run: "(cd tests/Application && bin/console doctrine:schema:create -vvv)"
-                
+                run: "(cd tests/Application && bin/console doctrine:schema:create)"
+
             -   name: "Validate Doctrine mapping"
-                run: "(cd tests/Application && bin/console doctrine:schema:validate -vvv)"
+                run: "(cd tests/Application && bin/console doctrine:schema:validate)"

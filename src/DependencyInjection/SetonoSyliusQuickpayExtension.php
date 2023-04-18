@@ -13,7 +13,11 @@ class SetonoSyliusQuickpayExtension extends Extension
 {
     public function load(array $configs, ContainerBuilder $container): void
     {
-        /** @psalm-suppress PossiblyNullArgument */
+        /**
+         * @psalm-suppress PossiblyNullArgument
+         *
+         * @var array{disable_capture: bool, disable_refund: bool, disable_cancel: bool} $config
+         */
         $config = $this->processConfiguration($this->getConfiguration([], $container), $configs);
         $loader = new XmlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
 

@@ -60,7 +60,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
         if (!isset($details['quickpayPayment']) || !$details['quickpayPayment'] instanceof QuickPayPayment) {
             $details->replace(
-                $this->getRelatedOrderDetails($token)
+                $this->getRelatedOrderDetails($token),
             );
 
             $payment = $this->api->getPayment($details);
@@ -74,7 +74,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         if (!isset($details['callback_url']) || null === $details['callback_url'] || '' === $details['callback_url']) {
             $notifyToken = $this->payum->getTokenFactory()->createNotifyToken(
                 $token->getGatewayName(),
-                $token->getDetails()
+                $token->getDetails(),
             );
             $details['callback_url'] = $notifyToken->getTargetUrl();
         }
@@ -156,7 +156,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         $details['name'] = sprintf(
             '%s %s',
             (string) $address->getFirstName(),
-            (string) $address->getLastName()
+            (string) $address->getLastName(),
         );
         $details['city'] = $address->getCity();
         $details['zip_code'] = $address->getPostcode();
@@ -170,6 +170,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
     /**
      * @param Collection|OrderItemInterface[] $items
+     *
      * @psalm-param Collection<array-key, OrderItemInterface> $items
      */
     protected function convertOrderItems(Collection $items): array
@@ -184,7 +185,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
                 'item_name' => sprintf(
                     '%s %s',
                     (string) $orderItem->getProductName(),
-                    (string) $orderItem->getVariantName()
+                    (string) $orderItem->getVariantName(),
                 ),
                 'item_price' => $orderItem->getFullDiscountedUnitPrice(),
                 'vat_rate' => 25 / 100, // @todo Fix

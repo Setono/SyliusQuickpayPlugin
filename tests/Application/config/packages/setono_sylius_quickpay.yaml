@@ -1,0 +1,3 @@
+imports:
+    - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/config.yaml" }
+    - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/fixtures.yaml" }

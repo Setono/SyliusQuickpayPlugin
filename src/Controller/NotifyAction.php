@@ -107,9 +107,10 @@ final class NotifyAction
                     }
 
                     return (int) $payment->getDetails()['quickpayPaymentId'] === $quickpayPaymentId;
-                }
+                },
             )
-            ->last();
+            ->last()
+        ;
 
         return false === $quickpayPayment ? null : $quickpayPayment;
     }
