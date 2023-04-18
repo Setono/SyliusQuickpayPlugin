@@ -1,45 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="4.8.1@f73f2299dbc59a3e6c4d66cff4605176e728ee69">
+<files psalm-version="5.9.0@8b9ad1eb9e8b7d3101f949291da2b9f7767cd163">
   <file src="src/Action/ConvertPaymentAction.php">
-    <DeprecatedClass occurrences="1">
-      <code>$this-&gt;payum-&gt;getTokenFactory()</code>
-    </DeprecatedClass>
-    <InvalidArrayOffset occurrences="2">
-      <code>$splittedStreet['houseNumberParts']['base']</code>
-      <code>$splittedStreet['houseNumberParts']['extension']</code>
+    <DeprecatedInterface>
+      <code><![CDATA[$this->payum->getTokenFactory()]]></code>
+    </DeprecatedInterface>
+    <InvalidArrayOffset>
+      <code><![CDATA[$splittedStreet['houseNumberParts']['base']]]></code>
+      <code><![CDATA[$splittedStreet['houseNumberParts']['extension']]]></code>
     </InvalidArrayOffset>
-    <MixedAssignment occurrences="2">
-      <code>$details['house_extension']</code>
-      <code>$details['house_number']</code>
+    <MixedAssignment>
+      <code><![CDATA[$details['house_extension']]]></code>
+      <code><![CDATA[$details['house_number']]]></code>
     </MixedAssignment>
-    <MoreSpecificImplementedParamType occurrences="1">
+    <MoreSpecificImplementedParamType>
       <code>$request</code>
     </MoreSpecificImplementedParamType>
-    <PropertyNotSetInConstructor occurrences="2">
+    <PropertyNotSetInConstructor>
       <code>ConvertPaymentAction</code>
       <code>ConvertPaymentAction</code>
     </PropertyNotSetInConstructor>
-    <RedundantConditionGivenDocblockType occurrences="1">
+    <RedundantConditionGivenDocblockType>
       <code>notNull</code>
     </RedundantConditionGivenDocblockType>
   </file>
   <file src="src/Action/NotifyAction.php">
-    <MixedArrayAccess occurrences="1">
-      <code>$httpRequest-&gt;headers['quickpay-checksum-sha256']</code>
+    <MixedArrayAccess>
+      <code><![CDATA[$httpRequest->headers['quickpay-checksum-sha256']]]></code>
+      <code><![CDATA[$httpRequest->headers['quickpay-checksum-sha256'][0]]]></code>
     </MixedArrayAccess>
-    <MoreSpecificImplementedParamType occurrences="1">
+    <MoreSpecificImplementedParamType>
       <code>$request</code>
     </MoreSpecificImplementedParamType>
   </file>
   <file src="src/Action/StatusAction.php">
-    <MoreSpecificImplementedParamType occurrences="1">
+    <MoreSpecificImplementedParamType>
       <code>$request</code>
     </MoreSpecificImplementedParamType>
   </file>
   <file src="src/Checker/StreetEligibilityChecker.php">
-    <MixedArrayAccess occurrences="2">
-      <code>$splittedStreet['houseNumberParts']['base']</code>
-      <code>$splittedStreet['houseNumberParts']['extension']</code>
+    <MixedArrayAccess>
+      <code><![CDATA[$splittedStreet['houseNumberParts']['base']]]></code>
+      <code><![CDATA[$splittedStreet['houseNumberParts']['extension']]]></code>
     </MixedArrayAccess>
   </file>
 </files>

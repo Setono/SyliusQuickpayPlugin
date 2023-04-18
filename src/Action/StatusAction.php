@@ -42,8 +42,8 @@ class StatusAction implements ActionInterface, ApiAwareInterface, GatewayAwareIn
         // default state is new to reuse the payment for further operations
         $request->markNew();
 
-        if ($quickpayPayment->getState() === QuickPayPayment::STATE_NEW
-            && $this->isOperationApproved($latestOperation, QuickPayPaymentOperation::TYPE_AUTHORIZE)) {
+        if ($quickpayPayment->getState() === QuickPayPayment::STATE_NEW &&
+            $this->isOperationApproved($latestOperation, QuickPayPaymentOperation::TYPE_AUTHORIZE)) {
             $request->markAuthorized();
 
             return;

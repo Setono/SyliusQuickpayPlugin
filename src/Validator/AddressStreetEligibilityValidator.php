@@ -20,6 +20,9 @@ final class AddressStreetEligibilityValidator extends ConstraintValidator
         $this->streetEligibilityChecker = $streetEligibilityChecker;
     }
 
+    /**
+     * @param mixed $value
+     */
     public function validate($value, Constraint $constraint): void
     {
         Assert::isInstanceOf($value, AddressInterface::class);

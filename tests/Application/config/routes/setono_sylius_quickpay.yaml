@@ -1,0 +1,2 @@
+setono_sylius_quickpay:
+    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routing.yaml"

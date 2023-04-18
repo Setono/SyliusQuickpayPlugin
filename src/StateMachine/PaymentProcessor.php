@@ -54,8 +54,8 @@ final class PaymentProcessor
 
         switch ($event->getTransition()) {
             case PaymentTransitions::TRANSITION_COMPLETE:
-                if ($this->disableCapture
-                    || $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CAPTURE)) {
+                if ($this->disableCapture ||
+                    $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CAPTURE)) {
                     return;
                 }
 
@@ -63,8 +63,8 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_REFUND:
-                if ($this->disableRefund
-                    || $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_REFUND)) {
+                if ($this->disableRefund ||
+                    $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_REFUND)) {
                     return;
                 }
 
@@ -72,8 +72,8 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_CANCEL:
-                if ($this->disableCancel
-                    || $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CANCEL)) {
+                if ($this->disableCancel ||
+                    $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CANCEL)) {
                     return;
                 }
 
