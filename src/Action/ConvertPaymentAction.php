@@ -163,6 +163,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
         $details['region'] = $address->getProvinceName() ?? $address->getProvinceCode();
         $details['country_code'] = Countries::getAlpha3Code($countryCode);
         $details['phone_number'] = $address->getPhoneNumber();
+        $details['mobile_number'] = $address->getPhoneNumber();
         $details['email'] = $customer->getEmail();
 
         return $details;
