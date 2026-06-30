@@ -23,6 +23,11 @@ jobs:
                     php-version: "8.1"
                     coverage: "none"
 
+            # The base branch may pin dependencies (e.g. api-platform/core) to versions that have
+            # since been flagged by security advisories, which would otherwise block the comparison install.
+            -   name: "Allow installing advisory-affected dependencies for the comparison"
+                run: "composer config --global audit.block-insecure false"
+
             -   name: "Install tool"
                 run: "composer global require roave/backward-compatibility-check"
 
