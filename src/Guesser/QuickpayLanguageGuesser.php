@@ -21,11 +21,8 @@ class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
         'nn' => 'no',
     ];
 
-    protected LocaleContextInterface $localeContext;
-
-    public function __construct(LocaleContextInterface $localeContext)
+    public function __construct(protected LocaleContextInterface $localeContext)
     {
-        $this->localeContext = $localeContext;
     }
 
     public function guess(): string

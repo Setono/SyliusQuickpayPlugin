@@ -36,11 +36,8 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
     use GatewayAwareTrait;
     use ApiAwareTrait;
 
-    protected Payum $payum;
-
-    public function __construct(Payum $payum)
+    public function __construct(protected Payum $payum)
     {
-        $this->payum = $payum;
     }
 
     /**
@@ -128,7 +125,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
                     $details['street'] = $splittedStreet['streetName'];
                     $details['house_number'] = $splittedStreet['houseNumber'];
-                } catch (SplittingException $e) {
+                } catch (SplittingException) {
                     $details['street'] = $street;
                     $details['house_number'] = '';
                 }
@@ -142,7 +139,7 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
                     $details['street'] = $splittedStreet['streetName'];
                     $details['house_number'] = $splittedStreet['houseNumberParts']['base'];
                     $details['house_extension'] = $splittedStreet['houseNumberParts']['extension'];
-                } catch (SplittingException $e) {
+                } catch (SplittingException) {
                     $details['street'] = $street;
                     $details['house_number'] = '';
                     $details['house_extension'] = '';
@@ -171,7 +168,6 @@ class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, Gatewa
 
     /**
      * @param Collection|OrderItemInterface[] $items
-     *
      * @psalm-param Collection<array-key, OrderItemInterface> $items
      */
     protected function convertOrderItems(Collection $items): array

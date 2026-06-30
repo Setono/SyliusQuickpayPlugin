@@ -17,20 +17,8 @@ use Sylius\Component\Payment\PaymentTransitions;
 
 final class PaymentProcessor
 {
-    private Payum $payum;
-
-    private bool $disableCapture;
-
-    private bool $disableRefund;
-
-    private bool $disableCancel;
-
-    public function __construct(Payum $payum, bool $disableCapture, bool $disableRefund, bool $disableCancel)
+    public function __construct(private readonly Payum $payum, private readonly bool $disableCapture, private readonly bool $disableRefund, private readonly bool $disableCancel)
     {
-        $this->payum = $payum;
-        $this->disableCapture = $disableCapture;
-        $this->disableRefund = $disableRefund;
-        $this->disableCancel = $disableCancel;
     }
 
     public function __invoke(PaymentInterface $payment, TransitionEvent $event): void

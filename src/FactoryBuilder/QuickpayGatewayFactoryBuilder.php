@@ -10,13 +10,9 @@ use Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesserInterface;
 
 class QuickpayGatewayFactoryBuilder extends GatewayFactoryBuilder
 {
-    protected QuickpayLanguageGuesserInterface $languageGuesser;
-
-    public function __construct(string $gatewayFactoryClass, QuickpayLanguageGuesserInterface $languageGuesser)
+    public function __construct(string $gatewayFactoryClass, protected QuickpayLanguageGuesserInterface $languageGuesser)
     {
         parent::__construct($gatewayFactoryClass);
-
-        $this->languageGuesser = $languageGuesser;
     }
 
     public function build(array $defaultConfig, GatewayFactoryInterface $coreGatewayFactory): GatewayFactoryInterface

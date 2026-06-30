@@ -48,7 +48,7 @@ class NotifyAction implements ActionInterface, ApiAwareInterface, GatewayAwareIn
              * @var stdClass $data
              */
             $data = json_decode($httpRequest->content, false, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
+        } catch (JsonException) {
             throw new BadRequestHttpException();
         }
 

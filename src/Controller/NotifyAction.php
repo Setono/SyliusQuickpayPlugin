@@ -20,17 +20,8 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 final class NotifyAction
 {
-    private Payum $payum;
-
-    private OrderRepositoryInterface $orderRepository;
-
-    private string $orderPrefix;
-
-    public function __construct(Payum $payum, OrderRepositoryInterface $orderRepository, string $orderPrefix)
+    public function __construct(private readonly Payum $payum, private readonly OrderRepositoryInterface $orderRepository, private readonly string $orderPrefix)
     {
-        $this->payum = $payum;
-        $this->orderRepository = $orderRepository;
-        $this->orderPrefix = $orderPrefix;
     }
 
     public function __invoke(Request $request): Response
@@ -49,7 +40,7 @@ final class NotifyAction
              * @var \stdClass $data
              */
             $data = json_decode($request->getContent(), false, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
+        } catch (\JsonException) {
             throw new BadRequestHttpException();
         }
 

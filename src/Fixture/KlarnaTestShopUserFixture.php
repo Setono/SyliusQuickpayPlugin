@@ -18,23 +18,13 @@ use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 
 class KlarnaTestShopUserFixture extends AbstractFixture
 {
-    protected ExampleFactoryInterface $shopUserExampleFactory;
-
-    protected ExampleFactoryInterface $addressExampleFactory;
-
-    protected EntityManagerInterface $shopUserManager;
-
-    private Generator $faker;
+    private readonly Generator $faker;
 
     public function __construct(
-        ExampleFactoryInterface $shopUserExampleFactory,
-        ExampleFactoryInterface $addressExampleFactory,
-        EntityManagerInterface $shopUserManager,
+        protected ExampleFactoryInterface $shopUserExampleFactory,
+        protected ExampleFactoryInterface $addressExampleFactory,
+        protected EntityManagerInterface $shopUserManager,
     ) {
-        $this->shopUserExampleFactory = $shopUserExampleFactory;
-        $this->addressExampleFactory = $addressExampleFactory;
-        $this->shopUserManager = $shopUserManager;
-
         $this->faker = Factory::create();
     }
 
