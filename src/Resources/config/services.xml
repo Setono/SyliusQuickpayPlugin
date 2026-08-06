@@ -66,6 +66,7 @@
             <argument>%setono_sylius_quickpay.disable_capture%</argument>
             <argument>%setono_sylius_quickpay.disable_refund%</argument>
             <argument>%setono_sylius_quickpay.disable_cancel%</argument>
+            <argument type="service" id="logger" on-invalid="null"/>
         </service>
 
         <!-- Form -->
