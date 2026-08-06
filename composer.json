@@ -20,6 +20,7 @@
         "doctrine/orm": "^2.7 || ^3.0",
         "fakerphp/faker": "^1.21",
         "payum/payum": "^1.6",
+        "psr/log": "^1.1 || ^2.0 || ^3.0",
         "setono/payum-quickpay": "^1.5",
         "sylius/addressing": "^1.0",
         "sylius/core": "^1.0",
