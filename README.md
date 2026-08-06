@@ -1,11 +1,11 @@
-# QuickPay Payment Plugin for Sylius
+# Quickpay Payment Plugin for Sylius
 
 [![Latest Version][ico-version]][link-packagist]
 [![Software License][ico-license]](LICENSE)
 [![Build Status][ico-github-actions]][link-github-actions]
 [![Code Coverage][ico-code-coverage]][link-code-coverage]
 
-Adds [QuickPay](https://quickpay.net) as a payment gateway to your Sylius store, including credit card and Klarna
+Adds [Quickpay](https://quickpay.net) as a payment gateway to your Sylius store, including credit card and Klarna
 payments. The plugin integrates the [`setono/payum-quickpay`](https://github.com/Setono/payum-quickpay) Payum gateway
 into Sylius' checkout, state machine, and admin.
 
@@ -42,7 +42,7 @@ imports:
     - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/config.yaml" }
 ```
 
-This registers the state machine callback that captures, refunds, and cancels QuickPay payments when the
+This registers the state machine callback that captures, refunds, and cancels Quickpay payments when the
 corresponding Sylius payment transitions are applied (see [How it works](#how-it-works)). Each operation can be
 turned off individually:
 
@@ -65,7 +65,7 @@ setono_sylius_quickpay:
     resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routing.yaml"
 ```
 
-This registers the callback endpoint (`POST /payment/quickpay/notify`) that QuickPay's servers use to notify your
+This registers the callback endpoint (`POST /payment/quickpay/notify`) that Quickpay's servers use to notify your
 store about payment state changes.
 
 ### 5. Set the order prefix environment variable
@@ -75,9 +75,9 @@ store about payment state changes.
 QUICKPAY_ORDER_PREFIX=qp_
 ```
 
-The prefix is prepended to your order numbers before they are sent to QuickPay as the `order_id`. It **must** be
+The prefix is prepended to your order numbers before they are sent to Quickpay as the `order_id`. It **must** be
 defined for the container to compile, and it must be **unique per project and environment** sharing the same
-QuickPay account — see [Troubleshooting](#troubleshooting). Keep it at 11 characters or less.
+Quickpay account — see [Troubleshooting](#troubleshooting). Keep it at 11 characters or less.
 
 ### 6. Add the validator constraint (optional, Klarna only)
 
@@ -113,7 +113,7 @@ imports:
     - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/fixtures.yaml" }
 ```
 
-The fixtures create QuickPay credit card and Klarna payment methods, matching channels, and a test customer. They
+The fixtures create Quickpay credit card and Klarna payment methods, matching channels, and a test customer. They
 read the gateway credentials from these environment variables:
 
 ```dotenv
@@ -125,27 +125,27 @@ QUICKPAY_AGREEMENT_ID=
 
 ## Configuration
 
-Create a new payment method of type **QuickPay** in the admin panel (*Configuration* → *Payment methods*) and fill
+Create a new payment method of type **Quickpay** in the admin panel (*Configuration* → *Payment methods*) and fill
 out the gateway configuration:
 
 | Field | Description |
 |---|---|
-| Api key | The API key of the **API user** in your QuickPay manager (*Settings* → *Users*) |
+| Api key | The API key of the **API user** in your Quickpay manager (*Settings* → *Users*) |
 | Private key | The private key of your merchant account (*Settings* → *Integration*) |
-| Merchant id | Your QuickPay merchant id |
+| Merchant id | Your Quickpay merchant id |
 | Agreement id | The agreement id of the **API user** |
-| Order prefix | Prepended to order numbers sent to QuickPay — keep in sync with `QUICKPAY_ORDER_PREFIX` |
-| Payment methods | Which payment methods the QuickPay payment window offers, e.g. `creditcard` or `klarna-payments` — see the [QuickPay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
+| Order prefix | Prepended to order numbers sent to Quickpay — keep in sync with `QUICKPAY_ORDER_PREFIX` |
+| Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `klarna-payments` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
 | Auto capture | Capture the payment automatically right after authorization — useful for digital products |
 
 ## How it works
 
-* During checkout the customer is redirected to the QuickPay payment window through a payment link. The payment is
+* During checkout the customer is redirected to the Quickpay payment window through a payment link. The payment is
   **authorized**, not captured (unless *Auto capture* is enabled).
-* QuickPay notifies your store of every payment change on the callback endpoint. The callback's
-  `QuickPay-Checksum-SHA256` header is validated against your private key before the payment details are updated.
+* Quickpay notifies your store of every payment change on the callback endpoint. The callback's
+  `Quickpay-Checksum-SHA256` header is validated against your private key before the payment details are updated.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
-  capture, refund, or cancel operation against QuickPay. A failed cancel at QuickPay (e.g. the customer never
+  capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
   completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order.
 
 ## Testing
@@ -157,7 +157,7 @@ composer check-style   # coding standards
 ```
 
 For manual testing, use the credit card numbers from the
-[QuickPay test data](https://learn.quickpay.net/tech-talk/appendixes/test/#test-data).
+[Quickpay test data](https://learn.quickpay.net/tech-talk/appendixes/test/#test-data).
 
 ## Troubleshooting
 
@@ -185,7 +185,7 @@ For manual testing, use the credit card numbers from the
   every time you recreate dev database) whenever you:
 
   - Recreating your database on dev environment and your order IDs become same as they was before
-  - Use `SetonoSyliusQuickpayPlugin` at two different projects but with same QuickPay
+  - Use `SetonoSyliusQuickpayPlugin` at two different projects but with same Quickpay
     (developer) account credentials
 
 - `Validation error: order_id must have length between 4 and 20`
