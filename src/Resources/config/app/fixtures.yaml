@@ -126,7 +126,7 @@ sylius_fixtures:
                                 enabled: true
 
                 setono_quickpay_shipping_method:
-                    name: shipping_methody
+                    name: shipping_method
                     options:
                         custom:
                             eu_courier:

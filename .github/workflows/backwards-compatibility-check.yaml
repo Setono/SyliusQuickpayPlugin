@@ -1,0 +1,40 @@
+# See https://github.com/Roave/BackwardCompatibilityCheck
+
+name: "Backwards Compatibility Check"
+
+on:
+    pull_request: ~
+
+jobs:
+    backwards-compatibility-check:
+        name: "Backwards Compatibility Check"
+
+        runs-on: "ubuntu-latest"
+
+        steps:
+            -   name: "Checkout"
+                uses: "actions/checkout@v6"
+                with:
+                    fetch-depth: 0
+
+            -   name: "Setup PHP, with composer and extensions"
+                uses: "shivammathur/setup-php@v2"
+                with:
+                    php-version: "8.1"
+                    coverage: "none"
+
+            # The base branch may pin dependencies (e.g. api-platform/core) to versions that have
+            # since been flagged by security advisories, which would otherwise block the comparison
+            # install. The plugin's own composer.json sets audit.block-insecure for the head side, but
+            # the (immutable) base branch needs this set globally. Can be removed once the base carries it.
+            -   name: "Allow installing advisory-affected dependencies for the comparison"
+                run: "composer config --global audit.block-insecure false"
+
+            -   name: "Install tool"
+                run: "composer global require roave/backward-compatibility-check"
+
+            # --install-development-dependencies is required because the plugin's Sylius dependencies
+            # (e.g. the SyliusPluginTrait / AbstractFixture parents) come from dev dependencies; without
+            # it Roave cannot reflect those parents and reports false "could not be found" breaks.
+            -   name: "Check for BC breaks"
+                run: "~/.composer/vendor/bin/roave-backward-compatibility-check --from=origin/${{ github.event.pull_request.base.ref }} --format=github-actions --install-development-dependencies"

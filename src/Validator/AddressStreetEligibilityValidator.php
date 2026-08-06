@@ -13,11 +13,8 @@ use Webmozart\Assert\Assert;
 
 final class AddressStreetEligibilityValidator extends ConstraintValidator
 {
-    private StreetEligibilityCheckerInterface $streetEligibilityChecker;
-
-    public function __construct(StreetEligibilityCheckerInterface $streetEligibilityChecker)
+    public function __construct(private readonly StreetEligibilityCheckerInterface $streetEligibilityChecker)
     {
-        $this->streetEligibilityChecker = $streetEligibilityChecker;
     }
 
     /**

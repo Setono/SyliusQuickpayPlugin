@@ -41,7 +41,7 @@ class StreetEligibilityChecker implements StreetEligibilityCheckerInterface
                         return false;
                     }
             }
-        } catch (SplittingException $e) {
+        } catch (SplittingException) {
             return false;
         }
 
