@@ -2,7 +2,7 @@ name: "build"
 on:
     push:
         branches:
-            - "1.*.x" # Matches our branch versioning that mirrors Sylius', e.g. '1.12.x'
+            - "*.x" # Matches our branch versioning that mirrors Sylius', e.g. '1.x' or '1.12.x'
             - "master"
             - "main"
         paths-ignore:
@@ -33,7 +33,7 @@ jobs:
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -86,7 +86,7 @@ jobs:
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -133,7 +133,7 @@ jobs:
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -177,7 +177,7 @@ jobs:
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -221,7 +221,7 @@ jobs:
                 run: "sudo /etc/init.d/mysql start"
 
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -265,7 +265,7 @@ jobs:
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
@@ -299,7 +299,7 @@ jobs:
 
         steps:
             -   name: "Checkout"
-                uses: "actions/checkout@v5"
+                uses: "actions/checkout@v6"
 
             -   name: "Setup PHP, with composer and extensions"
                 uses: "shivammathur/setup-php@v2"
