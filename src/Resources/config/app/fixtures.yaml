@@ -60,8 +60,8 @@ sylius_fixtures:
                         custom:
                             quickpay_credit_card:
                                 code: 'quickpay_credit_card'
-                                name: 'Creditcard via QuickPay'
-                                instructions: 'Pay via QuickPay with credit card'
+                                name: 'Creditcard via Quickpay'
+                                instructions: 'Pay via Quickpay with credit card'
                                 gatewayName: 'quickpay_credit_card'
                                 gatewayFactory: quickpay
                                 gatewayConfig:

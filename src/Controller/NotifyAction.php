@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 /**
- * Handles callbacks from QuickPay @see https://learn.quickpay.net/tech-talk/api/callback/
+ * Handles callbacks from Quickpay @see https://learn.quickpay.net/tech-talk/api/callback/
  */
 final class NotifyAction
 {
