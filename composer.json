@@ -38,6 +38,7 @@
     "symfony/intl": "^6.4",
     "symfony/validator": "^6.4",
     "symfony/workflow": "^6.4",
+    "twig/twig": "^2.15 || ^3.0",
     "webmozart/assert": "^1.11",
     "winzou/state-machine": "^0.3 || ^0.4"
   },

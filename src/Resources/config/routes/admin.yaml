@@ -1,0 +1,7 @@
+setono_sylius_quickpay_admin_payment_operations:
+    path: /quickpay/payments/{id}/operations
+    methods: [GET]
+    requirements:
+        id: '\d+'
+    defaults:
+        _controller: Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction

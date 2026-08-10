@@ -134,3 +134,6 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
 - **New: the API key is verified at form-save time.** Saving a Quickpay payment method pings the
   Quickpay API with the submitted key and rejects the form when Quickpay rejects it; an unreachable
   Quickpay skips the check, so an outage never blocks saving.
+- **New: live operation history on the admin order view.** Each Quickpay payment shows its operations
+  (type, amount, status, timestamp), captured balance and test-mode flag, fetched from Quickpay after
+  the page has rendered — no storage, no migrations.

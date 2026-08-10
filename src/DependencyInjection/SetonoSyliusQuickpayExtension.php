@@ -33,6 +33,21 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
             ]);
         }
 
+        if ($container->hasExtension('sylius_ui')) {
+            $container->prependExtensionConfig('sylius_ui', [
+                'events' => [
+                    'sylius.admin.order.show.payment_content' => [
+                        'blocks' => [
+                            'setono_sylius_quickpay_operations' => [
+                                'template' => '@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_quickpay.html.twig',
+                                'priority' => -10,
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+        }
+
         // The guard keeps the plugin bootable in applications running the sylius_payment graph on
         // the symfony_workflow adapter, where the winzou bundle is not necessarily registered
         if (!$container->hasExtension('winzou_state_machine')) {

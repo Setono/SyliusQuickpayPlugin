@@ -95,6 +95,14 @@ defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolv
 
 The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
+`Controller/Admin/PaymentOperationsAction` (route `setono_sylius_quickpay_admin_payment_operations`,
+`GET /admin/quickpay/payments/{id}/operations`) renders the live Quickpay operation history for the
+admin order view. The panel itself is a `sylius_ui` block prepended onto
+`sylius.admin.order.show.payment_content` (guarded by `hasExtension('sylius_ui')`): a placeholder that
+fetches the route after page load, so the order page never blocks on Quickpay; failures render an
+inline retry notice (HTTP 502). The controller resolves the api key from the payment's own gateway
+config and fetches via `Quickpay/ClientFactory`.
+
 `Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`) is the backstop for
 callbacks that never arrive: `Provider/PendingPaymentProvider` queries non-final Quickpay payments with
 a `quickpayPaymentId`, the command polls each via `GetHumanStatus` and applies the matching transition

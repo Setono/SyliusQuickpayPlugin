@@ -1,5 +1,6 @@
-setono_sylius_quickpay_notify:
-    path: /payment/quickpay/notify
-    methods: [POST]
-    defaults:
-        _controller: Setono\SyliusQuickpayPlugin\Controller\NotifyAction
+setono_sylius_quickpay_global:
+    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routes/global.yaml"
+
+setono_sylius_quickpay_admin:
+    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routes/admin.yaml"
+    prefix: '/%sylius_admin.path_name%'

@@ -126,4 +126,51 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
 
         self::assertSame([], $container->getExtensionConfig('twig'));
     }
+
+    /**
+     * @test
+     */
+    public function it_prepends_the_admin_order_show_block(): void
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class() extends Extension {
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return 'sylius_ui';
+            }
+        });
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([
+            [
+                'events' => [
+                    'sylius.admin.order.show.payment_content' => [
+                        'blocks' => [
+                            'setono_sylius_quickpay_operations' => [
+                                'template' => '@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_quickpay.html.twig',
+                                'priority' => -10,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container->getExtensionConfig('sylius_ui'));
+    }
+
+    /**
+     * @test
+     */
+    public function it_does_not_prepend_the_admin_order_show_block_when_the_sylius_ui_extension_is_not_registered(): void
+    {
+        $container = new ContainerBuilder();
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([], $container->getExtensionConfig('sylius_ui'));
+    }
 }
