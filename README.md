@@ -12,7 +12,7 @@ into Sylius' checkout, state machine, and admin.
 ## Requirements
 
 * PHP 8.1 or higher
-* Sylius 1.14 on Symfony 6.4
+* Sylius 1.x on Symfony ^6.4 (tested against Sylius 1.14)
 * A PSR-18 HTTP client and PSR-17 factories discoverable by `php-http/discovery`
   (e.g. `symfony/http-client` + `nyholm/psr7`)
 
