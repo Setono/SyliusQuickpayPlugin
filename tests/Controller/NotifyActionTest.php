@@ -7,7 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Controller;
 use Payum\Core\Payum;
 use PHPUnit\Framework\TestCase;
 use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
-use Setono\SyliusQuickpayPlugin\Provider\QuickpayPaymentProvider;
+use Setono\SyliusQuickpayPlugin\Provider\PaymentProvider;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
@@ -39,7 +39,7 @@ final class NotifyActionTest extends TestCase
         $action = new NotifyAction(
             $this->createMock(Payum::class),
             $this->createOrderRepository(),
-            new QuickpayPaymentProvider(),
+            new PaymentProvider(),
             $this->createGatewayConfigRepository($configuredPrefixes),
         );
 

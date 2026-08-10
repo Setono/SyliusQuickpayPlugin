@@ -16,7 +16,7 @@
 
         <!-- Provider -->
         <service id="setono_sylius_quickpay.provider.quickpay_payment"
-                 class="Setono\SyliusQuickpayPlugin\Provider\QuickpayPaymentProvider"/>
+                 class="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
 
         <!-- Action -->
         <service id="setono_sylius_quickpay.payum_action.quickpay.convert_payment"

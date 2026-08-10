@@ -6,11 +6,11 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Provider;
 
 use Doctrine\Common\Collections\ArrayCollection;
 use PHPUnit\Framework\TestCase;
-use Setono\SyliusQuickpayPlugin\Provider\QuickpayPaymentProvider;
+use Setono\SyliusQuickpayPlugin\Provider\PaymentProvider;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 
-final class QuickpayPaymentProviderTest extends TestCase
+final class PaymentProviderTest extends TestCase
 {
     /**
      * @test
@@ -23,7 +23,7 @@ final class QuickpayPaymentProviderTest extends TestCase
             $expected,
         ]);
 
-        self::assertSame($expected, (new QuickpayPaymentProvider())->findByQuickpayPaymentId($order, 12345));
+        self::assertSame($expected, (new PaymentProvider())->findByQuickpayPaymentId($order, 12345));
     }
 
     /**
@@ -37,7 +37,7 @@ final class QuickpayPaymentProviderTest extends TestCase
             $latest,
         ]);
 
-        self::assertSame($latest, (new QuickpayPaymentProvider())->findByQuickpayPaymentId($order, 12345));
+        self::assertSame($latest, (new PaymentProvider())->findByQuickpayPaymentId($order, 12345));
     }
 
     /**
@@ -51,7 +51,7 @@ final class QuickpayPaymentProviderTest extends TestCase
             $this->createPayment(['quickpayPaymentId' => 'not-numeric']),
         ]);
 
-        self::assertNull((new QuickpayPaymentProvider())->findByQuickpayPaymentId($order, 12345));
+        self::assertNull((new PaymentProvider())->findByQuickpayPaymentId($order, 12345));
     }
 
     /**

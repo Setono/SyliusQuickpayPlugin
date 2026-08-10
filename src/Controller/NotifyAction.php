@@ -8,7 +8,7 @@ use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
 use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
-use Setono\SyliusQuickpayPlugin\Provider\QuickpayPaymentProviderInterface;
+use Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -30,7 +30,7 @@ final class NotifyAction
     public function __construct(
         private readonly Payum $payum,
         private readonly OrderRepositoryInterface $orderRepository,
-        private readonly QuickpayPaymentProviderInterface $paymentProvider,
+        private readonly PaymentProviderInterface $paymentProvider,
         private readonly RepositoryInterface $gatewayConfigRepository,
     ) {
     }
