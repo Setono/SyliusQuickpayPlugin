@@ -76,7 +76,7 @@ minting), capture, refund, cancel, status (balance-aware), notify (HMAC validati
 
 ### The notify flow
 - `src/Controller/NotifyAction.php` is the **HTTP entry point** (route `setono_sylius_quickpay_notify` →
-  `POST /payment/quickpay/notify`, in `src/Resources/config/routing.yaml`). It receives the raw Quickpay server
+  `POST /payment/quickpay/notify`, in `src/Resources/config/routes.yaml`). It receives the raw Quickpay server
   callback, resolves the order by `order_id`, finds the matching payment by `quickpayPaymentId`, then dispatches
   the Payum `Notify` request with the Sylius payment.
 - Sylius's `ExecuteSameRequestWithPaymentDetailsAction` rewraps that as `Notify(details)`, which the **library's**
