@@ -1,0 +1,34 @@
+{% if payment.details['quickpayPaymentId'] is defined %}
+    <div class="ui top attached segment setono-quickpay-operations"
+         data-url="{{ path('setono_sylius_quickpay_admin_payment_operations', {'id': payment.id}) }}">
+        <h4 class="ui tiny dividing header">{{ 'setono_sylius_quickpay.ui.operations'|trans }}</h4>
+        <div class="setono-quickpay-operations__content">
+            <em>{{ 'setono_sylius_quickpay.ui.loading'|trans }}</em>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var panel = document.currentScript.previousElementSibling;
+            var content = panel.querySelector('.setono-quickpay-operations__content');
+
+            var load = function () {
+                content.innerHTML = '<em>{{ 'setono_sylius_quickpay.ui.loading'|trans|e('js') }}<\/em>';
+                fetch(panel.dataset.url, {headers: {'Accept': 'text/html'}, credentials: 'same-origin'})
+                    .then(function (response) { return response.text(); })
+                    .then(function (html) { content.innerHTML = html; })
+                    .catch(function () {
+                        content.innerHTML = '<div class="ui tiny negative message">{{ 'setono_sylius_quickpay.ui.load_failed'|trans|e('js') }} <a href="#" class="setono-quickpay-operations__retry">{{ 'setono_sylius_quickpay.ui.retry'|trans|e('js') }}<\/a><\/div>';
+                    });
+            };
+
+            panel.addEventListener('click', function (event) {
+                if (event.target.classList.contains('setono-quickpay-operations__retry')) {
+                    event.preventDefault();
+                    load();
+                }
+            });
+
+            load();
+        })();
+    </script>
+{% endif %}

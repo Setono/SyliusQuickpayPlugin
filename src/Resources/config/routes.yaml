@@ -3,3 +3,13 @@ setono_sylius_quickpay_notify:
     methods: [POST]
     defaults:
         _controller: Setono\SyliusQuickpayPlugin\Controller\NotifyAction
+
+# The /admin prefix puts the route under the admin firewall and access control
+# of a standard Sylius application
+setono_sylius_quickpay_admin_payment_operations:
+    path: /admin/quickpay/payments/{id}/operations
+    methods: [GET]
+    requirements:
+        id: '\d+'
+    defaults:
+        _controller: Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction

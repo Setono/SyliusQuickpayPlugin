@@ -130,6 +130,14 @@ never blocks saving.
   programmatic partial operations; note that Sylius' payment state machine still treats the payment as a whole —
   the `refund` transition can only be applied once.
 
+## Operation history in the admin
+
+Each Quickpay payment on the admin order view shows its **live operation history** — every
+authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
+captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
+so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, the panel shows an
+inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
+
 ## Reconciling missed callbacks
 
 The Quickpay callback is normally the only way your store learns about a payment state change. If a

@@ -1,0 +1,41 @@
+{% import '@SyliusAdmin/Common/Macro/money.html.twig' as money %}
+
+<table class="ui very basic small celled table">
+    <thead>
+        <tr>
+            <th>{{ 'setono_sylius_quickpay.ui.type'|trans }}</th>
+            <th>{{ 'setono_sylius_quickpay.ui.amount'|trans }}</th>
+            <th>{{ 'setono_sylius_quickpay.ui.status'|trans }}</th>
+            <th>{{ 'setono_sylius_quickpay.ui.date'|trans }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for operation in quickpay_payment.operations %}
+            <tr>
+                <td>
+                    {{ operation.type }}
+                    {% if operation.pending %}
+                        <span class="ui tiny yellow label">{{ 'setono_sylius_quickpay.ui.pending'|trans }}</span>
+                    {% endif %}
+                </td>
+                <td>{% if operation.amount is not null %}{{ money.format(operation.amount, quickpay_payment.currency) }}{% endif %}</td>
+                <td{% if operation.aqStatusMsg is not empty %} title="{{ operation.aqStatusMsg }}"{% endif %}>
+                    {{ operation.qpStatusCode }} {{ operation.qpStatusMsg }}
+                </td>
+                <td>{% if operation.createdAt is not null %}{{ operation.createdAt|date('Y-m-d H:i:s') }}{% endif %}</td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="4">{{ 'setono_sylius_quickpay.ui.no_operations'|trans }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div>
+    <strong>{{ 'setono_sylius_quickpay.ui.balance'|trans }}:</strong>
+    {{ money.format(quickpay_payment.balance ?? 0, quickpay_payment.currency) }}
+    {% if quickpay_payment.testMode %}
+        <span class="ui tiny orange label">{{ 'setono_sylius_quickpay.ui.test_mode'|trans }}</span>
+    {% endif %}
+</div>

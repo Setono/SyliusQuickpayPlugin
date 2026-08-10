@@ -27,6 +27,12 @@
         <service id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider"/>
 
+        <service id="Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction" public="true">
+            <argument type="service" id="sylius.repository.payment"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>
+            <argument type="service" id="twig"/>
+        </service>
+
         <!-- Quickpay client -->
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
 
