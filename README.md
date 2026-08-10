@@ -73,18 +73,7 @@ setono_sylius_quickpay:
 This registers the callback endpoint (`POST /payment/quickpay/notify`) that Quickpay's servers use to notify your
 store about payment state changes.
 
-### 5. Set the order prefix environment variable
-
-```dotenv
-# .env
-QUICKPAY_ORDER_PREFIX=qp_
-```
-
-The prefix is prepended to your order numbers before they are sent to Quickpay as the `order_id`. It **must** be
-defined for the container to compile, and it must be **unique per project and environment** sharing the same
-Quickpay account — see [Troubleshooting](#troubleshooting). Keep it at 11 characters or less.
-
-### 6. Import fixtures (optional, development only)
+### 5. Import fixtures (optional, development only)
 
 ```yaml
 # config/packages/setono_sylius_quickpay.yaml
@@ -99,6 +88,7 @@ credentials from these environment variables:
 QUICKPAY_API_KEY=
 QUICKPAY_PRIVATE_KEY=
 QUICKPAY_AGREEMENT_ID=
+QUICKPAY_ORDER_PREFIX=qp_
 ```
 
 ## Configuration
@@ -111,7 +101,7 @@ out the gateway configuration:
 | Api key | The API key of the **API user** in your Quickpay manager (*Settings* → *Users*) |
 | Private key | The private key of your merchant account (*Settings* → *Integration*) |
 | Agreement id | *(optional)* The agreement id used for the payment window |
-| Order prefix | Prepended to order numbers sent to Quickpay — keep in sync with `QUICKPAY_ORDER_PREFIX` |
+| Order prefix | Prepended to order numbers sent to Quickpay as the `order_id` — must be **unique per project and environment** sharing the same Quickpay account (see [Troubleshooting](#troubleshooting)), and 11 characters or less |
 | Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `mobilepay` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
 | Auto capture | Capture the payment automatically right after authorization — useful for digital products |
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
@@ -160,6 +150,9 @@ full background. What it means for a store using this plugin:
 - **The state machine callback is now registered automatically** and
   `Resources/config/app/config.yaml` no longer exists — remove its import from your
   `config/packages/setono_sylius_quickpay.yaml` (keeping it would break the container build).
+- **The `QUICKPAY_ORDER_PREFIX` environment variable is no longer required.** Callbacks resolve
+  the order against the *Order prefix* configured on each Quickpay payment method, so the env var
+  only remains relevant if your fixtures or gateway configuration reference it.
 
 ## Troubleshooting
 
@@ -173,7 +166,7 @@ full background. What it means for a store using this plugin:
 
 - `Validation error: order_id already exists on another payment`
 
-  Make sure you changed your `QUICKPAY_ORDER_PREFIX` at `.env.*` to some unique string
+  Make sure you changed the *Order prefix* of your Quickpay payment method to some unique string
   like `qp_<projectname>_<date>_` (when `date` should be updated to actual
   every time you recreate dev database) whenever you:
 
@@ -183,7 +176,7 @@ full background. What it means for a store using this plugin:
 
 - `Validation error: order_id must have length between 4 and 20`
 
-  You should cut your `QUICKPAY_ORDER_PREFIX` to 11 chars or less.
+  You should cut the *Order prefix* of your Quickpay payment method to 11 chars or less.
 
 [ico-version]: https://poser.pugx.org/setono/sylius-quickpay-plugin/v/stable
 [ico-license]: https://poser.pugx.org/setono/sylius-quickpay-plugin/license
