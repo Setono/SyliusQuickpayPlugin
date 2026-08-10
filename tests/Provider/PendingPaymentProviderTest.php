@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Provider;
 
+use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\TestCase;
@@ -47,15 +47,23 @@ final class PendingPaymentProviderTest extends TestCase
      */
     private function createProvider(array $queryResult): PendingPaymentProvider
     {
-        $query = $this->prophesize(Query::class);
-        $query->setParameters(Argument::any())->willReturn($query);
-        $query->setFirstResult(Argument::any())->willReturn($query);
-        $query->setMaxResults(Argument::any())->willReturn($query);
+        // Doctrine\ORM\Query is final in parts of the supported ORM version range, so the
+        // builder chain is doubled instead of executed against a real QueryBuilder
+        $query = $this->prophesize(AbstractQuery::class);
         $query->getResult()->willReturn($queryResult);
 
+        $queryBuilder = $this->prophesize(QueryBuilder::class);
+        $queryBuilder->select(Argument::cetera())->willReturn($queryBuilder);
+        $queryBuilder->from(Argument::cetera())->willReturn($queryBuilder);
+        $queryBuilder->join(Argument::cetera())->willReturn($queryBuilder);
+        $queryBuilder->andWhere(Argument::cetera())->willReturn($queryBuilder);
+        $queryBuilder->orderBy(Argument::cetera())->willReturn($queryBuilder);
+        $queryBuilder->setParameter(Argument::cetera())->willReturn($queryBuilder);
+        $queryBuilder->setMaxResults(Argument::any())->willReturn($queryBuilder);
+        $queryBuilder->getQuery()->willReturn($query);
+
         $entityManager = $this->prophesize(EntityManagerInterface::class);
-        $entityManager->createQuery(Argument::type('string'))->willReturn($query);
-        $entityManager->createQueryBuilder()->will(fn (): QueryBuilder => new QueryBuilder($entityManager->reveal()));
+        $entityManager->createQueryBuilder()->willReturn($queryBuilder);
 
         $managerRegistry = $this->prophesize(ManagerRegistry::class);
         $managerRegistry->getManagerForClass(Payment::class)->willReturn($entityManager);
