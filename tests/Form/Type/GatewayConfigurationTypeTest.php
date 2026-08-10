@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Form\Type;
 
-use Setono\SyliusQuickpayPlugin\Form\Type\QuickpayGatewayConfigurationType;
+use Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormExtensionInterface;
 use Symfony\Component\Form\Test\TypeTestCase;
 use Symfony\Component\Validator\Validation;
 
-final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
+final class GatewayConfigurationTypeTest extends TypeTestCase
 {
     /**
      * @return list<FormExtensionInterface>
@@ -27,7 +27,7 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
      */
     public function it_submits_gateway_configuration_data(): void
     {
-        $form = $this->factory->create(QuickpayGatewayConfigurationType::class);
+        $form = $this->factory->create(GatewayConfigurationType::class);
 
         $form->submit([
             'api_key' => 'api-key',
@@ -59,7 +59,7 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
      */
     public function it_saves_an_unchecked_auto_capture_as_zero(): void
     {
-        $form = $this->factory->create(QuickpayGatewayConfigurationType::class);
+        $form = $this->factory->create(GatewayConfigurationType::class);
 
         $form->submit([
             'api_key' => 'api-key',
@@ -78,7 +78,7 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
      */
     public function it_displays_a_stored_auto_capture_int_as_a_checked_checkbox(): void
     {
-        $form = $this->factory->create(QuickpayGatewayConfigurationType::class, [
+        $form = $this->factory->create(GatewayConfigurationType::class, [
             'auto_capture' => 1,
         ]);
 
@@ -90,7 +90,7 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
      */
     public function it_is_invalid_when_required_fields_are_blank(): void
     {
-        $form = $this->factory->create(QuickpayGatewayConfigurationType::class, null, [
+        $form = $this->factory->create(GatewayConfigurationType::class, null, [
             'validation_groups' => ['sylius'],
         ]);
 
@@ -119,7 +119,7 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
      */
     public function it_migrates_credentials_stored_under_the_old_option_names(): void
     {
-        $form = $this->factory->create(QuickpayGatewayConfigurationType::class, [
+        $form = $this->factory->create(GatewayConfigurationType::class, [
             'apikey' => 'stored-api-key',
             'privatekey' => 'stored-private-key',
         ]);
