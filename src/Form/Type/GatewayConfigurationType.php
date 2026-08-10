@@ -8,6 +8,7 @@ use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\CallbackTransformer;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
+use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
@@ -40,9 +41,9 @@ final class GatewayConfigurationType extends AbstractType
                     new NotBlank(['groups' => 'sylius']),
                 ],
             ])
-            ->add('agreement', TextType::class, [
-                'label' => self::TRANSLATION_PREFIX . 'agreement',
-                'help' => self::TRANSLATION_PREFIX . 'agreement_help',
+            ->add('agreement_id', IntegerType::class, [
+                'label' => self::TRANSLATION_PREFIX . 'agreement_id',
+                'help' => self::TRANSLATION_PREFIX . 'agreement_id_help',
                 'required' => false,
             ])
             // Payment behavior
@@ -91,8 +92,10 @@ final class GatewayConfigurationType extends AbstractType
             ->add('use_authorize', HiddenType::class, [
                 'data' => true,
             ])
-            // Gateway configurations stored before the credential options went snake_case carry the
-            // old keys; migrate them so the form shows the stored credentials and saves the new keys
+            // Gateway configurations stored before the options were renamed carry the old keys;
+            // migrate them so the form shows the stored values and saves the new keys. The agreement
+            // id may be stored as a string (or '' from an unset fixture env var), which the integer
+            // field cannot display, so it is normalized while migrating
             ->addEventListener(FormEvents::PRE_SET_DATA, static function (FormEvent $event): void {
                 $data = $event->getData();
                 if (!is_array($data)) {
@@ -101,7 +104,11 @@ final class GatewayConfigurationType extends AbstractType
 
                 $data['api_key'] ??= $data['apikey'] ?? null;
                 $data['private_key'] ??= $data['privatekey'] ?? null;
-                unset($data['apikey'], $data['privatekey']);
+
+                $agreementId = $data['agreement_id'] ?? $data['agreement'] ?? null;
+                $data['agreement_id'] = is_numeric($agreementId) ? (int) $agreementId : null;
+
+                unset($data['apikey'], $data['privatekey'], $data['agreement']);
 
                 $event->setData($data);
             })

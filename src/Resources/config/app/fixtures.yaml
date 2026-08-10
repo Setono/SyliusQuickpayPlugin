@@ -67,7 +67,7 @@ sylius_fixtures:
                                 gatewayConfig:
                                     api_key: '%env(resolve:QUICKPAY_API_KEY)%'
                                     private_key: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
-                                    agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
+                                    agreement_id: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
 
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods

@@ -32,7 +32,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         $form->submit([
             'api_key' => 'api-key',
             'private_key' => 'private-key',
-            'agreement' => '67890',
+            'agreement_id' => '67890',
             'order_prefix' => 'qp_',
             'payment_methods' => 'creditcard, mobilepay',
             'auto_capture' => '1',
@@ -46,7 +46,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         self::assertIsArray($data);
         self::assertSame('api-key', $data['api_key']);
         self::assertSame('private-key', $data['private_key']);
-        self::assertSame('67890', $data['agreement']);
+        self::assertSame(67890, $data['agreement_id']);
         self::assertSame('qp_', $data['order_prefix']);
         self::assertSame('creditcard, mobilepay', $data['payment_methods']);
         self::assertSame(1, $data['auto_capture']);
@@ -97,7 +97,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         $form->submit([
             'api_key' => '',
             'private_key' => '',
-            'agreement' => '',
+            'agreement_id' => '',
             'order_prefix' => 'longer_than_eleven_characters',
             'payment_methods' => '',
         ]);
@@ -109,7 +109,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
 
         // Quickpay only requires the api and private keys; an empty payment_methods
         // makes the payment window offer every method enabled on the agreement
-        foreach (['agreement', 'payment_methods'] as $field) {
+        foreach (['agreement_id', 'payment_methods'] as $field) {
             self::assertCount(0, $form->get($field)->getErrors(), sprintf('Expected no validation error on the "%s" field', $field));
         }
     }
@@ -117,19 +117,34 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     /**
      * @test
      */
-    public function it_migrates_credentials_stored_under_the_old_option_names(): void
+    public function it_migrates_options_stored_under_the_old_names(): void
     {
         $form = $this->factory->create(GatewayConfigurationType::class, [
             'apikey' => 'stored-api-key',
             'privatekey' => 'stored-private-key',
+            'agreement' => '12345',
         ]);
 
         self::assertSame('stored-api-key', $form->get('api_key')->getData());
         self::assertSame('stored-private-key', $form->get('private_key')->getData());
+        self::assertSame(12345, $form->get('agreement_id')->getData());
 
         $data = $form->getData();
         self::assertIsArray($data);
         self::assertArrayNotHasKey('apikey', $data);
         self::assertArrayNotHasKey('privatekey', $data);
+        self::assertArrayNotHasKey('agreement', $data);
+    }
+
+    /**
+     * @test
+     */
+    public function it_normalizes_a_non_numeric_stored_agreement_id(): void
+    {
+        $form = $this->factory->create(GatewayConfigurationType::class, [
+            'agreement' => '',
+        ]);
+
+        self::assertNull($form->get('agreement_id')->getData());
     }
 }
