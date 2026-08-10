@@ -153,6 +153,8 @@ full background. What it means for a store using this plugin:
 - **The `QUICKPAY_ORDER_PREFIX` environment variable is no longer required.** Callbacks resolve
   the order against the *Order prefix* configured on each Quickpay payment method, so the env var
   only remains relevant if your fixtures or gateway configuration reference it.
+- **`Exception\UnsupportedPaymentTransitionException` was removed.** The plugin has not thrown it
+  since 2018, so catching it never had any effect.
 
 ## Troubleshooting
 
