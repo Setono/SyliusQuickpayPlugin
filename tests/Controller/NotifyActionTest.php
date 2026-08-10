@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Controller;
 use Payum\Core\Payum;
 use PHPUnit\Framework\TestCase;
 use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
+use Setono\SyliusQuickpayPlugin\Provider\QuickpayPaymentProvider;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -27,7 +28,7 @@ final class NotifyActionTest extends TestCase
             ->willReturn(null)
         ;
 
-        $action = new NotifyAction($this->createMock(Payum::class), $orderRepository, $orderPrefix);
+        $action = new NotifyAction($this->createMock(Payum::class), $orderRepository, new QuickpayPaymentProvider(), $orderPrefix);
 
         $response = $action($this->createRequest($orderId));
 

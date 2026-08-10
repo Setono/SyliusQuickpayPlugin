@@ -8,11 +8,11 @@ use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
 use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
+use Setono\SyliusQuickpayPlugin\Provider\QuickpayPaymentProviderInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
-use Sylius\Component\Payment\Model\PaymentInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -25,8 +25,12 @@ final class NotifyAction
     /**
      * @param OrderRepositoryInterface<OrderInterface> $orderRepository
      */
-    public function __construct(private readonly Payum $payum, private readonly OrderRepositoryInterface $orderRepository, private readonly string $orderPrefix)
-    {
+    public function __construct(
+        private readonly Payum $payum,
+        private readonly OrderRepositoryInterface $orderRepository,
+        private readonly QuickpayPaymentProviderInterface $paymentProvider,
+        private readonly string $orderPrefix,
+    ) {
     }
 
     public function __invoke(Request $request): Response
@@ -64,7 +68,7 @@ final class NotifyAction
             return new Response('', 204);
         }
 
-        $payment = $this->getPaymentFromOrder($order, $quickpayPaymentId);
+        $payment = $this->paymentProvider->findByQuickpayPaymentId($order, $quickpayPaymentId);
 
         if (null === $payment) {
             throw new BadRequestHttpException();
@@ -84,23 +88,4 @@ final class NotifyAction
         return new Response('', 204);
     }
 
-    /**
-     * @TODO: maybe move this code somewhere outside?
-     */
-    private function getPaymentFromOrder(OrderInterface $order, int $quickpayPaymentId): ?PaymentInterface
-    {
-        $quickpayPayment = $order
-            ->getPayments()
-            ->filter(
-                static function (PaymentInterface $payment) use ($quickpayPaymentId): bool {
-                    $id = $payment->getDetails()['quickpayPaymentId'] ?? null;
-
-                    return is_numeric($id) && (int) $id === $quickpayPaymentId;
-                },
-            )
-            ->last()
-        ;
-
-        return false === $quickpayPayment ? null : $quickpayPayment;
-    }
 }
