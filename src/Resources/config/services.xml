@@ -10,8 +10,13 @@
                  class="Setono\SyliusQuickpayPlugin\Controller\NotifyAction" public="true">
             <argument type="service" id="payum"/>
             <argument type="service" id="sylius.repository.order"/>
-            <argument>%env(QUICKPAY_ORDER_PREFIX)%</argument>
+            <argument type="service" id="setono_sylius_quickpay.provider.quickpay_payment"/>
+            <argument type="service" id="sylius.repository.gateway_config"/>
         </service>
+
+        <!-- Provider -->
+        <service id="setono_sylius_quickpay.provider.quickpay_payment"
+                 class="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
 
         <!-- Action -->
         <service id="setono_sylius_quickpay.payum_action.quickpay.convert_payment"

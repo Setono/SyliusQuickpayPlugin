@@ -6,11 +6,14 @@ namespace Setono\SyliusQuickpayPlugin\Controller;
 
 use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
+use Setono\Quickpay\Callback\Callback;
+use Setono\Quickpay\Enum\ResourceType;
+use Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
-use Sylius\Component\Payment\Model\PaymentInterface;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -22,17 +25,22 @@ final class NotifyAction
 {
     /**
      * @param OrderRepositoryInterface<OrderInterface> $orderRepository
+     * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
      */
-    public function __construct(private readonly Payum $payum, private readonly OrderRepositoryInterface $orderRepository, private readonly string $orderPrefix)
-    {
+    public function __construct(
+        private readonly Payum $payum,
+        private readonly OrderRepositoryInterface $orderRepository,
+        private readonly PaymentProviderInterface $paymentProvider,
+        private readonly RepositoryInterface $gatewayConfigRepository,
+    ) {
     }
 
     public function __invoke(Request $request): Response
     {
-        $type = (string) $request->headers->get('QuickPay-Resource-Type');
+        $type = ResourceType::tryFrom((string) $request->headers->get(Callback::RESOURCE_TYPE_HEADER));
 
         // only handle payments for now
-        if ($type !== 'Payment') {
+        if (ResourceType::Payment !== $type) {
             return new Response('', 204);
         }
 
@@ -46,23 +54,14 @@ final class NotifyAction
         }
 
         $quickpayPaymentId = (int) $data['id'];
-        $orderNumber = $data['order_id'];
 
-        // an attempt to remove the order prefix in non-prod environments
-        // it's optimistic because the prefix saved in the database might be different
-        // TODO: better ideas are very welcome
-        if ('' !== $this->orderPrefix && str_starts_with($orderNumber, $this->orderPrefix)) {
-            $orderNumber = substr($orderNumber, \strlen($this->orderPrefix));
-        }
-
-        /** @var OrderInterface|null $order */
-        $order = $this->orderRepository->findOneByNumber($orderNumber);
+        $order = $this->resolveOrder($data['order_id']);
 
         if (null === $order) {
             return new Response('', 204);
         }
 
-        $payment = $this->getPaymentFromOrder($order, $quickpayPaymentId);
+        $payment = $this->paymentProvider->findByQuickpayPaymentId($order, $quickpayPaymentId);
 
         if (null === $payment) {
             throw new BadRequestHttpException();
@@ -82,23 +81,42 @@ final class NotifyAction
         return new Response('', 204);
     }
 
-    /**
-     * @TODO: maybe move this code somewhere outside?
-     */
-    private function getPaymentFromOrder(OrderInterface $order, int $quickpayPaymentId): ?PaymentInterface
+    private function resolveOrder(string $orderId): ?OrderInterface
     {
-        $quickpayPayment = $order
-            ->getPayments()
-            ->filter(
-                static function (PaymentInterface $payment) use ($quickpayPaymentId): bool {
-                    $id = $payment->getDetails()['quickpayPaymentId'] ?? null;
+        foreach ($this->resolveOrderNumberCandidates($orderId) as $orderNumber) {
+            $order = $this->orderRepository->findOneByNumber($orderNumber);
+            if ($order instanceof OrderInterface) {
+                return $order;
+            }
+        }
 
-                    return is_numeric($id) && (int) $id === $quickpayPaymentId;
-                },
-            )
-            ->last()
-        ;
+        return null;
+    }
 
-        return false === $quickpayPayment ? null : $quickpayPayment;
+    /**
+     * The Quickpay order_id was built by prepending the order_prefix of whichever Quickpay gateway
+     * created the payment, so the candidates are the incoming order_id stripped of each configured
+     * gateway's prefix — the values actually used at creation time, not an env var that may have
+     * drifted since.
+     *
+     * @return list<string>
+     */
+    private function resolveOrderNumberCandidates(string $orderId): array
+    {
+        $candidates = [];
+
+        /** @var GatewayConfigInterface $gatewayConfig */
+        foreach ($this->gatewayConfigRepository->findBy(['factoryName' => 'quickpay']) as $gatewayConfig) {
+            $prefix = $gatewayConfig->getConfig()['order_prefix'] ?? null;
+            if (is_string($prefix) && '' !== $prefix && str_starts_with($orderId, $prefix)) {
+                $candidates[] = substr($orderId, \strlen($prefix));
+            }
+        }
+
+        // Covers prefixless configurations and payments created under a prefix that no longer
+        // matches any configured gateway
+        $candidates[] = $orderId;
+
+        return array_values(array_unique($candidates));
     }
 }
