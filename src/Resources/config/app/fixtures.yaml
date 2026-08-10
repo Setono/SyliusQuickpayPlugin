@@ -65,8 +65,8 @@ sylius_fixtures:
                                 gatewayName: 'quickpay_credit_card'
                                 gatewayFactory: quickpay
                                 gatewayConfig:
-                                    apikey: '%env(resolve:QUICKPAY_API_KEY)%'
-                                    privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
+                                    api_key: '%env(resolve:QUICKPAY_API_KEY)%'
+                                    private_key: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
 

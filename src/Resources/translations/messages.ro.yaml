@@ -4,8 +4,8 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                apikey: Cheie API
-                privatekey: Cheie privată
+                api_key: Cheie API
+                private_key: Cheie privată
                 agreement: ID acord
                 order_prefix: Prefix comandă
                 payment_methods: Metode de plată

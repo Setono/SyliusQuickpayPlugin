@@ -10,6 +10,8 @@ use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\Form\FormEvent;
+use Symfony\Component\Form\FormEvents;
 use Symfony\Component\Validator\Constraints\Length;
 use Symfony\Component\Validator\Constraints\NotBlank;
 
@@ -21,14 +23,14 @@ class QuickPayGatewayConfigurationType extends AbstractType
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder
-            ->add('apikey', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.apikey',
+            ->add('api_key', TextType::class, [
+                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.api_key',
                 'constraints' => [
                     new NotBlank(['groups' => 'sylius']),
                 ],
             ])
-            ->add('privatekey', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.privatekey',
+            ->add('private_key', TextType::class, [
+                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.private_key',
                 'constraints' => [
                     new NotBlank(['groups' => 'sylius']),
                 ],
@@ -71,6 +73,20 @@ class QuickPayGatewayConfigurationType extends AbstractType
             ->add('use_authorize', HiddenType::class, [
                 'data' => true,
             ])
+            // Gateway configurations stored before the credential options went snake_case carry the
+            // old keys; migrate them so the form shows the stored credentials and saves the new keys
+            ->addEventListener(FormEvents::PRE_SET_DATA, static function (FormEvent $event): void {
+                $data = $event->getData();
+                if (!is_array($data)) {
+                    return;
+                }
+
+                $data['api_key'] ??= $data['apikey'] ?? null;
+                $data['private_key'] ??= $data['privatekey'] ?? null;
+                unset($data['apikey'], $data['privatekey']);
+
+                $event->setData($data);
+            })
         ;
     }
 }

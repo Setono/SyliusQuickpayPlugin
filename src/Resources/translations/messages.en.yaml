@@ -4,8 +4,8 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                apikey: Api key
-                privatekey: Private key
+                api_key: Api key
+                private_key: Private key
                 agreement: Agreement id
                 order_prefix: Order prefix
                 payment_methods: Payment methods
