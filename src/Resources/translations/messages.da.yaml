@@ -6,7 +6,6 @@ setono_sylius_quickpay:
             quickpay:
                 apikey: Api nøgle
                 privatekey: Privat nøgle
-                merchant: Merchant id
                 agreement: Aftale id
                 order_prefix: Ordre prefiks
                 payment_methods: Betalingsmetoder
@@ -14,3 +13,6 @@ setono_sylius_quickpay:
                 auto_capture_option:
                     no: Nej
                     yes: Ja
+                synchronized: Synkrone operationer
+                synchronized_help: Udfør capture, refund og cancel synkront i stedet for at afvente Quickpay-callbacket
+                branding_id: Branding id

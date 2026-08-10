@@ -15,6 +15,9 @@ class QuickpayGatewayFactoryBuilder extends GatewayFactoryBuilder
         parent::__construct($gatewayFactoryClass);
     }
 
+    /**
+     * @param array<mixed> $defaultConfig
+     */
     public function build(array $defaultConfig, GatewayFactoryInterface $coreGatewayFactory): GatewayFactoryInterface
     {
         $defaultConfig['language'] = $this->languageGuesser->guess();

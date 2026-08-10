@@ -79,7 +79,6 @@ sylius_fixtures:
                                 gatewayConfig:
                                     apikey: '%env(resolve:QUICKPAY_API_KEY)%'
                                     privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
-                                    merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
 
@@ -90,6 +89,8 @@ sylius_fixtures:
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
                                     # in the payment link request, to capture the payment automatically after the authorize.
                                     auto_capture: 0
+
+                                    synchronized: false
 
                                     use_authorize: true
                                 channels:
@@ -107,7 +108,6 @@ sylius_fixtures:
                                 gatewayConfig:
                                     apikey: '%env(resolve:QUICKPAY_API_KEY)%'
                                     privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
-                                    merchant: '%env(resolve:QUICKPAY_MERCHANT_ID)%'
                                     agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
                                     order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
 
@@ -118,6 +118,8 @@ sylius_fixtures:
                                     # If you are selling a digital products, you can include "auto_capture":"true" 
                                     # in the payment link request, to capture the payment automatically after the authorize.
                                     auto_capture: 0
+
+                                    synchronized: false
 
                                     use_authorize: true
                                 channels:

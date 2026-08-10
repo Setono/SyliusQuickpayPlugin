@@ -32,6 +32,7 @@ class StreetEligibilityChecker implements StreetEligibilityCheckerInterface
 
                     break;
                 case 'NL':
+                    /** @var array{houseNumberParts: array{base: string, extension: string}} $splittedStreet */
                     $splittedStreet = AddressSplitter::splitAddress($street);
                     if ('' === $splittedStreet['houseNumberParts']['base']) {
                         return false;

@@ -20,6 +20,9 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 final class NotifyAction
 {
+    /**
+     * @param OrderRepositoryInterface<OrderInterface> $orderRepository
+     */
     public function __construct(private readonly Payum $payum, private readonly OrderRepositoryInterface $orderRepository, private readonly string $orderPrefix)
     {
     }
@@ -44,11 +47,12 @@ final class NotifyAction
             throw new BadRequestHttpException();
         }
 
-        if (!isset($data->id, $data->order_id)) {
+        if (!isset($data->id, $data->order_id) || !is_numeric($data->id) || !is_string($data->order_id)) {
             throw new BadRequestHttpException();
         }
 
-        $orderNumber = (string) $data->order_id;
+        $quickpayPaymentId = (int) $data->id;
+        $orderNumber = $data->order_id;
 
         // an attempt to remove the order prefix in non-prod environments
         // it's optimistic because the prefix saved in the database might be different
@@ -64,7 +68,7 @@ final class NotifyAction
             return new Response('', 204);
         }
 
-        $payment = $this->getPaymentFromOrder($order, (int) $data->id);
+        $payment = $this->getPaymentFromOrder($order, $quickpayPaymentId);
 
         if (null === $payment) {
             throw new BadRequestHttpException();
@@ -93,11 +97,9 @@ final class NotifyAction
             ->getPayments()
             ->filter(
                 static function (PaymentInterface $payment) use ($quickpayPaymentId): bool {
-                    if (!isset($payment->getDetails()['quickpayPaymentId'])) {
-                        return false;
-                    }
+                    $id = $payment->getDetails()['quickpayPaymentId'] ?? null;
 
-                    return (int) $payment->getDetails()['quickpayPaymentId'] === $quickpayPaymentId;
+                    return is_numeric($id) && (int) $id === $quickpayPaymentId;
                 },
             )
             ->last()

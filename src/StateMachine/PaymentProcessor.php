@@ -8,11 +8,11 @@ use Payum\Core\Exception\ExceptionInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\Cancel;
 use Payum\Core\Request\Capture;
+use Payum\Core\Request\GetHumanStatus;
 use Payum\Core\Request\Refund;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use Setono\Payum\QuickPay\Model\QuickPayPayment;
-use Setono\Payum\QuickPay\Model\QuickPayPaymentOperation;
+use Setono\Quickpay\Exception\QuickpayException;
 use SM\Event\TransitionEvent;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -54,8 +54,14 @@ final class PaymentProcessor
 
         switch ($event->getTransition()) {
             case PaymentTransitions::TRANSITION_COMPLETE:
-                if ($this->disableCapture ||
-                    $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CAPTURE)) {
+                if ($this->disableCapture) {
+                    return;
+                }
+
+                // The status is resolved through the gateway so the payment is re-fetched from
+                // Quickpay, guarding against capturing a payment that was already auto captured
+                $gateway->execute($status = new GetHumanStatus($payment));
+                if ($status->isCaptured()) {
                     return;
                 }
 
@@ -63,8 +69,12 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_REFUND:
-                if ($this->disableRefund ||
-                    $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_REFUND)) {
+                if ($this->disableRefund) {
+                    return;
+                }
+
+                $gateway->execute($status = new GetHumanStatus($payment));
+                if ($status->isRefunded()) {
                     return;
                 }
 
@@ -72,18 +82,22 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_CANCEL:
-                if ($this->disableCancel ||
-                    $this->isLastOperationApproved($payment, QuickPayPaymentOperation::TYPE_CANCEL)) {
+                if ($this->disableCancel) {
                     return;
                 }
 
                 try {
+                    $gateway->execute($status = new GetHumanStatus($payment));
+                    if ($status->isCanceled()) {
+                        return;
+                    }
+
                     $gateway->execute(new Cancel($payment->getDetails()));
-                } catch (ExceptionInterface $e) {
-                    // Cancelling the order must not be blocked by QuickPay being unable to cancel
+                } catch (ExceptionInterface|QuickpayException $e) {
+                    // Cancelling the order must not be blocked by Quickpay being unable to cancel
                     // the payment, e.g. because it was never authorized or has already expired.
-                    // Unused authorizations expire by themselves at QuickPay.
-                    $this->logger->warning(sprintf('Could not cancel QuickPay payment: %s', $e->getMessage()), [
+                    // Unused authorizations expire by themselves at Quickpay.
+                    $this->logger->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
                         'quickpayPaymentId' => $quickpayPaymentId,
                         'paymentId' => $payment->getId(),
                     ]);
@@ -91,22 +105,5 @@ final class PaymentProcessor
 
                 break;
         }
-    }
-
-    private function isLastOperationApproved(PaymentInterface $payment, string $state): bool
-    {
-        $quickpayPayment = $payment->getDetails()['quickpayPayment'] ?? null;
-
-        if (!$quickpayPayment instanceof QuickPayPayment) {
-            return false;
-        }
-
-        $operation = $quickpayPayment->getLatestOperation();
-
-        if (null === $operation) {
-            return false;
-        }
-
-        return $operation->getType() === $state && $operation->isApproved();
     }
 }
