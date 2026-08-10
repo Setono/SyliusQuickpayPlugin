@@ -17,6 +17,8 @@ Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `
 base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@alpha` + the SDK `^1.0@beta`).
 The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
+`UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x — keep it
+updated when further 2.x breaks land.
 
 All dev tooling (PHPStan, PHPUnit, Rector, Infection, ECS, composer-dependency-analyser, composer-normalize) is
 delegated to the **`setono/sylius-plugin-pack`** meta-package — it is not listed package-by-package in
@@ -42,8 +44,8 @@ static-code-analysis (`composer analyse`), unit-tests (`composer phpunit`), inte
 code-coverage (Codecov). Matrix: PHP 8.1–8.3 × Symfony `~6.4.0` × deps lowest/highest. A separate
 `backwards-compatibility-check.yaml` runs Roave BC-check on PRs.
 
-PHPStan runs at `level: max` with a `phpstan-baseline.neon` capturing the pre-existing `src/` issues inherited from
-the old Psalm setup — prefer fixing an issue over leaving it baselined, and shrink the baseline over time.
+PHPStan runs at `level: max` with **no baseline** — the error count is zero and must stay there; fix new
+errors rather than introducing a baseline.
 
 ## Test application
 
@@ -68,29 +70,38 @@ minting), capture, refund, cancel, status (balance-aware), notify (HMAC validati
 2.x actions.
 
 - **`ConvertPaymentAction`** — turns a Sylius payment into a Quickpay payment. On first run it builds SDK DTOs
-  (`Address`, `BasketItem` per order item, `Shipping`) and calls
+  (`Address` incl. company name, `BasketItem` per order item, `Shipping`) and calls
   `$this->api->payments()->create(new CreatePaymentRequest(...))`, then stores the scalar `quickpayPaymentId` +
   `order_id` in the Sylius payment's `details` along with `amount`, `currency` and continue/cancel URLs. The
   Payum `Convert` source is Payum's *synthetic* payment; the real Sylius order is resolved via the token identity
-  through `$this->payum->getStorage(...)`.
+  through `$this->payum->getStorage(...)`. Per-item and shipping VAT rates come from
+  `Taxation/VatRateResolver` (reads the tax adjustments, falling back to deriving the rate from the totals).
+
+Services use **FQCN ids** in `services.xml`, with interface → class aliases for every `*Interface` the plugin
+defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolverInterface`,
+`LanguageGuesserInterface`) — inject the interface, alias resolution does the rest.
 
 ### The notify flow
 - `src/Controller/NotifyAction.php` is the **HTTP entry point** (route `setono_sylius_quickpay_notify` →
-  `POST /payment/quickpay/notify`, in `src/Resources/config/routes.yaml`). It receives the raw Quickpay server
-  callback, resolves the order by `order_id`, finds the matching payment by `quickpayPaymentId`, then dispatches
-  the Payum `Notify` request with the Sylius payment.
+  `POST /payment/quickpay/notify`, in `src/Resources/config/routes.yaml`). It only handles callbacks whose
+  `QuickPay-Resource-Type` header is `Payment`, recovers the Sylius order number by stripping the
+  `order_prefix` of **each configured Quickpay gateway** from the incoming `order_id` (read from the stored
+  gateway configs — with the raw `order_id` as fallback candidate), finds the matching payment via
+  `Provider/PaymentProvider::findByQuickpayPaymentId()`, then dispatches the Payum `Notify` request with the
+  Sylius payment on that payment's own gateway.
 - Sylius's `ExecuteSameRequestWithPaymentDetailsAction` rewraps that as `Notify(details)`, which the **library's**
-  `NotifyAction` handles: it validates the `QuickPay-Checksum-Sha256` HMAC against the gateway `privatekey` and
+  `NotifyAction` handles: it validates the `QuickPay-Checksum-Sha256` HMAC against the gateway `private_key` and
   dispatches `ConfirmPayment`.
 
-The controller strips `QUICKPAY_ORDER_PREFIX` from the incoming `order_id` to recover the Sylius order number — this
-prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
+The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
 ### State machine integration
 `SetonoSyliusQuickpayExtension::prepend()` registers a `winzou_state_machine` **before** callback on the
 `sylius_payment` machine for the `complete`, `refund`, and `cancel` transitions, invoking
 `StateMachine/PaymentProcessor` (guarded by `hasExtension('winzou_state_machine')` so the plugin stays
-bootable under the `symfony_workflow` adapter, where the callback simply will not fire). That processor translates each transition into the corresponding Payum request
+bootable under the `symfony_workflow` adapter, where the callback simply will not fire). The processor
+implements `PaymentProcessorInterface` and is `LoggerAwareInterface` (wired via a `setLogger()` call with
+`on-invalid="ignore"`). It translates each transition into the corresponding Payum request
 (`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
 and it guards each operation by first executing `GetHumanStatus` (the library's status action re-fetches the
 payment from Quickpay), skipping operations that already happened. A failed cancel
@@ -106,7 +117,8 @@ passed to the processor as container parameters).
   `sylius.gateway_configuration_type` type `quickpay`). Every field carries a translated `help` text
   (16 locales in `Resources/translations/`); `auto_capture` is a checkbox whose model transformer keeps
   the stored `0`/`1` int shape, and a `PRE_SET_DATA` listener migrates configs stored under the pre-2.0
-  `apikey`/`privatekey` keys. Sylius' admin form theme ignores Symfony's `help_html` option, so the
+  option names (`apikey`/`privatekey`/`agreement` → `api_key`/`private_key`/`agreement_id`, the last
+  normalized to int/null for the integer field). Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/Form/theme.html.twig`, scoped to that field's block prefix and registered by
   `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`).
@@ -115,9 +127,10 @@ passed to the processor as container parameters).
 
 ## Conventions specific to this repo
 
-- The plugin reads runtime config from **env vars** (notably `QUICKPAY_ORDER_PREFIX`, plus the API credentials used
-  by `setono/payum-quickpay`). The order prefix must be unique per project/environment — re-used prefixes cause the
-  QuickPay "order_id already exists" / length errors documented in the README.
+- Runtime config lives in the **gateway configuration stored per payment method** (admin form) — the
+  `QUICKPAY_*` env vars only feed the test application's fixtures. The order prefix must be unique per
+  project/environment — re-used prefixes cause the Quickpay "order_id already exists" / length errors
+  documented in the README.
 - New Payum behavior = a new class in `src/Action/` tagged `payum.action factory="quickpay"` in `services.xml`.
   Services are wired explicitly in `services.xml` (no autowiring/autoconfiguration in this bundle).
 - `composer.lock` is gitignored — this is a plugin, so no lockfile is committed.
