@@ -1,11 +1,5 @@
-# The notify endpoint stays outside the admin and locale prefixes on purpose: Quickpay's servers
-# call it with the URL configured account-wide in the Quickpay manager, so its path must not
-# depend on the application's locale setup
-setono_sylius_quickpay_notify:
-    path: /payment/quickpay/notify
-    methods: [POST]
-    defaults:
-        _controller: Setono\SyliusQuickpayPlugin\Controller\NotifyAction
+setono_sylius_quickpay_global:
+    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routes/global.yaml"
 
 setono_sylius_quickpay_admin:
     resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routes/admin.yaml"
