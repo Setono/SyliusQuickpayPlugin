@@ -116,6 +116,12 @@ out the gateway configuration:
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
   completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order.
+* A refund targets Quickpay's **balance** (what is still captured) rather than the original amount — so a payment
+  that was partially refunded directly in the Quickpay manager refunds only the remainder instead of failing. The
+  balance is also persisted into the payment details on every status check and callback. An explicit
+  `refund_amount` / `capture_amount` in the payment details is passed through to Quickpay untouched for
+  programmatic partial operations; note that Sylius' payment state machine still treats the payment as a whole —
+  the `refund` transition can only be applied once.
 
 ## Testing
 

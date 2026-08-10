@@ -95,7 +95,9 @@ bootable under the `symfony_workflow` adapter, where the callback simply will no
 and it guards each operation by first executing `GetHumanStatus` (the library's status action re-fetches the
 payment from Quickpay), skipping operations that already happened. A failed cancel
 (`Payum\Core\Exception\ExceptionInterface` or the SDK's `Setono\Quickpay\Exception\QuickpayException`) is logged
-but does not block the transition. Each operation can be turned off via the plugin config
+but does not block the transition. Operations execute with the Sylius payment through Sylius' Payum bridge, so
+gateway-updated details persist; an unqualified `Refund` refunds Quickpay's remaining `balance` and the balance is
+persisted into the details by the library's Status/Confirm/Sync actions (payum-quickpay >= 2.0.0-alpha.2). Each operation can be turned off via the plugin config
 `disable_capture` / `disable_refund` / `disable_cancel` (defined in `DependencyInjection/Configuration.php`, passed
 to the processor as container parameters). This config file must be imported by the host app (see README install steps).
 

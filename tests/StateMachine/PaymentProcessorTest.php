@@ -80,6 +80,18 @@ final class PaymentProcessorTest extends TestCase
     /**
      * @test
      */
+    public function it_refunds_the_quickpay_payment_when_the_payment_is_refunded(): void
+    {
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), false, false, false);
+        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_REFUND));
+
+        self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
+        self::assertInstanceOf(Refund::class, $this->executedRequests[1] ?? null);
+    }
+
+    /**
+     * @test
+     */
     public function it_cancels_the_quickpay_payment_when_the_payment_is_cancelled(): void
     {
         $processor = new PaymentProcessor($this->createPayum($this->createGateway()), false, false, false);
@@ -219,7 +231,12 @@ final class PaymentProcessorTest extends TestCase
         return $payum;
     }
 
-    private function createPayment(): PaymentInterface
+    /**
+     * @param array<string, mixed> $details
+     *
+     * @return PaymentInterface&\PHPUnit\Framework\MockObject\MockObject
+     */
+    private function createPayment(array $details = ['quickpayPaymentId' => 12345]): PaymentInterface
     {
         $gatewayConfig = $this->createMock(GatewayConfigInterface::class);
         $gatewayConfig->method('getGatewayName')->willReturn('quickpay');
@@ -228,7 +245,7 @@ final class PaymentProcessorTest extends TestCase
         $method->method('getGatewayConfig')->willReturn($gatewayConfig);
 
         $payment = $this->createMock(PaymentInterface::class);
-        $payment->method('getDetails')->willReturn(['quickpayPaymentId' => 12345]);
+        $payment->method('getDetails')->willReturn($details);
         $payment->method('getMethod')->willReturn($method);
 
         return $payment;
