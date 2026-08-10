@@ -27,11 +27,13 @@
     "sylius/resource-bundle": "^1.10",
     "symfony/config": "^6.4",
     "symfony/dependency-injection": "^6.4",
+    "symfony/event-dispatcher": "^6.4",
     "symfony/form": "^6.4",
     "symfony/http-foundation": "^6.4",
     "symfony/http-kernel": "^6.4",
     "symfony/intl": "^6.4",
     "symfony/validator": "^6.4",
+    "symfony/workflow": "^6.4",
     "webmozart/assert": "^1.11",
     "winzou/state-machine": "^0.3 || ^0.4"
   },

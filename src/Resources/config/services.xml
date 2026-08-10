@@ -44,6 +44,12 @@
         <service id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface"
                  alias="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor"/>
 
+        <service id="Setono\SyliusQuickpayPlugin\StateMachine\WorkflowSubscriber">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface"/>
+
+            <tag name="kernel.event_subscriber"/>
+        </service>
+
         <!-- Form -->
         <service id="Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType">
             <tag name="sylius.gateway_configuration_type"
