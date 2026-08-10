@@ -24,9 +24,9 @@ final class PaymentProcessor
 
     public function __construct(
         private readonly Payum $payum,
-        private readonly bool $disableCapture,
-        private readonly bool $disableRefund,
-        private readonly bool $disableCancel,
+        private readonly bool $captureEnabled,
+        private readonly bool $refundEnabled,
+        private readonly bool $cancelEnabled,
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
@@ -54,7 +54,7 @@ final class PaymentProcessor
 
         switch ($event->getTransition()) {
             case PaymentTransitions::TRANSITION_COMPLETE:
-                if ($this->disableCapture) {
+                if (!$this->captureEnabled) {
                     return;
                 }
 
@@ -69,7 +69,7 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_REFUND:
-                if ($this->disableRefund) {
+                if (!$this->refundEnabled) {
                     return;
                 }
 
@@ -85,7 +85,7 @@ final class PaymentProcessor
 
                 break;
             case PaymentTransitions::TRANSITION_CANCEL:
-                if ($this->disableCancel) {
+                if (!$this->cancelEnabled) {
                     return;
                 }
 

@@ -36,7 +36,7 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_captures_the_quickpay_payment_when_the_payment_is_completed(): void
     {
-        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_COMPLETE));
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
@@ -54,7 +54,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_COMPLETE));
 
         self::assertNotContainsInstanceOf(Capture::class, $this->executedRequests);
@@ -71,7 +71,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_REFUND));
 
         self::assertNotContainsInstanceOf(Refund::class, $this->executedRequests);
@@ -82,7 +82,7 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_refunds_the_quickpay_payment_when_the_payment_is_refunded(): void
     {
-        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_REFUND));
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
@@ -94,7 +94,7 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_cancels_the_quickpay_payment_when_the_payment_is_cancelled(): void
     {
-        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
@@ -112,7 +112,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
 
         self::assertNotContainsInstanceOf(Cancel::class, $this->executedRequests);
@@ -129,7 +129,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
 
         // Reaching this point means the exception was caught and the transition can proceed
@@ -147,7 +147,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
 
         $this->addToAssertionCount(1);
@@ -164,7 +164,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
 
         $this->expectException(HttpException::class);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_COMPLETE));
@@ -181,7 +181,7 @@ final class PaymentProcessorTest extends TestCase
         $payment = $this->createMock(PaymentInterface::class);
         $payment->method('getDetails')->willReturn([]);
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
         $processor($payment, $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
     }
 
@@ -193,7 +193,7 @@ final class PaymentProcessorTest extends TestCase
         $gateway = $this->createMock(GatewayInterface::class);
         $gateway->expects(self::never())->method('execute');
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), false, false, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, false);
         $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
     }
 

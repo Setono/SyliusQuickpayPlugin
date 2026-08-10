@@ -54,9 +54,10 @@ Each operation can be turned off individually:
 ```yaml
 # config/packages/setono_sylius_quickpay.yaml
 setono_sylius_quickpay:
-    disable_capture: false
-    disable_refund: false
-    disable_cancel: false
+    operations:
+        capture: true  # forward the payment's complete transition to Quickpay as a capture
+        refund: true   # forward the refund transition to Quickpay
+        cancel: true   # forward the cancel transition to Quickpay
 ```
 
 **Note:** The callback is registered with `winzou_state_machine`, the default state machine adapter in Sylius 1.14.
@@ -156,6 +157,9 @@ full background. What it means for a store using this plugin:
 - **The state machine callback is now registered automatically** and
   `Resources/config/app/config.yaml` no longer exists — remove its import from your
   `config/packages/setono_sylius_quickpay.yaml` (keeping it would break the container build).
+- **The `disable_capture`/`disable_refund`/`disable_cancel` config keys were replaced** by
+  positively-named flags nested under `operations` (`operations.capture: true` etc., all
+  defaulting to enabled) — update your `setono_sylius_quickpay` configuration if you set them.
 - **The `QUICKPAY_ORDER_PREFIX` environment variable is no longer required.** Callbacks resolve
   the order against the *Order prefix* configured on each Quickpay payment method, so the env var
   only remains relevant if your fixtures or gateway configuration reference it.
