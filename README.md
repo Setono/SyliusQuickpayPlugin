@@ -160,6 +160,9 @@ full background. What it means for a store using this plugin:
 - **The `disable_capture`/`disable_refund`/`disable_cancel` config keys were replaced** by
   positively-named flags nested under `operations` (`operations.capture: true` etc., all
   defaulting to enabled) — update your `setono_sylius_quickpay` configuration if you set them.
+- **Service ids are now FQCNs** (e.g. `Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor`
+  instead of `setono_sylius_quickpay.state_machine.payment_processor`), with interface → class
+  aliases for every interfaced service — update any service references or decorations in your app.
 - **The credential config keys are now `api_key`/`private_key`** (previously `apikey`/`privatekey`).
   Stored gateway configurations keep working — the old spellings remain deprecated aliases in the
   gateway library, and the admin form migrates them to the new keys the next time you save the
