@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API-sleutel
-                private_key: Privésleutel
-                agreement: Overeenkomst-id
-                order_prefix: Voorvoegsel bestelnummer
-                payment_methods: Betaalmethoden
-                auto_capture: Automatische capture
-                auto_capture_option:
-                    no: Nee
-                    yes: Ja
-                synchronized: Synchrone bewerkingen
-                synchronized_help: Voer capture, terugbetaling en annulering synchroon uit in plaats van te vertrouwen op de Quickpay-callback
-                branding_id: Branding-id
+                api_key: 'API-sleutel'
+                api_key_help: 'De API-sleutel van de API-gebruiker in je Quickpay-manager (Instellingen → Gebruikers)'
+                private_key: 'Privésleutel'
+                private_key_help: 'De privésleutel van je account (Instellingen → Integratie in de Quickpay-manager)'
+                agreement: 'Overeenkomst-id'
+                agreement_help: 'Optioneel: de overeenkomst-id voor het betaalvenster'
+                payment_methods: 'Betaalmethoden'
+                payment_methods_help: 'Kommagescheiden lijst van betaalmethoden in het betaalvenster — zie de <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-documentatie</a>'
+                auto_capture: 'Automatische capture'
+                auto_capture_help: 'De betaling direct na autorisatie automatisch innen — handig voor digitale producten'
+                synchronized: 'Synchrone bewerkingen'
+                synchronized_help: 'Voer capture, terugbetaling en annulering synchroon uit in plaats van te vertrouwen op de Quickpay-callback'
+                order_prefix: 'Voorvoegsel bestelnummer'
+                order_prefix_help: 'Wordt vóór bestelnummers geplaatst en vormt het Quickpay-order-id — moet uniek zijn per project en omgeving met hetzelfde Quickpay-account, maximaal 11 tekens'
+                branding_id: 'Branding-id'
+                branding_id_help: 'Optioneel: het id van de te gebruiken betaalvenster-branding'

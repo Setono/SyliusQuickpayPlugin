@@ -73,9 +73,7 @@ sylius_fixtures:
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
                                     payment_methods: 'creditcard'
 
-                                    # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
-                                    # If you are selling a digital products, you can include "auto_capture":"true" 
-                                    # in the payment link request, to capture the payment automatically after the authorize.
+                                    # Capture the payment automatically right after authorization, e.g. when selling digital products
                                     auto_capture: 0
 
                                     synchronized: false

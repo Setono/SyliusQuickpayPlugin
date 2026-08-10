@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API-ключ
-                private_key: Приватний ключ
-                agreement: ID угоди
-                order_prefix: Префікс замовлення
-                payment_methods: Способи оплати
-                auto_capture: Автоматичне списання
-                auto_capture_option:
-                    no: Ні
-                    yes: Так
-                synchronized: Синхронні операції
-                synchronized_help: Виконувати списання, повернення та скасування синхронно, не покладаючись на callback Quickpay
-                branding_id: ID брендингу
+                api_key: 'API-ключ'
+                api_key_help: 'API-ключ API-користувача у вашому менеджері Quickpay (Налаштування → Користувачі)'
+                private_key: 'Приватний ключ'
+                private_key_help: 'Приватний ключ вашого облікового запису (Налаштування → Інтеграція в менеджері Quickpay)'
+                agreement: 'ID угоди'
+                agreement_help: 'Необов''язково: ID угоди для платіжного вікна'
+                payment_methods: 'Способи оплати'
+                payment_methods_help: 'Розділений комами список способів оплати у платіжному вікні — див. <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">документацію Quickpay</a>'
+                auto_capture: 'Автоматичне списання'
+                auto_capture_help: 'Списувати платіж автоматично одразу після авторизації — зручно для цифрових товарів'
+                synchronized: 'Синхронні операції'
+                synchronized_help: 'Виконувати списання, повернення та скасування синхронно, не покладаючись на callback Quickpay'
+                order_prefix: 'Префікс замовлення'
+                order_prefix_help: 'Додається перед номерами замовлень і утворює ID замовлення Quickpay — має бути унікальним для проєкту та середовища, що використовують один обліковий запис Quickpay, не більше 11 символів'
+                branding_id: 'ID брендингу'
+                branding_id_help: 'Необов''язково: ID брендингу платіжного вікна'

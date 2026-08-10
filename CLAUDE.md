@@ -102,8 +102,14 @@ persisted into the details by the library's Status/Confirm/Sync actions. Each op
 passed to the processor as container parameters).
 
 ### Gateway config & language
-- `Form/Type/QuickPayGatewayConfigurationType` is the admin form for the gateway (tagged
-  `sylius.gateway_configuration_type` type `quickpay`).
+- `Form/Type/QuickpayGatewayConfigurationType` is the admin form for the gateway (tagged
+  `sylius.gateway_configuration_type` type `quickpay`). Every field carries a translated `help` text
+  (16 locales in `Resources/translations/`); `auto_capture` is a checkbox whose model transformer keeps
+  the stored `0`/`1` int shape, and a `PRE_SET_DATA` listener migrates configs stored under the pre-2.0
+  `apikey`/`privatekey` keys. Sylius' admin form theme ignores Symfony's `help_html` option, so the
+  `payment_methods` docs link renders through the plugin's own form theme
+  (`Resources/views/Form/theme.html.twig`, scoped to that field's block prefix and registered by
+  `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
   build time; `Guesser/LanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`).
 

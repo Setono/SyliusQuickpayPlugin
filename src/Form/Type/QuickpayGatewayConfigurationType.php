@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\CallbackTransformer;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
-use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -20,28 +20,60 @@ use Symfony\Component\Validator\Constraints\NotBlank;
  */
 final class QuickpayGatewayConfigurationType extends AbstractType
 {
+    private const TRANSLATION_PREFIX = 'setono_sylius_quickpay.form.gateway_configuration.quickpay.';
+
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder
+            // Credentials
             ->add('api_key', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.api_key',
+                'label' => self::TRANSLATION_PREFIX . 'api_key',
+                'help' => self::TRANSLATION_PREFIX . 'api_key_help',
                 'constraints' => [
                     new NotBlank(['groups' => 'sylius']),
                 ],
             ])
             ->add('private_key', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.private_key',
+                'label' => self::TRANSLATION_PREFIX . 'private_key',
+                'help' => self::TRANSLATION_PREFIX . 'private_key_help',
                 'constraints' => [
                     new NotBlank(['groups' => 'sylius']),
                 ],
             ])
             ->add('agreement', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.agreement',
+                'label' => self::TRANSLATION_PREFIX . 'agreement',
+                'help' => self::TRANSLATION_PREFIX . 'agreement_help',
+                'required' => false,
+            ])
+            // Payment behavior
+            ->add('payment_methods', TextType::class, [
+                'label' => self::TRANSLATION_PREFIX . 'payment_methods',
+                'help' => self::TRANSLATION_PREFIX . 'payment_methods_help',
+                'help_html' => true,
+                // Sylius' admin form theme ignores help_html, so the docs link is rendered
+                // through the plugin's own form theme, scoped to this block prefix
+                'block_prefix' => 'setono_sylius_quickpay_payment_methods',
+                'attr' => [
+                    'placeholder' => 'creditcard, mobilepay',
+                ],
+            ])
+            ->add('auto_capture', CheckboxType::class, [
+                'label' => self::TRANSLATION_PREFIX . 'auto_capture',
+                'help' => self::TRANSLATION_PREFIX . 'auto_capture_help',
+                'required' => false,
+            ])
+            ->add('synchronized', CheckboxType::class, [
+                'label' => self::TRANSLATION_PREFIX . 'synchronized',
+                'help' => self::TRANSLATION_PREFIX . 'synchronized_help',
                 'required' => false,
             ])
             ->add('order_prefix', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.order_prefix',
+                'label' => self::TRANSLATION_PREFIX . 'order_prefix',
+                'help' => self::TRANSLATION_PREFIX . 'order_prefix_help',
                 'required' => false,
+                'attr' => [
+                    'placeholder' => 'qp_',
+                ],
                 'constraints' => [
                     new Length([
                         'max' => 11,
@@ -49,25 +81,10 @@ final class QuickpayGatewayConfigurationType extends AbstractType
                     ]),
                 ],
             ])
-            ->add('payment_methods', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.payment_methods',
-                'help' => 'https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods',
-            ])
-            ->add('auto_capture', ChoiceType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture',
-                'choices' => [
-                    'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture_option.no' => 0,
-                    'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture_option.yes' => 1,
-                ],
-                'help' => 'https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments',
-            ])
-            ->add('synchronized', CheckboxType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.synchronized',
-                'required' => false,
-                'help' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.synchronized_help',
-            ])
+            // Presentation
             ->add('branding_id', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.branding_id',
+                'label' => self::TRANSLATION_PREFIX . 'branding_id',
+                'help' => self::TRANSLATION_PREFIX . 'branding_id_help',
                 'required' => false,
             ])
             ->add('use_authorize', HiddenType::class, [
@@ -88,5 +105,12 @@ final class QuickpayGatewayConfigurationType extends AbstractType
                 $event->setData($data);
             })
         ;
+
+        // Stored configurations carry auto_capture as 0/1; the checkbox needs a bool and the
+        // stored shape stays an int either way
+        $builder->get('auto_capture')->addModelTransformer(new CallbackTransformer(
+            static fn (mixed $value): bool => (bool) $value,
+            static fn (?bool $value): int => true === $value ? 1 : 0,
+        ));
     }
 }

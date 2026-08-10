@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API-nyckel
-                private_key: Privat nyckel
-                agreement: Avtals-id
-                order_prefix: Orderprefix
-                payment_methods: Betalningsmetoder
-                auto_capture: Automatisk debitering
-                auto_capture_option:
-                    no: Nej
-                    yes: Ja
-                synchronized: Synkrona operationer
-                synchronized_help: Utför debitering, återbetalning och annullering synkront i stället för att förlita sig på Quickpay-callbacket
-                branding_id: Branding-id
+                api_key: 'API-nyckel'
+                api_key_help: 'API-användarens API-nyckel i din Quickpay-manager (Inställningar → Användare)'
+                private_key: 'Privat nyckel'
+                private_key_help: 'Ditt kontos privata nyckel (Inställningar → Integration i Quickpay-managern)'
+                agreement: 'Avtals-id'
+                agreement_help: 'Valfritt: avtals-id som används för betalningsfönstret'
+                payment_methods: 'Betalningsmetoder'
+                payment_methods_help: 'Kommaseparerad lista över betalningsmetoder i betalningsfönstret — se <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-dokumentationen</a>'
+                auto_capture: 'Automatisk debitering'
+                auto_capture_help: 'Debitera betalningen automatiskt direkt efter auktorisation — praktiskt för digitala produkter'
+                synchronized: 'Synkrona operationer'
+                synchronized_help: 'Utför debitering, återbetalning och annullering synkront i stället för att förlita sig på Quickpay-callbacket'
+                order_prefix: 'Orderprefix'
+                order_prefix_help: 'Sätts före ordernummer och bildar Quickpay-order-id — måste vara unikt per projekt och miljö som delar samma Quickpay-konto, och högst 11 tecken'
+                branding_id: 'Branding-id'
+                branding_id_help: 'Valfritt: id för den betalningsfönster-branding som ska användas'

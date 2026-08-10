@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API-avain
-                private_key: Yksityinen avain
-                agreement: Sopimuksen tunnus
-                order_prefix: Tilauksen etuliite
-                payment_methods: Maksutavat
-                auto_capture: Automaattinen veloitus
-                auto_capture_option:
-                    no: Ei
-                    yes: Kyllä
-                synchronized: Synkroniset toiminnot
-                synchronized_help: Suorita veloitus, hyvitys ja peruutus synkronisesti sen sijaan, että luotettaisiin Quickpayn callback-kutsuun
-                branding_id: Branding-tunnus
+                api_key: 'API-avain'
+                api_key_help: 'API-käyttäjän API-avain Quickpay-hallinnassa (Asetukset → Käyttäjät)'
+                private_key: 'Yksityinen avain'
+                private_key_help: 'Tilisi yksityinen avain (Asetukset → Integraatio Quickpay-hallinnassa)'
+                agreement: 'Sopimuksen tunnus'
+                agreement_help: 'Valinnainen: maksuikkunassa käytettävä sopimustunnus'
+                payment_methods: 'Maksutavat'
+                payment_methods_help: 'Pilkuin eroteltu lista maksuikkunassa tarjottavista maksutavoista — katso <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpayn dokumentaatio</a>'
+                auto_capture: 'Automaattinen veloitus'
+                auto_capture_help: 'Veloita maksu automaattisesti heti valtuutuksen jälkeen — kätevä digitaalisille tuotteille'
+                synchronized: 'Synkroniset toiminnot'
+                synchronized_help: 'Suorita veloitus, hyvitys ja peruutus synkronisesti sen sijaan, että luotettaisiin Quickpayn callback-kutsuun'
+                order_prefix: 'Tilauksen etuliite'
+                order_prefix_help: 'Lisätään tilausnumeroiden eteen Quickpay-tilaustunnukseksi — oltava yksilöllinen projektia ja ympäristöä kohden samalla Quickpay-tilillä, enintään 11 merkkiä'
+                branding_id: 'Branding-tunnus'
+                branding_id_help: 'Valinnainen: käytettävän maksuikkunabrändäyksen tunnus'

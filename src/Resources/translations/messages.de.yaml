@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API-Schlüssel
-                private_key: Privater Schlüssel
-                agreement: Vereinbarungs-ID
-                order_prefix: Bestellpräfix
-                payment_methods: Zahlungsarten
-                auto_capture: Automatische Erfassung
-                auto_capture_option:
-                    no: Nein
-                    yes: Ja
-                synchronized: Synchrone Vorgänge
-                synchronized_help: Erfassung, Erstattung und Stornierung synchron ausführen, statt auf den Quickpay-Callback zu warten
-                branding_id: Branding-ID
+                api_key: 'API-Schlüssel'
+                api_key_help: 'Der API-Schlüssel des API-Benutzers in Ihrem Quickpay-Manager (Einstellungen → Benutzer)'
+                private_key: 'Privater Schlüssel'
+                private_key_help: 'Der private Schlüssel Ihres Kontos (Einstellungen → Integration im Quickpay-Manager)'
+                agreement: 'Vereinbarungs-ID'
+                agreement_help: 'Optional: die für das Zahlungsfenster verwendete Vereinbarungs-ID'
+                payment_methods: 'Zahlungsarten'
+                payment_methods_help: 'Kommagetrennte Liste der im Zahlungsfenster angebotenen Zahlungsarten — siehe die <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-Dokumentation</a>'
+                auto_capture: 'Automatische Erfassung'
+                auto_capture_help: 'Die Zahlung direkt nach der Autorisierung automatisch erfassen — praktisch für digitale Produkte'
+                synchronized: 'Synchrone Vorgänge'
+                synchronized_help: 'Erfassung, Erstattung und Stornierung synchron ausführen, statt auf den Quickpay-Callback zu warten'
+                order_prefix: 'Bestellpräfix'
+                order_prefix_help: 'Wird Bestellnummern vorangestellt und bildet die Quickpay-Bestell-ID — muss je Projekt und Umgebung mit demselben Quickpay-Konto eindeutig sein, höchstens 11 Zeichen'
+                branding_id: 'Branding-ID'
+                branding_id_help: 'Optional: die ID des zu verwendenden Zahlungsfenster-Brandings'

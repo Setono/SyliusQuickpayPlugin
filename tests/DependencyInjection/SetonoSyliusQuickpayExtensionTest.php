@@ -90,4 +90,40 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
 
         self::assertSame([], $container->getExtensionConfig('winzou_state_machine'));
     }
+
+    /**
+     * @test
+     */
+    public function it_prepends_the_form_theme(): void
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class() extends Extension {
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return 'twig';
+            }
+        });
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([
+            ['form_themes' => ['@SetonoSyliusQuickpayPlugin/Form/theme.html.twig']],
+        ], $container->getExtensionConfig('twig'));
+    }
+
+    /**
+     * @test
+     */
+    public function it_does_not_prepend_the_form_theme_when_the_twig_extension_is_not_registered(): void
+    {
+        $container = new ContainerBuilder();
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([], $container->getExtensionConfig('twig'));
+    }
 }
