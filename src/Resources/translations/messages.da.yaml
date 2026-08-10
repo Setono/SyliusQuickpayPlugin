@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: Api nøgle
-                private_key: Privat nøgle
-                agreement: Aftale id
-                order_prefix: Ordre prefiks
-                payment_methods: Betalingsmetoder
-                auto_capture: Auto capture
-                auto_capture_option:
-                    no: Nej
-                    yes: Ja
-                synchronized: Synkrone operationer
-                synchronized_help: Udfør capture, refund og cancel synkront i stedet for at afvente Quickpay-callbacket
-                branding_id: Branding id
+                api_key: 'API-nøgle'
+                api_key_help: 'API-brugerens API-nøgle i din Quickpay manager (Indstillinger → Brugere)'
+                private_key: 'Privat nøgle'
+                private_key_help: 'Din kontos private nøgle (Indstillinger → Integration i Quickpay manageren)'
+                agreement: 'Aftale-id'
+                agreement_help: 'Valgfrit: aftale-id''et der bruges til betalingsvinduet'
+                payment_methods: 'Betalingsmetoder'
+                payment_methods_help: 'Kommasepareret liste af betalingsmetoder i betalingsvinduet — se <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-dokumentationen</a>'
+                auto_capture: 'Auto capture'
+                auto_capture_help: 'Hæv betalingen automatisk umiddelbart efter autorisation — praktisk til digitale produkter'
+                synchronized: 'Synkrone operationer'
+                synchronized_help: 'Udfør capture, refund og cancel synkront i stedet for at afvente Quickpay-callbacket'
+                order_prefix: 'Ordrepræfiks'
+                order_prefix_help: 'Sættes foran ordrenumre og danner Quickpay-ordre-id''et — skal være unikt pr. projekt og miljø der deler samme Quickpay-konto, og højst 11 tegn'
+                branding_id: 'Branding-id'
+                branding_id_help: 'Valgfrit: id''et på den betalingsvindue-branding der skal bruges'

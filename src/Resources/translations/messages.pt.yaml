@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: Chave da API
-                private_key: Chave privada
-                agreement: ID do acordo
-                order_prefix: Prefixo do pedido
-                payment_methods: Métodos de pagamento
-                auto_capture: Captura automática
-                auto_capture_option:
-                    no: Não
-                    yes: Sim
-                synchronized: Operações síncronas
-                synchronized_help: Executar a captura, o reembolso e o cancelamento de forma síncrona em vez de depender do callback da Quickpay
-                branding_id: ID de branding
+                api_key: 'Chave da API'
+                api_key_help: 'A chave da API do utilizador API no seu manager Quickpay (Definições → Utilizadores)'
+                private_key: 'Chave privada'
+                private_key_help: 'A chave privada da sua conta (Definições → Integração no manager Quickpay)'
+                agreement: 'ID do acordo'
+                agreement_help: 'Opcional: o ID do acordo usado para a janela de pagamento'
+                payment_methods: 'Métodos de pagamento'
+                payment_methods_help: 'Lista separada por vírgulas dos métodos de pagamento oferecidos na janela de pagamento — consulte a <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">documentação da Quickpay</a>'
+                auto_capture: 'Captura automática'
+                auto_capture_help: 'Capturar o pagamento automaticamente logo após a autorização — útil para produtos digitais'
+                synchronized: 'Operações síncronas'
+                synchronized_help: 'Executar a captura, o reembolso e o cancelamento de forma síncrona em vez de depender do callback da Quickpay'
+                order_prefix: 'Prefixo do pedido'
+                order_prefix_help: 'Adicionado antes dos números de pedido para formar o ID de pedido Quickpay — deve ser único por projeto e ambiente que partilham a mesma conta Quickpay, no máximo 11 caracteres'
+                branding_id: 'ID de branding'
+                branding_id_help: 'Opcional: o ID do branding da janela de pagamento a usar'

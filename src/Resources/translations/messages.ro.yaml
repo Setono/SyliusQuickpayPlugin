@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: Cheie API
-                private_key: Cheie privată
-                agreement: ID acord
-                order_prefix: Prefix comandă
-                payment_methods: Metode de plată
-                auto_capture: Capturare automată
-                auto_capture_option:
-                    no: Nu
-                    yes: Da
-                synchronized: Operațiuni sincrone
-                synchronized_help: Execută capturarea, rambursarea și anularea sincron în loc să se bazeze pe callback-ul Quickpay
-                branding_id: ID branding
+                api_key: 'Cheie API'
+                api_key_help: 'Cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori)'
+                private_key: 'Cheie privată'
+                private_key_help: 'Cheia privată a contului tău (Setări → Integrare în managerul Quickpay)'
+                agreement: 'ID acord'
+                agreement_help: 'Opțional: ID-ul acordului folosit pentru fereastra de plată'
+                payment_methods: 'Metode de plată'
+                payment_methods_help: 'Listă separată prin virgulă a metodelor de plată oferite în fereastra de plată — vezi <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">documentația Quickpay</a>'
+                auto_capture: 'Capturare automată'
+                auto_capture_help: 'Capturează plata automat imediat după autorizare — util pentru produse digitale'
+                synchronized: 'Operațiuni sincrone'
+                synchronized_help: 'Execută capturarea, rambursarea și anularea sincron în loc să se bazeze pe callback-ul Quickpay'
+                order_prefix: 'Prefix comandă'
+                order_prefix_help: 'Adăugat înaintea numerelor de comandă pentru a forma ID-ul de comandă Quickpay — trebuie să fie unic per proiect și mediu care folosesc același cont Quickpay, maximum 11 caractere'
+                branding_id: 'ID branding'
+                branding_id_help: 'Opțional: ID-ul branding-ului ferestrei de plată de folosit'

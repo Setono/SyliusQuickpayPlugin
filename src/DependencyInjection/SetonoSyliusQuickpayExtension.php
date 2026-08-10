@@ -27,6 +27,12 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
 
     public function prepend(ContainerBuilder $container): void
     {
+        if ($container->hasExtension('twig')) {
+            $container->prependExtensionConfig('twig', [
+                'form_themes' => ['@SetonoSyliusQuickpayPlugin/Form/theme.html.twig'],
+            ]);
+        }
+
         // The guard keeps the plugin bootable in applications running the sylius_payment graph on
         // the symfony_workflow adapter, where the winzou bundle is not necessarily registered
         if (!$container->hasExtension('winzou_state_machine')) {

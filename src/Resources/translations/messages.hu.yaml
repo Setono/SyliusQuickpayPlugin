@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API-kulcs
-                private_key: Privát kulcs
-                agreement: Megállapodás azonosító
-                order_prefix: Rendelési előtag
-                payment_methods: Fizetési módok
-                auto_capture: Automatikus terhelés
-                auto_capture_option:
-                    no: Nem
-                    yes: Igen
-                synchronized: Szinkron műveletek
-                synchronized_help: A terhelés, visszatérítés és törlés szinkron végrehajtása a Quickpay-visszahívásra való támaszkodás helyett
-                branding_id: Branding azonosító
+                api_key: 'API-kulcs'
+                api_key_help: 'Az API-felhasználó API-kulcsa a Quickpay managerben (Beállítások → Felhasználók)'
+                private_key: 'Privát kulcs'
+                private_key_help: 'A fiókod privát kulcsa (Beállítások → Integráció a Quickpay managerben)'
+                agreement: 'Megállapodás azonosító'
+                agreement_help: 'Opcionális: a fizetési ablakhoz használt megállapodás azonosító'
+                payment_methods: 'Fizetési módok'
+                payment_methods_help: 'A fizetési ablakban kínált fizetési módok vesszővel elválasztott listája — lásd a <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay dokumentációt</a>'
+                auto_capture: 'Automatikus terhelés'
+                auto_capture_help: 'A fizetés automatikus terhelése közvetlenül az engedélyezés után — digitális termékekhez hasznos'
+                synchronized: 'Szinkron műveletek'
+                synchronized_help: 'A terhelés, visszatérítés és törlés szinkron végrehajtása a Quickpay-visszahívásra való támaszkodás helyett'
+                order_prefix: 'Rendelési előtag'
+                order_prefix_help: 'A rendelésszámok elé kerül, ez alkotja a Quickpay rendelésazonosítót — projektenként és környezetenként egyedinek kell lennie azonos Quickpay-fiók esetén, legfeljebb 11 karakter'
+                branding_id: 'Branding azonosító'
+                branding_id_help: 'Opcionális: a használandó fizetésiablak-branding azonosítója'

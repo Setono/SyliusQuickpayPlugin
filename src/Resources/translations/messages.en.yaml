@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: Api key
-                private_key: Private key
-                agreement: Agreement id
-                order_prefix: Order prefix
-                payment_methods: Payment methods
-                auto_capture: Auto capture
-                auto_capture_option:
-                    no: No
-                    yes: Yes
-                synchronized: Synchronized operations
-                synchronized_help: Run capture, refund and cancel synchronously instead of relying on the Quickpay callback
-                branding_id: Branding id
+                api_key: 'API key'
+                api_key_help: 'The API key of the API user in your Quickpay manager (Settings → Users)'
+                private_key: 'Private key'
+                private_key_help: 'The private key of your merchant account (Settings → Integration in the Quickpay manager)'
+                agreement: 'Agreement id'
+                agreement_help: 'Optional: the agreement id used for the payment window'
+                payment_methods: 'Payment methods'
+                payment_methods_help: 'Comma-separated list of payment methods to offer in the payment window — see the <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay documentation</a>'
+                auto_capture: 'Auto capture'
+                auto_capture_help: 'Capture the payment automatically right after authorization — useful for digital products'
+                synchronized: 'Synchronized operations'
+                synchronized_help: 'Run capture, refund and cancel synchronously instead of relying on the Quickpay callback'
+                order_prefix: 'Order prefix'
+                order_prefix_help: 'Prepended to order numbers to form the Quickpay order id — must be unique per project and environment sharing the same Quickpay account, and 11 characters or less'
+                branding_id: 'Branding id'
+                branding_id_help: 'Optional: the id of the payment window branding to use'

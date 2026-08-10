@@ -4,15 +4,19 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                api_key: API klíč
-                private_key: Soukromý klíč
-                agreement: ID smlouvy
-                order_prefix: Předpona objednávky
-                payment_methods: Platební metody
-                auto_capture: Automatické stržení
-                auto_capture_option:
-                    no: Ne
-                    yes: Ano
-                synchronized: Synchronní operace
-                synchronized_help: Provádět stržení, vrácení a zrušení synchronně místo spoléhání na callback Quickpay
-                branding_id: ID brandingu
+                api_key: 'API klíč'
+                api_key_help: 'API klíč API uživatele ve vašem Quickpay manageru (Nastavení → Uživatelé)'
+                private_key: 'Soukromý klíč'
+                private_key_help: 'Soukromý klíč vašeho účtu (Nastavení → Integrace v Quickpay manageru)'
+                agreement: 'ID smlouvy'
+                agreement_help: 'Volitelné: ID smlouvy použité pro platební okno'
+                payment_methods: 'Platební metody'
+                payment_methods_help: 'Čárkami oddělený seznam platebních metod nabízených v platebním okně — viz <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">dokumentace Quickpay</a>'
+                auto_capture: 'Automatické stržení'
+                auto_capture_help: 'Strhnout platbu automaticky ihned po autorizaci — užitečné pro digitální produkty'
+                synchronized: 'Synchronní operace'
+                synchronized_help: 'Provádět stržení, vrácení a zrušení synchronně místo spoléhání na callback Quickpay'
+                order_prefix: 'Předpona objednávky'
+                order_prefix_help: 'Předřazuje se číslům objednávek a tvoří Quickpay ID objednávky — musí být jedinečná pro každý projekt a prostředí sdílející stejný Quickpay účet, nejvýše 11 znaků'
+                branding_id: 'ID brandingu'
+                branding_id_help: 'Volitelné: ID brandingu platebního okna, který se má použít'
