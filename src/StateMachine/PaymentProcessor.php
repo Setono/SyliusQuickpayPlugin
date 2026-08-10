@@ -13,12 +13,11 @@ use Payum\Core\Request\Refund;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Setono\Quickpay\Exception\QuickpayException;
-use SM\Event\TransitionEvent;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 
-final class PaymentProcessor
+final class PaymentProcessor implements PaymentProcessorInterface
 {
     private readonly LoggerInterface $logger;
 
@@ -32,7 +31,7 @@ final class PaymentProcessor
         $this->logger = $logger ?? new NullLogger();
     }
 
-    public function __invoke(PaymentInterface $payment, TransitionEvent $event): void
+    public function __invoke(PaymentInterface $payment, string $transition): void
     {
         $quickpayPaymentId = $payment->getDetails()['quickpayPaymentId'] ?? null;
         if (null === $quickpayPaymentId) {
@@ -52,7 +51,7 @@ final class PaymentProcessor
 
         $gateway = $this->payum->getGateway($gatewayConfig->getGatewayName());
 
-        switch ($event->getTransition()) {
+        switch ($transition) {
             case PaymentTransitions::TRANSITION_COMPLETE:
                 if (!$this->captureEnabled) {
                     return;

@@ -115,7 +115,7 @@ passed to the processor as container parameters).
 - New Payum behavior = a new class in `src/Action/` tagged `payum.action factory="quickpay"` in `services.xml`.
   Services are wired explicitly in `services.xml` (no autowiring/autoconfiguration in this bundle).
 - `composer.lock` is gitignored — this is a plugin, so no lockfile is committed.
-- The plugin's `src/` still uses the **winzou** state machine (`SM\Event\TransitionEvent` + the
-  `winzou_state_machine` callback prepended by the extension). Sylius 1.14 ships `SyliusStateMachineAbstractionBundle` and
+- The plugin still relies on the **winzou** state machine, but only in the callback config prepended by the
+  extension (which passes `event.getTransition()`, so `PaymentProcessor` itself is adapter-agnostic). Sylius 1.14 ships `SyliusStateMachineAbstractionBundle` and
   also supports the `symfony_workflow` adapter; under that adapter the winzou callback would not fire. Migrating to
   `Sylius\Abstraction\StateMachine` is a known follow-up.

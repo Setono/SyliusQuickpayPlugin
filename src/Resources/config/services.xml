@@ -41,6 +41,9 @@
             <argument type="service" id="logger" on-invalid="null"/>
         </service>
 
+        <service id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface"
+                 alias="setono_sylius_quickpay.state_machine.payment_processor"/>
+
         <!-- Form -->
         <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
                  class="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">

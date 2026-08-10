@@ -71,7 +71,7 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
                         'setono_quickpay_resolve_state' => [
                             'on' => ['complete', 'refund', 'cancel'],
                             'do' => ['@setono_sylius_quickpay.state_machine.payment_processor', '__invoke'],
-                            'args' => ['object', 'event'],
+                            'args' => ['object', 'event.getTransition()'],
                         ],
                     ],
                 ],
