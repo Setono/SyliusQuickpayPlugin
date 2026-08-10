@@ -10,25 +10,23 @@ use Payum\Core\Request\Cancel;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\GetHumanStatus;
 use Payum\Core\Request\Refund;
-use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use Setono\Quickpay\Exception\QuickpayException;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 
-final class PaymentProcessor implements PaymentProcessorInterface
+final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareInterface
 {
-    private readonly LoggerInterface $logger;
+    use LoggerAwareTrait;
 
     public function __construct(
         private readonly Payum $payum,
         private readonly bool $captureEnabled,
         private readonly bool $refundEnabled,
         private readonly bool $cancelEnabled,
-        ?LoggerInterface $logger = null,
     ) {
-        $this->logger = $logger ?? new NullLogger();
     }
 
     public function __invoke(PaymentInterface $payment, string $transition): void
@@ -99,7 +97,7 @@ final class PaymentProcessor implements PaymentProcessorInterface
                     // Cancelling the order must not be blocked by Quickpay being unable to cancel
                     // the payment, e.g. because it was never authorized or has already expired.
                     // Unused authorizations expire by themselves at Quickpay.
-                    $this->logger->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
+                    $this->logger?->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
                         'quickpayPaymentId' => $quickpayPaymentId,
                         'paymentId' => $payment->getId(),
                     ]);
