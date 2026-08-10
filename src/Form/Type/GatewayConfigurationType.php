@@ -18,7 +18,7 @@ use Symfony\Component\Validator\Constraints\NotBlank;
 /**
  * @extends AbstractType<array<string, mixed>>
  */
-final class QuickpayGatewayConfigurationType extends AbstractType
+final class GatewayConfigurationType extends AbstractType
 {
     private const TRANSLATION_PREFIX = 'setono_sylius_quickpay.form.gateway_configuration.quickpay.';
 

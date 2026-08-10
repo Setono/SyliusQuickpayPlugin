@@ -102,7 +102,7 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
 | `Action\NotifyAction` | removed — the gateway library validates the callback HMAC itself |
 | `Exception\UnsupportedPaymentTransitionException` | removed — has not been thrown since 2018 |
 | `Checker\*`, `Validator\*`, `Klarna\*`, `Fixture\KlarnaTestShopUserFixture` | removed with Klarna support |
-| `Form\Type\QuickPayGatewayConfigurationType` | `Form\Type\QuickpayGatewayConfigurationType` (casing) |
+| `Form\Type\QuickPayGatewayConfigurationType` | `Form\Type\GatewayConfigurationType` |
 | `Guesser\QuickpayLanguageGuesser(Interface)` | `Guesser\LanguageGuesser(Interface)` |
 
 ## Behavioral changes
