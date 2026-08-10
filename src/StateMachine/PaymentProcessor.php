@@ -78,7 +78,7 @@ final class PaymentProcessor
                     return;
                 }
 
-                // An unqualified Refund refunds the remaining balance (payum-quickpay >= 2.0.0-alpha.2),
+                // An unqualified Refund refunds the remaining balance,
                 // so a payment partially refunded directly in the Quickpay manager refunds only what
                 // is left; an explicit refund_amount in the details is passed through untouched
                 $gateway->execute(new Refund($payment));
