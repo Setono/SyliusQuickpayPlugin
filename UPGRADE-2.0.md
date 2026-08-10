@@ -28,7 +28,11 @@ Your `GatewayConfig` rows carry values written by the 1.x admin form. After upgr
   deprecated aliases in the gateway library, so stored configs survive the upgrade untouched — and the
   admin form migrates them: editing an existing Quickpay payment method shows the stored credentials,
   and saving writes the new keys. Re-save each Quickpay payment method once to migrate.
-- **`agreement` is now optional** (it maps to the payment window's agreement id).
+- **`agreement` is now `agreement_id` — and optional.** It maps to the payment window's agreement id.
+  The old name keeps working as a deprecated alias in the gateway library, and the admin form migrates
+  it on re-save like the credentials. Update it before 3.0: unlike the credentials it is optional, so
+  after the alias removal a stale name fails *silently* — the payment link is created without an
+  agreement id and Quickpay falls back to the account default.
 - **New optional options**: `synchronized` (run capture/refund/cancel synchronously instead of relying
   on the Quickpay callback) and `branding_id` (payment window branding).
 - `use_authorize` is unchanged and still required to be `true` — Sylius core reads it to select the
