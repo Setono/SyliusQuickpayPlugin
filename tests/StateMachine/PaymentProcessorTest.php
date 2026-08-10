@@ -16,7 +16,6 @@ use Payum\Core\Request\Refund;
 use PHPUnit\Framework\TestCase;
 use Setono\Quickpay\Exception\ValidationException;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
-use SM\Event\TransitionEvent;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
@@ -37,7 +36,7 @@ final class PaymentProcessorTest extends TestCase
     public function it_captures_the_quickpay_payment_when_the_payment_is_completed(): void
     {
         $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_COMPLETE));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
         self::assertInstanceOf(Capture::class, $this->executedRequests[1] ?? null);
@@ -55,7 +54,7 @@ final class PaymentProcessorTest extends TestCase
         });
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_COMPLETE));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
 
         self::assertNotContainsInstanceOf(Capture::class, $this->executedRequests);
     }
@@ -72,7 +71,7 @@ final class PaymentProcessorTest extends TestCase
         });
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_REFUND));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_REFUND);
 
         self::assertNotContainsInstanceOf(Refund::class, $this->executedRequests);
     }
@@ -83,7 +82,7 @@ final class PaymentProcessorTest extends TestCase
     public function it_refunds_the_quickpay_payment_when_the_payment_is_refunded(): void
     {
         $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_REFUND));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_REFUND);
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
         self::assertInstanceOf(Refund::class, $this->executedRequests[1] ?? null);
@@ -95,7 +94,7 @@ final class PaymentProcessorTest extends TestCase
     public function it_cancels_the_quickpay_payment_when_the_payment_is_cancelled(): void
     {
         $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
         self::assertInstanceOf(Cancel::class, $this->executedRequests[1] ?? null);
@@ -113,7 +112,7 @@ final class PaymentProcessorTest extends TestCase
         });
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         self::assertNotContainsInstanceOf(Cancel::class, $this->executedRequests);
     }
@@ -130,7 +129,7 @@ final class PaymentProcessorTest extends TestCase
         });
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         // Reaching this point means the exception was caught and the transition can proceed
         $this->addToAssertionCount(1);
@@ -148,7 +147,7 @@ final class PaymentProcessorTest extends TestCase
         });
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         $this->addToAssertionCount(1);
     }
@@ -167,7 +166,7 @@ final class PaymentProcessorTest extends TestCase
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
 
         $this->expectException(HttpException::class);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_COMPLETE));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
     }
 
     /**
@@ -182,7 +181,7 @@ final class PaymentProcessorTest extends TestCase
         $payment->method('getDetails')->willReturn([]);
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($payment, $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
+        $processor($payment, PaymentTransitions::TRANSITION_CANCEL);
     }
 
     /**
@@ -194,7 +193,7 @@ final class PaymentProcessorTest extends TestCase
         $gateway->expects(self::never())->method('execute');
 
         $processor = new PaymentProcessor($this->createPayum($gateway), true, true, false);
-        $processor($this->createPayment(), $this->createEvent(PaymentTransitions::TRANSITION_CANCEL));
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
     }
 
     /**
@@ -249,13 +248,5 @@ final class PaymentProcessorTest extends TestCase
         $payment->method('getMethod')->willReturn($method);
 
         return $payment;
-    }
-
-    private function createEvent(string $transition): TransitionEvent
-    {
-        $event = $this->createMock(TransitionEvent::class);
-        $event->method('getTransition')->willReturn($transition);
-
-        return $event;
     }
 }
