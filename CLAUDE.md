@@ -141,7 +141,7 @@ passed to the processor as container parameters).
   capped at 5s) — an explicit 401/403 raises a violation, anything else fails open.
   Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
-  (`Resources/views/Form/theme.html.twig`, scoped to that field's block prefix and registered by
+  (`Resources/views/form/theme.html.twig`, scoped to that field's block prefix and registered by
   `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
   build time; `Guesser/LanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`).

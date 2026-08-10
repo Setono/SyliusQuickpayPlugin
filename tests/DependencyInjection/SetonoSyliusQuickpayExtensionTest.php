@@ -111,7 +111,7 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
         (new SetonoSyliusQuickpayExtension())->prepend($container);
 
         self::assertSame([
-            ['form_themes' => ['@SetonoSyliusQuickpayPlugin/Form/theme.html.twig']],
+            ['form_themes' => ['@SetonoSyliusQuickpayPlugin/form/theme.html.twig']],
         ], $container->getExtensionConfig('twig'));
     }
 
@@ -152,7 +152,7 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
                     'sylius.admin.order.show.payment_content' => [
                         'blocks' => [
                             'setono_sylius_quickpay_operations' => [
-                                'template' => '@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_quickpay.html.twig',
+                                'template' => '@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_quickpay.html.twig',
                                 'priority' => -10,
                             ],
                         ],
