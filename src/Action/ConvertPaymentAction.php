@@ -20,7 +20,7 @@ use Setono\Quickpay\Request\Payment\Address;
 use Setono\Quickpay\Request\Payment\BasketItem;
 use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
 use Setono\Quickpay\Request\Payment\Shipping;
-use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver;
+use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface;
 use function sprintf;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
@@ -39,8 +39,10 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
     use GatewayAwareTrait;
     use ApiAwareTrait;
 
-    public function __construct(private readonly Payum $payum)
-    {
+    public function __construct(
+        private readonly Payum $payum,
+        private readonly VatRateResolverInterface $vatRateResolver,
+    ) {
     }
 
     /**
@@ -95,7 +97,7 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
                 basket: $this->convertOrderItems($order->getItems()),
                 shipping: new Shipping(
                     amount: $order->getShippingTotal(),
-                    vatRate: VatRateResolver::forShipping($order),
+                    vatRate: $this->vatRateResolver->forShipping($order),
                 ),
             ));
 
@@ -162,7 +164,7 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
                     (string) $orderItem->getVariantName(),
                 ),
                 itemPrice: $orderItem->getFullDiscountedUnitPrice(),
-                vatRate: VatRateResolver::forOrderItem($orderItem),
+                vatRate: $this->vatRateResolver->forOrderItem($orderItem),
             );
         })->toArray());
     }

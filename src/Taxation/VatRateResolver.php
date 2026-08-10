@@ -12,13 +12,9 @@ use Sylius\Component\Core\Model\OrderItemInterface;
  * Resolves the VAT rate Quickpay should be told about (a fraction, e.g. 0.25) from the tax
  * adjustments Sylius put on the order.
  */
-final class VatRateResolver
+final class VatRateResolver implements VatRateResolverInterface
 {
-    private function __construct()
-    {
-    }
-
-    public static function forOrderItem(OrderItemInterface $orderItem): float
+    public function forOrderItem(OrderItemInterface $orderItem): float
     {
         foreach ($orderItem->getAdjustmentsRecursively(AdjustmentInterface::TAX_ADJUSTMENT) as $adjustment) {
             $rate = self::rateFromDetails($adjustment->getDetails());
@@ -33,7 +29,7 @@ final class VatRateResolver
         return self::rateFromTotals($orderItem->getTaxTotal(), $orderItem->getTotal());
     }
 
-    public static function forShipping(OrderInterface $order): float
+    public function forShipping(OrderInterface $order): float
     {
         foreach ($order->getShipments() as $shipment) {
             foreach ($shipment->getAdjustments(AdjustmentInterface::TAX_ADJUSTMENT) as $adjustment) {

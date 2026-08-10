@@ -18,6 +18,7 @@
                  class="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction"
                  public="true">
             <argument type="service" id="payum"/>
+            <argument type="service" id="setono_sylius_quickpay.taxation.vat_rate_resolver"/>
 
             <tag name="payum.action"
                  factory="quickpay"
@@ -55,6 +56,10 @@
         </service>
 
         <!-- Fixtures -->
+        <!-- Taxation -->
+        <service id="setono_sylius_quickpay.taxation.vat_rate_resolver"
+                 class="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
+
         <!-- Etc -->
         <service id="setono_sylius_quickpay.guesser.language_guesser"
                  class="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">

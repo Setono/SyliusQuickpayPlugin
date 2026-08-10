@@ -21,7 +21,7 @@ final class VatRateResolverTest extends TestCase
     {
         $orderItem = $this->createOrderItem([$this->createAdjustment(['taxRateAmount' => 0.25])]);
 
-        self::assertSame(0.25, VatRateResolver::forOrderItem($orderItem));
+        self::assertSame(0.25, (new VatRateResolver())->forOrderItem($orderItem));
     }
 
     /**
@@ -31,7 +31,7 @@ final class VatRateResolverTest extends TestCase
     {
         $orderItem = $this->createOrderItem([], taxTotal: 0, total: 1000);
 
-        self::assertSame(0.0, VatRateResolver::forOrderItem($orderItem));
+        self::assertSame(0.0, (new VatRateResolver())->forOrderItem($orderItem));
     }
 
     /**
@@ -41,7 +41,7 @@ final class VatRateResolverTest extends TestCase
     {
         $orderItem = $this->createOrderItem([$this->createAdjustment([])], taxTotal: 250, total: 1250);
 
-        self::assertSame(0.25, VatRateResolver::forOrderItem($orderItem));
+        self::assertSame(0.25, (new VatRateResolver())->forOrderItem($orderItem));
     }
 
     /**
@@ -55,7 +55,7 @@ final class VatRateResolverTest extends TestCase
         $order = $this->createMock(OrderInterface::class);
         $order->method('getShipments')->willReturn(new ArrayCollection([$shipment]));
 
-        self::assertSame(0.19, VatRateResolver::forShipping($order));
+        self::assertSame(0.19, (new VatRateResolver())->forShipping($order));
     }
 
     /**
@@ -66,7 +66,7 @@ final class VatRateResolverTest extends TestCase
         $order = $this->createMock(OrderInterface::class);
         $order->method('getShipments')->willReturn(new ArrayCollection());
 
-        self::assertSame(0.0, VatRateResolver::forShipping($order));
+        self::assertSame(0.0, (new VatRateResolver())->forShipping($order));
     }
 
     /**
