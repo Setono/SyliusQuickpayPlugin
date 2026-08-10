@@ -6,24 +6,23 @@
     <services>
 
         <!-- Controllers -->
-        <service id="setono_sylius_quickpay.controller.notify"
-                 class="Setono\SyliusQuickpayPlugin\Controller\NotifyAction" public="true">
+        <service id="Setono\SyliusQuickpayPlugin\Controller\NotifyAction" public="true">
             <argument type="service" id="payum"/>
             <argument type="service" id="sylius.repository.order"/>
-            <argument type="service" id="setono_sylius_quickpay.provider.quickpay_payment"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
             <argument type="service" id="sylius.repository.gateway_config"/>
         </service>
 
         <!-- Provider -->
-        <service id="setono_sylius_quickpay.provider.quickpay_payment"
-                 class="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
+        <service id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
+
+        <service id="Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
 
         <!-- Action -->
-        <service id="setono_sylius_quickpay.payum_action.quickpay.convert_payment"
-                 class="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction"
-                 public="true">
+        <service id="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction" public="true">
             <argument type="service" id="payum"/>
-            <argument type="service" id="setono_sylius_quickpay.taxation.vat_rate_resolver"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
 
             <tag name="payum.action"
                  factory="quickpay"
@@ -31,9 +30,7 @@
         </service>
 
         <!-- State machine -->
-        <service id="setono_sylius_quickpay.state_machine.payment_processor"
-                 class="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor"
-                 public="true">
+        <service id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor" public="true">
             <argument type="service" id="payum"/>
             <argument>%setono_sylius_quickpay.operations.capture%</argument>
             <argument>%setono_sylius_quickpay.operations.refund%</argument>
@@ -45,37 +42,37 @@
         </service>
 
         <service id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface"
-                 alias="setono_sylius_quickpay.state_machine.payment_processor"/>
+                 alias="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor"/>
 
         <!-- Form -->
-        <service id="setono_sylius_quickpay.form.type.quickpay_gateway_configuration"
-                 class="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">
-
+        <service id="Setono\SyliusQuickpayPlugin\Form\Type\QuickPayGatewayConfigurationType">
             <tag name="sylius.gateway_configuration_type"
                  type="quickpay"
                  label="setono_sylius_quickpay.payum_gateway_factory.quickpay"/>
         </service>
 
         <!-- Factory builder -->
-        <service id="setono_sylius_quickpay.payum.gateway_factory_builder"
-                 class="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
+        <service id="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
             <argument>Setono\Payum\Quickpay\QuickpayGatewayFactory</argument>
-            <argument type="service" id="setono_sylius_quickpay.guesser.language_guesser"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser"/>
 
             <tag name="payum.gateway_factory_builder"
                  factory="quickpay"/>
         </service>
 
-        <!-- Fixtures -->
         <!-- Taxation -->
-        <service id="setono_sylius_quickpay.taxation.vat_rate_resolver"
-                 class="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
+        <service id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
 
-        <!-- Etc -->
-        <service id="setono_sylius_quickpay.guesser.language_guesser"
-                 class="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">
+        <service id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
+
+        <!-- Guesser -->
+        <service id="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">
             <argument type="service" id="sylius.context.locale"/>
         </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesserInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser"/>
 
     </services>
 </container>

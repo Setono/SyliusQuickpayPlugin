@@ -39,7 +39,7 @@ class SetonoSyliusQuickpayExtension extends Extension implements PrependExtensio
                     'before' => [
                         'setono_quickpay_resolve_state' => [
                             'on' => ['complete', 'refund', 'cancel'],
-                            'do' => ['@setono_sylius_quickpay.state_machine.payment_processor', '__invoke'],
+                            'do' => ['@Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor', '__invoke'],
                             'args' => ['object', 'event.getTransition()'],
                         ],
                     ],
