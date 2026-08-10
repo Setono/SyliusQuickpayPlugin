@@ -4,8 +4,8 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                apikey: API-kulcs
-                privatekey: Privát kulcs
+                api_key: API-kulcs
+                private_key: Privát kulcs
                 agreement: Megállapodás azonosító
                 order_prefix: Rendelési előtag
                 payment_methods: Fizetési módok

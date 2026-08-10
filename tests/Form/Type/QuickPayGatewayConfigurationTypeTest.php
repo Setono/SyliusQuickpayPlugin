@@ -30,8 +30,8 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
         $form = $this->factory->create(QuickPayGatewayConfigurationType::class);
 
         $form->submit([
-            'apikey' => 'api-key',
-            'privatekey' => 'private-key',
+            'api_key' => 'api-key',
+            'private_key' => 'private-key',
             'agreement' => '67890',
             'order_prefix' => 'qp_',
             'payment_methods' => 'creditcard, mobilepay',
@@ -44,8 +44,8 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
 
         $data = $form->getData();
         self::assertIsArray($data);
-        self::assertSame('api-key', $data['apikey']);
-        self::assertSame('private-key', $data['privatekey']);
+        self::assertSame('api-key', $data['api_key']);
+        self::assertSame('private-key', $data['private_key']);
         self::assertSame('67890', $data['agreement']);
         self::assertSame('qp_', $data['order_prefix']);
         self::assertSame('creditcard, mobilepay', $data['payment_methods']);
@@ -64,18 +64,37 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
         ]);
 
         $form->submit([
-            'apikey' => '',
-            'privatekey' => '',
+            'api_key' => '',
+            'private_key' => '',
             'agreement' => '',
             'order_prefix' => 'longer_than_eleven_characters',
         ]);
 
         self::assertFalse($form->isValid());
-        foreach (['apikey', 'privatekey', 'order_prefix'] as $field) {
+        foreach (['api_key', 'private_key', 'order_prefix'] as $field) {
             self::assertGreaterThan(0, \count($form->get($field)->getErrors()), sprintf('Expected a validation error on the "%s" field', $field));
         }
 
         // The agreement id is optional since Quickpay only requires the api and private keys
         self::assertCount(0, $form->get('agreement')->getErrors());
+    }
+
+    /**
+     * @test
+     */
+    public function it_migrates_credentials_stored_under_the_old_option_names(): void
+    {
+        $form = $this->factory->create(QuickPayGatewayConfigurationType::class, [
+            'apikey' => 'stored-api-key',
+            'privatekey' => 'stored-private-key',
+        ]);
+
+        self::assertSame('stored-api-key', $form->get('api_key')->getData());
+        self::assertSame('stored-private-key', $form->get('private_key')->getData());
+
+        $data = $form->getData();
+        self::assertIsArray($data);
+        self::assertArrayNotHasKey('apikey', $data);
+        self::assertArrayNotHasKey('privatekey', $data);
     }
 }

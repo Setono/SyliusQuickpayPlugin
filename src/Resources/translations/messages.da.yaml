@@ -4,8 +4,8 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                apikey: Api nøgle
-                privatekey: Privat nøgle
+                api_key: Api nøgle
+                private_key: Privat nøgle
                 agreement: Aftale id
                 order_prefix: Ordre prefiks
                 payment_methods: Betalingsmetoder

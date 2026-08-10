@@ -4,8 +4,8 @@ setono_sylius_quickpay:
     form:
         gateway_configuration:
             quickpay:
-                apikey: API-avain
-                privatekey: Yksityinen avain
+                api_key: API-avain
+                private_key: Yksityinen avain
                 agreement: Sopimuksen tunnus
                 order_prefix: Tilauksen etuliite
                 payment_methods: Maksutavat
