@@ -96,10 +96,13 @@ defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolv
 The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
 ### State machine integration
-`SetonoSyliusQuickpayExtension::prepend()` registers a `winzou_state_machine` **before** callback on the
-`sylius_payment` machine for the `complete`, `refund`, and `cancel` transitions, invoking
-`StateMachine/PaymentProcessor` (guarded by `hasExtension('winzou_state_machine')` so the plugin stays
-bootable under the `symfony_workflow` adapter, where the callback simply will not fire). The processor
+Both Sylius 1.14 state machine adapters forward the `complete`, `refund`, and `cancel` transitions to
+`StateMachine/PaymentProcessor`: `SetonoSyliusQuickpayExtension::prepend()` registers a
+`winzou_state_machine` **before** callback (guarded by `hasExtension('winzou_state_machine')`), and
+`StateMachine/WorkflowSubscriber` listens on the `workflow.sylius_payment.transition.*` events for the
+`symfony_workflow` adapter — the parity point of the winzou `before` callback (both fire while the
+transition is applied, so an exception aborts it identically). Only the adapter actually applying a
+transition dispatches its events, so the dual registration never double-processes. The processor
 implements `PaymentProcessorInterface` and is `LoggerAwareInterface` (wired via a `setLogger()` call with
 `on-invalid="ignore"`). It translates each transition into the corresponding Payum request
 (`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
@@ -134,7 +137,6 @@ passed to the processor as container parameters).
 - New Payum behavior = a new class in `src/Action/` tagged `payum.action factory="quickpay"` in `services.xml`.
   Services are wired explicitly in `services.xml` (no autowiring/autoconfiguration in this bundle).
 - `composer.lock` is gitignored — this is a plugin, so no lockfile is committed.
-- The plugin still relies on the **winzou** state machine, but only in the callback config prepended by the
-  extension (which passes `event.getTransition()`, so `PaymentProcessor` itself is adapter-agnostic). Sylius 1.14 ships `SyliusStateMachineAbstractionBundle` and
-  also supports the `symfony_workflow` adapter; under that adapter the winzou callback would not fire. Migrating to
-  `Sylius\Abstraction\StateMachine` is a known follow-up.
+- `PaymentProcessorInterface` is adapter-agnostic (`(PaymentInterface $payment, string $transition)`), fed
+  by the winzou callback (which passes `event.getTransition()`) and by `WorkflowSubscriber` under the
+  `symfony_workflow` adapter. New transition-driven behavior must be hooked into **both** adapters.

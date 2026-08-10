@@ -124,5 +124,7 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
   tampered callbacks are rejected with a 400 response.
 - **A failed cancel no longer blocks cancelling the order** — e.g. when the customer never completed
   checkout, so there is nothing to cancel at Quickpay; the failure is logged instead.
-- The state machine callback still requires the `winzou_state_machine` adapter (the Sylius 1.14
-  default); under the `symfony_workflow` adapter it simply does not fire.
+- **Both state machine adapters are supported.** The winzou before-callback (the Sylius 1.14 default
+  adapter) is complemented by a Symfony workflow event subscriber, so capture/refund/cancel reach
+  Quickpay also when the `sylius_payment` graph runs on the `symfony_workflow` adapter — where 1.x
+  was silently inert.

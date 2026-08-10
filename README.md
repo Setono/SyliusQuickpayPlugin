@@ -60,8 +60,9 @@ setono_sylius_quickpay:
         cancel: true   # forward the cancel transition to Quickpay
 ```
 
-**Note:** The callback is registered with `winzou_state_machine`, the default state machine adapter in Sylius 1.14.
-If your application runs the `sylius_payment` graph on the `symfony_workflow` adapter, the callback will not fire.
+The plugin hooks into **both state machine adapters** supported by Sylius 1.14 — a `winzou_state_machine`
+callback (the default adapter) and a Symfony workflow event subscriber — so the operations are forwarded to
+Quickpay no matter which adapter your application runs the `sylius_payment` graph on.
 
 ### 4. Import the routes
 
