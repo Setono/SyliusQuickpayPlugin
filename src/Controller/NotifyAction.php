@@ -47,12 +47,12 @@ final class NotifyAction
             throw new BadRequestHttpException();
         }
 
-        if (!isset($data->id, $data->order_id) || !is_numeric($data->id) || !is_scalar($data->order_id)) {
+        if (!isset($data->id, $data->order_id) || !is_numeric($data->id) || !is_string($data->order_id)) {
             throw new BadRequestHttpException();
         }
 
         $quickpayPaymentId = (int) $data->id;
-        $orderNumber = (string) $data->order_id;
+        $orderNumber = $data->order_id;
 
         // an attempt to remove the order prefix in non-prod environments
         // it's optimistic because the prefix saved in the database might be different

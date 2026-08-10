@@ -11,10 +11,6 @@ jobs:
 
         runs-on: "ubuntu-latest"
 
-        # The 2.x line is an intentional major with BC breaks against 1.x; the first PRs compare
-        # against pre-2.0 code, so the check is advisory only. Remove once 2.0.0 is tagged.
-        continue-on-error: true
-
         steps:
             -   name: "Checkout"
                 uses: "actions/checkout@v6"
