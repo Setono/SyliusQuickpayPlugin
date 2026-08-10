@@ -7,7 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Provider;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
 
-final class QuickpayPaymentProvider implements QuickpayPaymentProviderInterface
+final class PaymentProvider implements PaymentProviderInterface
 {
     public function findByQuickpayPaymentId(OrderInterface $order, int $quickpayPaymentId): ?PaymentInterface
     {

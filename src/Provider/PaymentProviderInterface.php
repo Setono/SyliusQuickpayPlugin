@@ -7,7 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Provider;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Payment\Model\PaymentInterface;
 
-interface QuickpayPaymentProviderInterface
+interface PaymentProviderInterface
 {
     /**
      * Returns the payment on the order that belongs to the given Quickpay payment id, if any
