@@ -13,8 +13,8 @@ state machine, and admin.
 
 * PHP 8.1 or higher
 * Sylius 1.x on Symfony ^6.4 (tested against Sylius 1.14)
-* A PSR-18 HTTP client and PSR-17 factories discoverable by `php-http/discovery`
-  (e.g. `symfony/http-client` + `nyholm/psr7`)
+* PSR-17 factories discoverable by `php-http/discovery` (e.g. `nyholm/psr7`) — the plugin itself
+  brings `symfony/http-client` as its PSR-18 client
 
 ## Installation
 
@@ -27,10 +27,10 @@ must allow the pre-release versions explicitly:
 composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@alpha setono/quickpay-php-sdk:^1.0@beta
 ```
 
-If your project does not already provide a PSR-18 client and PSR-17 factories:
+If your project does not already provide PSR-17 factories:
 
 ```bash
-composer require symfony/http-client nyholm/psr7
+composer require nyholm/psr7
 ```
 
 ### 2. Register the bundle
