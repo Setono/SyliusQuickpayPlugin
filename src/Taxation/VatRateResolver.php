@@ -26,6 +26,11 @@ final class VatRateResolver implements VatRateResolverInterface
         // Adjustments created before Sylius stored the rate in the details carry no taxRateAmount;
         // derive the rate from the totals instead. The item total includes the tax in both the
         // included-in-price and added-on-top cases.
+        //
+        // This is a fallback rather than the primary path on purpose: the totals are rounded
+        // integer minor units, so the ratio only approximates the configured rate — an item of 33
+        // with 25% included VAT carries a tax of round(33 * 0.2) = 7, reconstructing to
+        // 7 / 26 = 0.2692 instead of 0.25. The taxRateAmount in the details is the exact rate.
         return self::rateFromTotals($orderItem->getTaxTotal(), $orderItem->getTotal());
     }
 
