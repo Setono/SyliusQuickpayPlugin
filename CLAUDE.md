@@ -95,6 +95,13 @@ defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolv
 
 The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
+`Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`) is the backstop for
+callbacks that never arrive: `Provider/PendingPaymentProvider` queries non-final Quickpay payments with
+a `quickpayPaymentId`, the command polls each via `GetHumanStatus` and applies the matching transition
+through `Sylius\Abstraction\StateMachine` (adapter-agnostic, so it pairs with either state machine
+adapter). Doctrine access in these classes goes through `setono/doctrine-orm-trait`'s `ORMTrait`
+(inject `ManagerRegistry`, call `$this->getManager(...)`) rather than injecting an entity manager.
+
 ### State machine integration
 Both Sylius 1.14 state machine adapters forward the `complete`, `refund`, and `cancel` transitions to
 `StateMachine/PaymentProcessor`: `SetonoSyliusQuickpayExtension::prepend()` registers a

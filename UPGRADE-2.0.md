@@ -128,3 +128,6 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
   adapter) is complemented by a Symfony workflow event subscriber, so capture/refund/cancel reach
   Quickpay also when the `sylius_payment` graph runs on the `symfony_workflow` adapter — where 1.x
   was silently inert.
+- **New: a reconciliation command.** `setono:sylius-quickpay:reconcile-payments` polls Quickpay for
+  payments stuck in a non-final state — e.g. because a callback never arrived — and applies the
+  matching payment transition. See the README for options and a suggested cron cadence.

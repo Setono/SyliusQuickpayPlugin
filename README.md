@@ -125,6 +125,32 @@ out the gateway configuration:
   programmatic partial operations; note that Sylius' payment state machine still treats the payment as a whole —
   the `refund` transition can only be applied once.
 
+## Reconciling missed callbacks
+
+The Quickpay callback is normally the only way your store learns about a payment state change. If a
+callback never arrives — misconfigured callback URL on the Quickpay agreement, store unreachable while
+Quickpay retried — the payment stays stuck in a non-final state and the order never completes. The
+plugin ships a reconciliation command that closes this gap by polling Quickpay directly:
+
+```bash
+bin/console setono:sylius-quickpay:reconcile-payments                             # last 7 days, max 100 payments
+bin/console setono:sylius-quickpay:reconcile-payments --since="12 hours" --limit=50
+bin/console setono:sylius-quickpay:reconcile-payments --dry-run                   # report only, change nothing
+```
+
+For each stuck payment it fetches the current status from Quickpay and applies the matching payment
+transition — the same one the callback would have triggered. A callback racing the command is harmless:
+transitions are guarded and the resulting Quickpay operations re-check the remote status first.
+
+Scheduling is your application's choice; a cron entry along these lines is plenty:
+
+```cron
+*/30 * * * * /usr/bin/php /path/to/shop/bin/console setono:sylius-quickpay:reconcile-payments >> /var/log/quickpay-reconcile.log 2>&1
+```
+
+The command exits non-zero when any payment could not be checked, so cron mail or your monitoring
+will surface persistent problems.
+
 ## Testing
 
 ```bash

@@ -19,6 +19,24 @@
         <service id="Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
 
+        <service id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider">
+            <argument type="service" id="doctrine"/>
+            <argument>%sylius.model.payment.class%</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider"/>
+
+        <!-- Command -->
+        <service id="Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"/>
+            <argument type="service" id="payum"/>
+            <argument type="service" id="sylius_abstraction.state_machine"/>
+            <argument type="service" id="doctrine"/>
+
+            <tag name="console.command"/>
+        </service>
+
         <!-- Action -->
         <service id="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction" public="true">
             <argument type="service" id="payum"/>
