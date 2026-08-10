@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'Quickpay відхилив цей API-ключ. Перевірте, що це API-ключ API-користувача у вашому менеджері Quickpay (Налаштування → Користувачі).'

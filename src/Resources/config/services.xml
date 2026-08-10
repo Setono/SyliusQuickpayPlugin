@@ -27,6 +27,19 @@
         <service id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider"/>
 
+        <!-- Quickpay client -->
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
+
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
+
+        <!-- Validator -->
+        <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>
+
+            <tag name="validator.constraint_validator"/>
+        </service>
+
         <!-- Command -->
         <service id="Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"/>

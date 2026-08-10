@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'Quickpay afviste denne API-nøgle. Tjek at det er API-brugerens API-nøgle i din Quickpay manager (Indstillinger → Brugere).'

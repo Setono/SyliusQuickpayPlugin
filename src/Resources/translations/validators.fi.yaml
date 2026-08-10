@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'Quickpay hylkäsi tämän API-avaimen. Tarkista, että se on API-käyttäjän API-avain Quickpay-hallinnassa (Asetukset → Käyttäjät).'

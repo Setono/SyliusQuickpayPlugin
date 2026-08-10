@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'A Quickpay elutasította ezt az API-kulcsot. Ellenőrizd, hogy az API-felhasználó API-kulcsa-e a Quickpay managerben (Beállítások → Felhasználók).'

@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'Quickpay rechazó esta clave API. Compruebe que es la clave API del usuario API en su manager de Quickpay (Ajustes → Usuarios).'
