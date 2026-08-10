@@ -73,7 +73,7 @@ If your application runs the `sylius_payment` graph on the `symfony_workflow` ad
 ```yaml
 # config/routes/setono_sylius_quickpay.yaml
 setono_sylius_quickpay:
-    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routing.yaml"
+    resource: "@SetonoSyliusQuickpayPlugin/Resources/config/routes.yaml"
 ```
 
 This registers the callback endpoint (`POST /payment/quickpay/notify`) that Quickpay's servers use to notify your
@@ -161,6 +161,8 @@ full background. What it means for a store using this plugin:
   instead of flipping to `refunded` on the first partial refund.
 - **Callbacks are HMAC-verified by the gateway library**; unsigned or tampered callbacks are
   rejected with a 400 response.
+- **The routes file was renamed** from `Resources/config/routing.yaml` to `Resources/config/routes.yaml` —
+  update the import in your `config/routes/setono_sylius_quickpay.yaml`.
 
 ## Troubleshooting
 
