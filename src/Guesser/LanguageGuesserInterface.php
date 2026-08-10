@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Guesser;
 
-interface QuickpayLanguageGuesserInterface
+interface LanguageGuesserInterface
 {
     public function guess(): string;
 }

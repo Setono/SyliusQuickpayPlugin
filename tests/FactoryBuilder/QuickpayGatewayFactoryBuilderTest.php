@@ -10,7 +10,7 @@ use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder;
-use Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesserInterface;
+use Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesserInterface;
 
 final class QuickpayGatewayFactoryBuilderTest extends TestCase
 {
@@ -21,7 +21,7 @@ final class QuickpayGatewayFactoryBuilderTest extends TestCase
      */
     public function it_builds_the_gateway_factory_with_the_guessed_language(): void
     {
-        $languageGuesser = $this->prophesize(QuickpayLanguageGuesserInterface::class);
+        $languageGuesser = $this->prophesize(LanguageGuesserInterface::class);
         $languageGuesser->guess()->shouldBeCalledOnce()->willReturn('da');
 
         $coreGatewayFactory = $this->prophesize(GatewayFactoryInterface::class);

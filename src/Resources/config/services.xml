@@ -54,7 +54,7 @@
         <!-- Factory builder -->
         <service id="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
             <argument>Setono\Payum\Quickpay\QuickpayGatewayFactory</argument>
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser"/>
 
             <tag name="payum.gateway_factory_builder"
                  factory="quickpay"/>
@@ -67,12 +67,12 @@
                  alias="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
 
         <!-- Guesser -->
-        <service id="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser">
+        <service id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser">
             <argument type="service" id="sylius.context.locale"/>
         </service>
 
-        <service id="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesserInterface"
-                 alias="Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser"/>
+        <service id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesserInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser"/>
 
     </services>
 </container>

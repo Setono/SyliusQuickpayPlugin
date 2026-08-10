@@ -6,11 +6,11 @@ namespace Setono\SyliusQuickpayPlugin\FactoryBuilder;
 
 use Payum\Core\Bridge\Symfony\Builder\GatewayFactoryBuilder;
 use Payum\Core\GatewayFactoryInterface;
-use Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesserInterface;
+use Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesserInterface;
 
 final class QuickpayGatewayFactoryBuilder extends GatewayFactoryBuilder
 {
-    public function __construct(string $gatewayFactoryClass, private readonly QuickpayLanguageGuesserInterface $languageGuesser)
+    public function __construct(string $gatewayFactoryClass, private readonly LanguageGuesserInterface $languageGuesser)
     {
         parent::__construct($gatewayFactoryClass);
     }

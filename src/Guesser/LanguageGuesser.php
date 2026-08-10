@@ -8,7 +8,7 @@ use Sylius\Component\Locale\Context\LocaleContextInterface;
 use Symfony\Component\Intl\Languages;
 use Throwable;
 
-final class QuickpayLanguageGuesser implements QuickpayLanguageGuesserInterface
+final class LanguageGuesser implements LanguageGuesserInterface
 {
     private const DEFAULT_LANGUAGE = 'en';
 
