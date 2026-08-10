@@ -8,6 +8,7 @@ use Doctrine\Common\Collections\Collection;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\ApiAwareInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
+use Payum\Core\Exception\RequestNotSupportedException;
 use Payum\Core\GatewayAwareInterface;
 use Payum\Core\GatewayAwareTrait;
 use Payum\Core\Model\PaymentInterface as PayumPaymentInterface;
@@ -44,12 +45,15 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
     }
 
     /**
-     * @param Convert $request
+     * @param mixed|Convert $request
      */
     public function execute($request): void
     {
-        /** @var PayumPaymentInterface $payumPayment */
+        RequestNotSupportedException::assertSupports($this, $request);
+        Assert::isInstanceOf($request, Convert::class);
+
         $payumPayment = $request->getSource();
+        Assert::isInstanceOf($payumPayment, PayumPaymentInterface::class);
 
         $details = ArrayObject::ensureArrayObject($payumPayment->getDetails());
         $details['amount'] = $payumPayment->getTotalAmount();

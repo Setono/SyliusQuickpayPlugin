@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\Fixture;
 use Doctrine\ORM\EntityManagerInterface;
 use Faker\Factory;
 use Faker\Generator;
-use function preg_replace;
 use function sprintf;
 use Sylius\Bundle\CoreBundle\Fixture\Factory\ExampleFactoryInterface;
 use Sylius\Bundle\FixturesBundle\Fixture\AbstractFixture;
@@ -15,6 +14,7 @@ use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
 use Sylius\Component\Core\Model\ShopUserInterface;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
+use Webmozart\Assert\Assert;
 
 class KlarnaTestShopUserFixture extends AbstractFixture
 {
@@ -33,8 +33,11 @@ class KlarnaTestShopUserFixture extends AbstractFixture
      */
     public function load(array $options): void
     {
+        $country = $options['country'] ?? null;
+        Assert::string($country);
+
         for ($i = 0; $i < $options['amount']; ++$i) {
-            $testData = $this->getKlarnaTestDataByCountry($options['country'], $options);
+            $testData = $this->getKlarnaTestDataByCountry($country, $options);
 
             /** @var ShopUserInterface $shopUser */
             $shopUser = $this->shopUserExampleFactory->create([
@@ -44,7 +47,7 @@ class KlarnaTestShopUserFixture extends AbstractFixture
 
             /** @var AddressInterface $address */
             $address = $this->addressExampleFactory->create([
-                'country_code' => $options['country'],
+                'country_code' => $country,
             ] + $this->getOptions($testData, ['first_name', 'last_name', 'phone_number', 'postcode', 'city', 'street']));
 
             /** @var CustomerInterface $customer */
@@ -78,6 +81,9 @@ class KlarnaTestShopUserFixture extends AbstractFixture
         ;
     }
 
+    /**
+     * @return list<string>
+     */
     protected static function getSupportedCountries(): array
     {
         return [
@@ -94,13 +100,20 @@ class KlarnaTestShopUserFixture extends AbstractFixture
 
     /**
      * @see https://developers.klarna.com/documentation/testing-environment/sample-data/
+     *
+     * @param array<mixed> $options
+     *
+     * @return array<string, mixed>
      */
     protected function getKlarnaTestDataByCountry(string $countryCode, array $options): array
     {
+        $approved = $options['approved'] ?? true;
+        Assert::boolean($approved);
+
         $klarnaDefaultTestData = [
             'first_name' => sprintf('Testperson-%s', mb_strtolower($countryCode)),
-            'email' => $options['approved'] ? $this->faker->email : preg_replace('@', '+denied@', $this->faker->email),
-            'last_name' => $options['approved'] ? 'Approved' : 'Denied',
+            'email' => $approved ? $this->faker->email : str_replace('@', '+denied@', $this->faker->email),
+            'last_name' => $approved ? 'Approved' : 'Denied',
         ];
 
         $klarnaCountryDependantTestData = [
@@ -111,12 +124,12 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'postcode' => '12345',
             ],
             'AT' => [
-                'phone_number' => $options['approved'] ? '0676 2600000' : '0676 2800000',
-                'street' => sprintf('Klarna-Straße %s', $this->faker->randomElement([1, 2, 3])),
+                'phone_number' => $approved ? '0676 2600000' : '0676 2800000',
+                'street' => sprintf('Klarna-Straße %d', $this->faker->numberBetween(1, 3)),
                 'city' => 'Hausmannstätten',
-                'postcode' => $options['approved'] ? '8071' : '8070',
-                'gender' => $options['approved'] ? CustomerInterface::MALE_GENDER : CustomerInterface::FEMALE_GENDER,
-                'birthday' => $options['approved'] ? '1960-04-14 00:00:00' : '1980-04-14 00:00:00',
+                'postcode' => $approved ? '8071' : '8070',
+                'gender' => $approved ? CustomerInterface::MALE_GENDER : CustomerInterface::FEMALE_GENDER,
+                'birthday' => $approved ? '1960-04-14 00:00:00' : '1980-04-14 00:00:00',
             ],
             'FI' => [
                 'phone_number' => '0401234567',
@@ -153,10 +166,10 @@ class KlarnaTestShopUserFixture extends AbstractFixture
                 'birthday' => '1960-07-10 00:00:00',
             ],
             'CH' => [
-                'first_name' => $options['approved'] ? $this->faker->firstName : 'test',
-                'last_name' => $options['approved'] ? $this->faker->lastName : 'test',
+                'first_name' => $approved ? $this->faker->firstName : 'test',
+                'last_name' => $approved ? $this->faker->lastName : 'test',
                 'phone_number' => '012345678',
-                'street' => $options['approved'] ? 'Bahnhofstrasse 77' : 'teststreet 77',
+                'street' => $approved ? 'Bahnhofstrasse 77' : 'teststreet 77',
                 'city' => 'Zürich',
                 'postcode' => '8001',
                 'gender' => CustomerInterface::MALE_GENDER,
@@ -167,9 +180,15 @@ class KlarnaTestShopUserFixture extends AbstractFixture
         return $klarnaDefaultTestData + $klarnaCountryDependantTestData[$countryCode];
     }
 
+    /**
+     * @param array<string, mixed> $testData
+     * @param list<string> $requiredKeys
+     *
+     * @return array<string, mixed>
+     */
     protected function getOptions(array $testData, array $requiredKeys): array
     {
-        foreach ($testData as $key => $value) {
+        foreach (array_keys($testData) as $key) {
             if (!in_array($key, $requiredKeys, true)) {
                 unset($testData[$key]);
             }
