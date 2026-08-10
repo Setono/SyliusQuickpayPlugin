@@ -15,7 +15,6 @@ final class Configuration implements ConfigurationInterface
 
         $rootNode = $treeBuilder->getRootNode();
 
-        /** @psalm-suppress MixedMethodCall,PossiblyUndefinedMethod,PossiblyNullReference,UndefinedInterfaceMethod */
         $rootNode
             ->addDefaultsIfNotSet()
             ->children()
