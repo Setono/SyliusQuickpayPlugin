@@ -54,18 +54,6 @@ sylius_fixtures:
                                 enabled: true
                                 hostname: "localhost"
 
-                setono_quickpay_klarna_test_shop_user_dk:
-                    name: setono_quickpay_klarna_test_shop_user
-                    options:
-                        amount: 10
-                        country: DK
-
-                setono_quickpay_klarna_test_shop_user_nl:
-                    name: setono_quickpay_klarna_test_shop_user
-                    options:
-                        amount: 10
-                        country: NL
-
                 setono_quickpay_payment_method:
                     name: payment_method
                     options:
@@ -99,34 +87,6 @@ sylius_fixtures:
                                     - 'DK_WEB'
                                     - 'NL_WEB'
                                 enabled: true
-                            quickpay_klarna:
-                                code: 'quickpay_klarna'
-                                name: 'Klarna via QuickPay'
-                                instructions: 'Pay via QuickPay with Klarna account'
-                                gatewayName: 'quickpay_klarna'
-                                gatewayFactory: quickpay
-                                gatewayConfig:
-                                    apikey: '%env(resolve:QUICKPAY_API_KEY)%'
-                                    privatekey: '%env(resolve:QUICKPAY_PRIVATE_KEY)%'
-                                    agreement: '%env(resolve:QUICKPAY_AGREEMENT_ID)%'
-                                    order_prefix: '%env(resolve:QUICKPAY_ORDER_PREFIX)%'
-
-                                    # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
-                                    payment_methods: 'klarna'
-
-                                    # https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments
-                                    # If you are selling a digital products, you can include "auto_capture":"true" 
-                                    # in the payment link request, to capture the payment automatically after the authorize.
-                                    auto_capture: 0
-
-                                    synchronized: false
-
-                                    use_authorize: true
-                                channels:
-                                    - 'DK_WEB'
-                                    - 'NL_WEB'
-                                enabled: true
-
                 setono_quickpay_shipping_method:
                     name: shipping_method
                     options:

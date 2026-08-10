@@ -34,7 +34,7 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
             'privatekey' => 'private-key',
             'agreement' => '67890',
             'order_prefix' => 'qp_',
-            'payment_methods' => 'creditcard, klarna-payments',
+            'payment_methods' => 'creditcard, mobilepay',
             'auto_capture' => '0',
             'synchronized' => '1',
             'branding_id' => '42',
@@ -48,7 +48,7 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
         self::assertSame('private-key', $data['privatekey']);
         self::assertSame('67890', $data['agreement']);
         self::assertSame('qp_', $data['order_prefix']);
-        self::assertSame('creditcard, klarna-payments', $data['payment_methods']);
+        self::assertSame('creditcard, mobilepay', $data['payment_methods']);
         self::assertSame(0, $data['auto_capture']);
         self::assertTrue($data['synchronized']);
         self::assertSame('42', $data['branding_id']);

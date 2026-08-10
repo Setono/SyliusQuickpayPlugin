@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Soukromý klíč je povinný.
                 order_prefix:
                     max_length: Nesmí být delší než 11 znaků.
-    address:
-        street_eligibility: Ulice musí obsahovat číslo domu (a rozšíření pro NL)

@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Privat nyckel krävs.
                 order_prefix:
                     max_length: Får inte vara längre än 11 tecken.
-    address:
-        street_eligibility: Gatan ska innehålla husnummer (och tillägg för NL)

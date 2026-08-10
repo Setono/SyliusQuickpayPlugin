@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Klucz prywatny jest wymagany.
                 order_prefix:
                     max_length: Nie może być dłuższy niż 11 znaków.
-    address:
-        street_eligibility: Ulica powinna zawierać numer domu (oraz rozszerzenie dla NL)

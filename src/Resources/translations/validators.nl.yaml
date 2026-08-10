@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Privésleutel is verplicht.
                 order_prefix:
                     max_length: Mag niet langer zijn dan 11 tekens.
-    address:
-        street_eligibility: De straat moet een huisnummer bevatten (en een toevoeging voor NL)

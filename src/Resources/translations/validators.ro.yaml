@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Cheia privată este obligatorie.
                 order_prefix:
                     max_length: Nu trebuie să depășească 11 caractere.
-    address:
-        street_eligibility: Strada trebuie să conțină numărul casei (și extensia pentru NL)

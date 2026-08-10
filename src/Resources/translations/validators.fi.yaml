@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Yksityinen avain vaaditaan.
                 order_prefix:
                     max_length: Saa olla enintään 11 merkkiä pitkä.
-    address:
-        street_eligibility: Kadun tulee sisältää talonumero (ja tarkenne NL:ssä)

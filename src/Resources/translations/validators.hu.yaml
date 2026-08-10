@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: A privát kulcs megadása kötelező.
                 order_prefix:
                     max_length: Nem lehet hosszabb 11 karakternél.
-    address:
-        street_eligibility: Az utcának tartalmaznia kell a házszámot (és NL esetén a kiegészítést)
