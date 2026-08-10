@@ -20,6 +20,7 @@ use Setono\Quickpay\Request\Payment\Address;
 use Setono\Quickpay\Request\Payment\BasketItem;
 use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
 use Setono\Quickpay\Request\Payment\Shipping;
+use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface;
 use function sprintf;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
@@ -38,8 +39,10 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
     use GatewayAwareTrait;
     use ApiAwareTrait;
 
-    public function __construct(private readonly Payum $payum)
-    {
+    public function __construct(
+        private readonly Payum $payum,
+        private readonly VatRateResolverInterface $vatRateResolver,
+    ) {
     }
 
     /**
@@ -92,7 +95,10 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
                 invoiceAddress: $this->convertAddress($billingAddress, $customer),
                 shippingAddress: $this->convertAddress($shippingAddress, $customer),
                 basket: $this->convertOrderItems($order->getItems()),
-                shipping: new Shipping(amount: $order->getShippingTotal()),
+                shipping: new Shipping(
+                    amount: $order->getShippingTotal(),
+                    vatRate: $this->vatRateResolver->forShipping($order),
+                ),
             ));
 
             $details['quickpayPaymentId'] = $quickpayPayment->id;
@@ -158,7 +164,7 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
                     (string) $orderItem->getVariantName(),
                 ),
                 itemPrice: $orderItem->getFullDiscountedUnitPrice(),
-                vatRate: 25 / 100, // @todo Derive the real VAT rate from the order's tax adjustments
+                vatRate: $this->vatRateResolver->forOrderItem($orderItem),
             );
         })->toArray());
     }
