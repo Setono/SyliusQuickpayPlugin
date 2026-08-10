@@ -87,5 +87,4 @@ final class NotifyAction
 
         return new Response('', 204);
     }
-
 }
