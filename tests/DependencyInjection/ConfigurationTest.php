@@ -23,9 +23,11 @@ final class ConfigurationTest extends TestCase
     public function it_has_sensible_defaults(): void
     {
         $this->assertProcessedConfigurationEquals([], [
-            'disable_capture' => false,
-            'disable_refund' => false,
-            'disable_cancel' => false,
+            'operations' => [
+                'capture' => true,
+                'refund' => true,
+                'cancel' => true,
+            ],
         ]);
     }
 
@@ -35,12 +37,14 @@ final class ConfigurationTest extends TestCase
     public function it_allows_disabling_individual_operations(): void
     {
         $this->assertProcessedConfigurationEquals([
-            ['disable_capture' => true],
-            ['disable_cancel' => true],
+            ['operations' => ['capture' => false]],
+            ['operations' => ['cancel' => false]],
         ], [
-            'disable_capture' => true,
-            'disable_refund' => false,
-            'disable_cancel' => true,
+            'operations' => [
+                'capture' => false,
+                'refund' => true,
+                'cancel' => false,
+            ],
         ]);
     }
 }

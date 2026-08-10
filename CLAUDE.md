@@ -98,8 +98,8 @@ payment from Quickpay), skipping operations that already happened. A failed canc
 but does not block the transition. Operations execute with the Sylius payment through Sylius' Payum bridge, so
 gateway-updated details persist; an unqualified `Refund` refunds Quickpay's remaining `balance` and the balance is
 persisted into the details by the library's Status/Confirm/Sync actions. Each operation can be turned off via the plugin config
-`disable_capture` / `disable_refund` / `disable_cancel` (defined in `DependencyInjection/Configuration.php`, passed
-to the processor as container parameters). This config file must be imported by the host app (see README install steps).
+`operations.capture` / `operations.refund` / `operations.cancel` (defined in `DependencyInjection/Configuration.php`,
+passed to the processor as container parameters).
 
 ### Gateway config & language
 - `Form/Type/QuickPayGatewayConfigurationType` is the admin form for the gateway (tagged

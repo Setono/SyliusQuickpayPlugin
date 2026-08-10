@@ -18,9 +18,24 @@ final class Configuration implements ConfigurationInterface
         $rootNode
             ->addDefaultsIfNotSet()
             ->children()
-                ->booleanNode('disable_capture')->defaultFalse()->end()
-                ->booleanNode('disable_refund')->defaultFalse()->end()
-                ->booleanNode('disable_cancel')->defaultFalse()->end()
+                ->arrayNode('operations')
+                    ->info('Which payment operations the state machine forwards to Quickpay when the corresponding Sylius payment transition is applied')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('capture')
+                            ->info("Forward the payment's complete transition to Quickpay as a capture")
+                            ->defaultTrue()
+                        ->end()
+                        ->booleanNode('refund')
+                            ->info('Forward the refund transition to Quickpay')
+                            ->defaultTrue()
+                        ->end()
+                        ->booleanNode('cancel')
+                            ->info('Forward the cancel transition to Quickpay')
+                            ->defaultTrue()
+                        ->end()
+                    ->end()
+                ->end()
         ;
 
         return $treeBuilder;
