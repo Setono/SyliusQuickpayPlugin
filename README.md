@@ -137,46 +137,9 @@ For manual testing, use the credit card numbers from the
 
 ## Upgrading from 1.x
 
-Version 2.x of this plugin is built on `setono/payum-quickpay` 2.0 — see its
-[upgrade guide](https://github.com/Setono/payum-quickpay/blob/2.x/docs/UPGRADE-2.0.md) for the
-full background. What it means for a store using this plugin:
-
-- **Payment details are scalar-only now.** Existing payments keep working: `quickpayPaymentId` is
-  the source of truth and the payment is re-fetched from Quickpay when needed. The stored
-  `quickpayPayment` object in old payment details is simply ignored.
-- **The `merchant` gateway option is gone** (Quickpay authenticates with the API key alone) and
-  `agreement` is optional. Existing gateway configurations keep working — unknown keys are
-  ignored — but you can open each Quickpay payment method in the admin and click save to clean
-  them up.
-- **A partially refunded payment now stays `captured`** until the full amount is refunded,
-  instead of flipping to `refunded` on the first partial refund.
-- **Callbacks are HMAC-verified by the gateway library**; unsigned or tampered callbacks are
-  rejected with a 400 response.
-- **The routes file was renamed** from `Resources/config/routing.yaml` to `Resources/config/routes.yaml` —
-  update the import in your `config/routes/setono_sylius_quickpay.yaml`.
-- **The state machine callback is now registered automatically** and
-  `Resources/config/app/config.yaml` no longer exists — remove its import from your
-  `config/packages/setono_sylius_quickpay.yaml` (keeping it would break the container build).
-- **The `disable_capture`/`disable_refund`/`disable_cancel` config keys were replaced** by
-  positively-named flags nested under `operations` (`operations.capture: true` etc., all
-  defaulting to enabled) — update your `setono_sylius_quickpay` configuration if you set them.
-- **All plugin classes are now `final`.** Extension happens through the supported seams instead:
-  every interfaced service can be decorated or replaced (interface aliases are registered), and the
-  gateway configuration form can be extended with a regular `AbstractTypeExtension`.
-- **`QuickPayGatewayConfigurationType` was renamed `QuickpayGatewayConfigurationType`** — update
-  any form extensions targeting it.
-- **Service ids are now FQCNs** (e.g. `Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor`
-  instead of `setono_sylius_quickpay.state_machine.payment_processor`), with interface → class
-  aliases for every interfaced service — update any service references or decorations in your app.
-- **The credential config keys are now `api_key`/`private_key`** (previously `apikey`/`privatekey`).
-  Stored gateway configurations keep working — the old spellings remain deprecated aliases in the
-  gateway library, and the admin form migrates them to the new keys the next time you save the
-  payment method.
-- **The `QUICKPAY_ORDER_PREFIX` environment variable is no longer required.** Callbacks resolve
-  the order against the *Order prefix* configured on each Quickpay payment method, so the env var
-  only remains relevant if your fixtures or gateway configuration reference it.
-- **`Exception\UnsupportedPaymentTransitionException` was removed.** The plugin has not thrown it
-  since 2018, so catching it never had any effect.
+See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the full list of changes an upgrading store has to make —
+gateway configuration keys, removed imports, renamed routes and classes, the Klarna removal, and the
+behavioral changes around refunds and callbacks.
 
 ## Troubleshooting
 
