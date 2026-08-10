@@ -45,17 +45,11 @@ return [
 ];
 ```
 
-### 3. Import the plugin configuration
+### 3. Configure the plugin (optional)
 
-```yaml
-# config/packages/setono_sylius_quickpay.yaml
-imports:
-    - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/config.yaml" }
-```
-
-This registers the state machine callback that captures, refunds, and cancels Quickpay payments when the
-corresponding Sylius payment transitions are applied (see [How it works](#how-it-works)). Each operation can be
-turned off individually:
+The state machine callback that captures, refunds, and cancels Quickpay payments when the corresponding
+Sylius payment transitions are applied (see [How it works](#how-it-works)) is registered automatically.
+Each operation can be turned off individually:
 
 ```yaml
 # config/packages/setono_sylius_quickpay.yaml
@@ -163,6 +157,9 @@ full background. What it means for a store using this plugin:
   rejected with a 400 response.
 - **The routes file was renamed** from `Resources/config/routing.yaml` to `Resources/config/routes.yaml` —
   update the import in your `config/routes/setono_sylius_quickpay.yaml`.
+- **The state machine callback is now registered automatically** and
+  `Resources/config/app/config.yaml` no longer exists — remove its import from your
+  `config/packages/setono_sylius_quickpay.yaml` (keeping it would break the container build).
 
 ## Troubleshooting
 

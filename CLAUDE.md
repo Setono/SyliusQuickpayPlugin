@@ -51,7 +51,7 @@ the old Psalm setup — prefer fixing an issue over leaving it baselined, and sh
 static analysis, PHPUnit bootstrapping, and integration testing. PHPStan boots it through
 `tests/PHPStan/console_application.php` (Symfony) and `tests/PHPStan/object_manager.php` (Doctrine); PHPUnit
 bootstraps from `tests/Application/config/bootstrap.php`. The plugin is wired into the app via
-`config/packages/setono_sylius_quickpay.yaml` (imports the plugin's `app/config.yaml` + `app/fixtures.yaml`)
+`config/packages/setono_sylius_quickpay.yaml` (imports the plugin's `app/fixtures.yaml`)
 and `config/routes/setono_sylius_quickpay.yaml`.
 
 Run any Symfony console command for the plugin from inside that directory, e.g.
@@ -87,9 +87,10 @@ The controller strips `QUICKPAY_ORDER_PREFIX` from the incoming `order_id` to re
 prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
 ### State machine integration
-`src/Resources/config/app/config.yaml` registers a `winzou_state_machine` **before** callback on the
+`SetonoSyliusQuickpayExtension::prepend()` registers a `winzou_state_machine` **before** callback on the
 `sylius_payment` machine for the `complete`, `refund`, and `cancel` transitions, invoking
-`StateMachine/PaymentProcessor`. That processor translates each transition into the corresponding Payum request
+`StateMachine/PaymentProcessor` (guarded by `hasExtension('winzou_state_machine')` so the plugin stays
+bootable under the `symfony_workflow` adapter, where the callback simply will not fire). That processor translates each transition into the corresponding Payum request
 (`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
 and it guards each operation by first executing `GetHumanStatus` (the library's status action re-fetches the
 payment from Quickpay), skipping operations that already happened. A failed cancel
@@ -113,6 +114,6 @@ to the processor as container parameters). This config file must be imported by 
   Services are wired explicitly in `services.xml` (no autowiring/autoconfiguration in this bundle).
 - `composer.lock` is gitignored — this is a plugin, so no lockfile is committed.
 - The plugin's `src/` still uses the **winzou** state machine (`SM\Event\TransitionEvent` + the
-  `winzou_state_machine` callback in `app/config.yaml`). Sylius 1.14 ships `SyliusStateMachineAbstractionBundle` and
+  `winzou_state_machine` callback prepended by the extension). Sylius 1.14 ships `SyliusStateMachineAbstractionBundle` and
   also supports the `symfony_workflow` adapter; under that adapter the winzou callback would not fire. Migrating to
   `Sylius\Abstraction\StateMachine` is a known follow-up.
