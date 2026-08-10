@@ -6,11 +6,11 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Guesser;
 
 use PHPUnit\Framework\TestCase;
 use Prophecy\PhpUnit\ProphecyTrait;
-use Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser;
+use Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser;
 use Sylius\Component\Locale\Context\LocaleContextInterface;
 use Sylius\Component\Locale\Context\LocaleNotFoundException;
 
-final class QuickpayLanguageGuesserTest extends TestCase
+final class LanguageGuesserTest extends TestCase
 {
     use ProphecyTrait;
 
@@ -24,7 +24,7 @@ final class QuickpayLanguageGuesserTest extends TestCase
         $localeContext = $this->prophesize(LocaleContextInterface::class);
         $localeContext->getLocaleCode()->willReturn($locale);
 
-        self::assertSame($expectedLanguage, (new QuickpayLanguageGuesser($localeContext->reveal()))->guess());
+        self::assertSame($expectedLanguage, (new LanguageGuesser($localeContext->reveal()))->guess());
     }
 
     /**
@@ -53,6 +53,6 @@ final class QuickpayLanguageGuesserTest extends TestCase
         $localeContext = $this->prophesize(LocaleContextInterface::class);
         $localeContext->getLocaleCode()->willThrow(new LocaleNotFoundException());
 
-        self::assertSame('en', (new QuickpayLanguageGuesser($localeContext->reveal()))->guess());
+        self::assertSame('en', (new LanguageGuesser($localeContext->reveal()))->guess());
     }
 }

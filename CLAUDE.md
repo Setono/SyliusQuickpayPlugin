@@ -105,7 +105,7 @@ passed to the processor as container parameters).
 - `Form/Type/QuickPayGatewayConfigurationType` is the admin form for the gateway (tagged
   `sylius.gateway_configuration_type` type `quickpay`).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
-  build time; `Guesser/QuickpayLanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`).
+  build time; `Guesser/LanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`).
 
 ## Conventions specific to this repo
 
