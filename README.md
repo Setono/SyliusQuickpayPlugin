@@ -160,6 +160,9 @@ full background. What it means for a store using this plugin:
 - **The `disable_capture`/`disable_refund`/`disable_cancel` config keys were replaced** by
   positively-named flags nested under `operations` (`operations.capture: true` etc., all
   defaulting to enabled) — update your `setono_sylius_quickpay` configuration if you set them.
+- **All plugin classes are now `final`.** Extension happens through the supported seams instead:
+  every interfaced service can be decorated or replaced (interface aliases are registered), and the
+  gateway configuration form can be extended with a regular `AbstractTypeExtension`.
 - **`QuickPayGatewayConfigurationType` was renamed `QuickpayGatewayConfigurationType`** — update
   any form extensions targeting it.
 - **Service ids are now FQCNs** (e.g. `Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor`

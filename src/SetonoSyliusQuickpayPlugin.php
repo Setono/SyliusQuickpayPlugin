@@ -7,7 +7,7 @@ namespace Setono\SyliusQuickpayPlugin;
 use Sylius\Bundle\CoreBundle\Application\SyliusPluginTrait;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 
-class SetonoSyliusQuickpayPlugin extends Bundle
+final class SetonoSyliusQuickpayPlugin extends Bundle
 {
     use SyliusPluginTrait;
 }
