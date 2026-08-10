@@ -1,6 +1,6 @@
 {# Sylius' admin form theme escapes help texts regardless of help_html, so the fields
    whose help contains markup render it through this block instead #}
-{%- block setono_sylius_quickpay__quickpay_gateway_configuration_payment_methods_help -%}
+{%- block setono_sylius_quickpay__gateway_configuration_payment_methods_help -%}
     {%- if help is not empty -%}
         <p id="{{ id }}_help" class="text-muted" style="margin-top: 0.5em; font-size: 0.9em; color: #6c757d;"{% with { attr: help_attr } %}{{ block('attributes') }}{% endwith %}>
             {%- if translation_domain is same as(false) -%}

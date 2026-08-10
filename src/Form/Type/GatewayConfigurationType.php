@@ -53,7 +53,7 @@ final class GatewayConfigurationType extends AbstractType
                 'required' => false,
                 // Sylius' admin form theme ignores help_html, so the docs link is rendered
                 // through the plugin's own form theme, scoped to this block prefix
-                'block_prefix' => 'setono_sylius_quickpay__quickpay_gateway_configuration_payment_methods',
+                'block_prefix' => 'setono_sylius_quickpay__gateway_configuration_payment_methods',
                 'attr' => [
                     'placeholder' => 'creditcard, mobilepay',
                 ],
