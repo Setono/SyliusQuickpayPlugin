@@ -14,26 +14,6 @@
         </service>
 
         <!-- Action -->
-        <service id="setono_sylius_quickpay.payum_action.notify"
-                 class="Setono\SyliusQuickpayPlugin\Action\NotifyAction"
-                 public="true">
-            <argument type="service" id="payum"/>
-
-            <tag name="payum.action"
-                 factory="quickpay"
-                 alias="setono_sylius_quickpay.notify"/>
-        </service>
-
-        <service id="setono_sylius_quickpay.payum_action.status"
-                 class="Setono\SyliusQuickpayPlugin\Action\StatusAction"
-                 public="true">
-            <argument type="service" id="payum"/>
-
-            <tag name="payum.action"
-                 factory="quickpay"
-                 alias="setono_sylius_quickpay.status"/>
-        </service>
-
         <service id="setono_sylius_quickpay.payum_action.quickpay.convert_payment"
                  class="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction"
                  public="true">
@@ -81,7 +61,7 @@
         <!-- Factory builder -->
         <service id="setono_sylius_quickpay.payum.gateway_factory_builder"
                  class="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
-            <argument>Setono\Payum\QuickPay\QuickPayGatewayFactory</argument>
+            <argument>Setono\Payum\Quickpay\QuickpayGatewayFactory</argument>
             <argument type="service" id="setono_sylius_quickpay.guesser.language_guesser"/>
 
             <tag name="payum.gateway_factory_builder"

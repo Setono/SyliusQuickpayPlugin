@@ -32,11 +32,12 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
         $form->submit([
             'apikey' => 'api-key',
             'privatekey' => 'private-key',
-            'merchant' => '12345',
             'agreement' => '67890',
             'order_prefix' => 'qp_',
             'payment_methods' => 'creditcard, klarna-payments',
             'auto_capture' => '0',
+            'synchronized' => '1',
+            'branding_id' => '42',
         ]);
 
         self::assertTrue($form->isSynchronized());
@@ -45,11 +46,12 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
         self::assertIsArray($data);
         self::assertSame('api-key', $data['apikey']);
         self::assertSame('private-key', $data['privatekey']);
-        self::assertSame('12345', $data['merchant']);
         self::assertSame('67890', $data['agreement']);
         self::assertSame('qp_', $data['order_prefix']);
         self::assertSame('creditcard, klarna-payments', $data['payment_methods']);
         self::assertSame(0, $data['auto_capture']);
+        self::assertTrue($data['synchronized']);
+        self::assertSame('42', $data['branding_id']);
     }
 
     /**
@@ -64,14 +66,16 @@ final class QuickPayGatewayConfigurationTypeTest extends TypeTestCase
         $form->submit([
             'apikey' => '',
             'privatekey' => '',
-            'merchant' => '',
             'agreement' => '',
             'order_prefix' => 'longer_than_eleven_characters',
         ]);
 
         self::assertFalse($form->isValid());
-        foreach (['apikey', 'privatekey', 'merchant', 'agreement', 'order_prefix'] as $field) {
+        foreach (['apikey', 'privatekey', 'order_prefix'] as $field) {
             self::assertGreaterThan(0, \count($form->get($field)->getErrors()), sprintf('Expected a validation error on the "%s" field', $field));
         }
+
+        // The agreement id is optional since Quickpay only requires the api and private keys
+        self::assertCount(0, $form->get('agreement')->getErrors());
     }
 }

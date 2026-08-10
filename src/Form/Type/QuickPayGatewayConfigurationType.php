@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
@@ -35,23 +36,9 @@ class QuickPayGatewayConfigurationType extends AbstractType
                     ]),
                 ],
             ])
-            ->add('merchant', TextType::class, [
-                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.merchant',
-                'constraints' => [
-                    new NotBlank([
-                        'message' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.merchant.not_blank',
-                        'groups' => 'sylius',
-                    ]),
-                ],
-            ])
             ->add('agreement', TextType::class, [
                 'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.agreement',
-                'constraints' => [
-                    new NotBlank([
-                        'message' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.agreement.not_blank',
-                        'groups' => 'sylius',
-                    ]),
-                ],
+                'required' => false,
             ])
             ->add('order_prefix', TextType::class, [
                 'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.order_prefix',
@@ -75,6 +62,15 @@ class QuickPayGatewayConfigurationType extends AbstractType
                     'setono_sylius_quickpay.form.gateway_configuration.quickpay.auto_capture_option.yes' => 1,
                 ],
                 'help' => 'https://learn.quickpay.net/tech-talk/guides/payments/#introduction-to-payments',
+            ])
+            ->add('synchronized', CheckboxType::class, [
+                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.synchronized',
+                'required' => false,
+                'help' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.synchronized_help',
+            ])
+            ->add('branding_id', TextType::class, [
+                'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.branding_id',
+                'required' => false,
             ])
             ->add('use_authorize', HiddenType::class, [
                 'data' => true,

@@ -13,13 +13,24 @@ into Sylius' checkout, state machine, and admin.
 
 * PHP 8.1 or higher
 * Sylius 1.14 on Symfony 6.4
+* A PSR-18 HTTP client and PSR-17 factories discoverable by `php-http/discovery`
+  (e.g. `symfony/http-client` + `nyholm/psr7`)
 
 ## Installation
 
 ### 1. Install the plugin
 
+The plugin builds on `setono/payum-quickpay` 2.x, which is still in pre-release, so your project
+must allow the pre-release versions explicitly:
+
 ```bash
-composer require setono/sylius-quickpay-plugin
+composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@alpha setono/quickpay-php-sdk:^1.0@beta
+```
+
+If your project does not already provide a PSR-18 client and PSR-17 factories:
+
+```bash
+composer require symfony/http-client nyholm/psr7
 ```
 
 ### 2. Register the bundle
@@ -119,7 +130,6 @@ read the gateway credentials from these environment variables:
 ```dotenv
 QUICKPAY_API_KEY=
 QUICKPAY_PRIVATE_KEY=
-QUICKPAY_MERCHANT_ID=
 QUICKPAY_AGREEMENT_ID=
 ```
 
@@ -132,11 +142,12 @@ out the gateway configuration:
 |---|---|
 | Api key | The API key of the **API user** in your Quickpay manager (*Settings* → *Users*) |
 | Private key | The private key of your merchant account (*Settings* → *Integration*) |
-| Merchant id | Your Quickpay merchant id |
-| Agreement id | The agreement id of the **API user** |
+| Agreement id | *(optional)* The agreement id used for the payment window |
 | Order prefix | Prepended to order numbers sent to Quickpay — keep in sync with `QUICKPAY_ORDER_PREFIX` |
 | Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `klarna-payments` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
 | Auto capture | Capture the payment automatically right after authorization — useful for digital products |
+| Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
+| Branding id | *(optional)* The payment window branding to use |
 
 ## How it works
 
@@ -159,21 +170,30 @@ composer check-style   # coding standards
 For manual testing, use the credit card numbers from the
 [Quickpay test data](https://learn.quickpay.net/tech-talk/appendixes/test/#test-data).
 
+## Upgrading from 1.x
+
+Version 2.x of this plugin is built on `setono/payum-quickpay` 2.0 — see its
+[upgrade guide](https://github.com/Setono/payum-quickpay/blob/2.x/docs/UPGRADE-2.0.md) for the
+full background. What it means for a store using this plugin:
+
+- **Payment details are scalar-only now.** Existing payments keep working: `quickpayPaymentId` is
+  the source of truth and the payment is re-fetched from Quickpay when needed. The stored
+  `quickpayPayment` object in old payment details is simply ignored.
+- **The `merchant` gateway option is gone** (Quickpay authenticates with the API key alone) and
+  `agreement` is optional. Existing gateway configurations keep working — unknown keys are
+  ignored — but you can open each Quickpay payment method in the admin and click save to clean
+  them up.
+- **A partially refunded payment now stays `captured`** until the full amount is refunded,
+  instead of flipping to `refunded` on the first partial refund.
+- **Callbacks are HMAC-verified by the gateway library**; unsigned or tampered callbacks are
+  rejected with a 400 response.
+
 ## Troubleshooting
-
-- `Validation error: Transaction in wrong state for this operation` after upgrading to Sylius v1.6
-
-  After this [commit](https://github.com/Sylius/Sylius/commit/6c748c9aec878687c610bd440aac9635143df0c3#diff-063b340e70ed54a7454a9c76bd3ef84eR158),
-  `use_authorize` config option should be strictly `boolean` typed. Update your `payment_method` fixtures like done
-  at this [commit](https://github.com/Setono/SyliusQuickpayPlugin/commit/a23a9d8552ed4dda528a810ed2c7e062106cf470).
-
-  At live app - open each quickpay payment method at admin and click save so hidden `use_authorize` form field
-  will be stored in database in new format.
 
 - `Not authorized: Not authorized to PUT /payments/:id/link`
   at `/payment/authorize/...` url:
 
-  You should check at `https://manage.quickpay.net/account/{QUICKPAY_MERCHANT_ID}/settings/users`
+  You should check at `https://manage.quickpay.net/account/{your merchant id}/settings/users`
   that `System users` > `API User` > `User permissions` > `Create or update payment link` have `PUT`
   checkbox checked. Also check `QUICKPAY_API_KEY` and `QUICKPAY_AGREEMENT_ID` is filled with `API User`'s
   api key and agreement id rather than `Payment Window`'s.
@@ -194,8 +214,8 @@ For manual testing, use the credit card numbers from the
 
 [ico-version]: https://poser.pugx.org/setono/sylius-quickpay-plugin/v/stable
 [ico-license]: https://poser.pugx.org/setono/sylius-quickpay-plugin/license
-[ico-github-actions]: https://github.com/Setono/SyliusQuickpayPlugin/actions/workflows/build.yaml/badge.svg?branch=1.x
-[ico-code-coverage]: https://codecov.io/gh/Setono/SyliusQuickpayPlugin/branch/1.x/graph/badge.svg
+[ico-github-actions]: https://github.com/Setono/SyliusQuickpayPlugin/actions/workflows/build.yaml/badge.svg?branch=2.x
+[ico-code-coverage]: https://codecov.io/gh/Setono/SyliusQuickpayPlugin/branch/2.x/graph/badge.svg
 
 [link-packagist]: https://packagist.org/packages/setono/sylius-quickpay-plugin
 [link-github-actions]: https://github.com/Setono/SyliusQuickpayPlugin/actions

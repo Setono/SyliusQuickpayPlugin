@@ -1,88 +1,10 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Cannot access offset ''amount'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Method Setono\\SyliusQuickpayPlugin\\Action\\ConvertPaymentAction\:\:convertAddress\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Method Setono\\SyliusQuickpayPlugin\\Action\\ConvertPaymentAction\:\:convertOrderItems\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Method Setono\\SyliusQuickpayPlugin\\Action\\ConvertPaymentAction\:\:getRelatedOrderDetails\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Offset ''base'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Offset ''extension'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
 			message: '#^Parameter \#1 \$request \(Payum\\Core\\Request\\Convert\) of method Setono\\SyliusQuickpayPlugin\\Action\\ConvertPaymentAction\:\:execute\(\) should be contravariant with parameter \$request \(mixed\) of method Payum\\Core\\Action\\ActionInterface\:\:execute\(\)$#'
 			identifier: method.childParameterType
 			count: 1
 			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between null and mixed will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/Action/ConvertPaymentAction.php
-
-		-
-			message: '#^Access to an undefined property Payum\\Core\\Request\\GetHttpRequest\:\:\$headers\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/Action/NotifyAction.php
-
-		-
-			message: '#^Cannot access offset ''quickpay\-checksum\-sha256'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Action/NotifyAction.php
-
-		-
-			message: '#^Cannot access offset 0 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Action/NotifyAction.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: src/Action/NotifyAction.php
-
-		-
-			message: '#^Parameter \#1 \$request \(Payum\\Core\\Request\\Notify\) of method Setono\\SyliusQuickpayPlugin\\Action\\NotifyAction\:\:execute\(\) should be contravariant with parameter \$request \(mixed\) of method Payum\\Core\\Action\\ActionInterface\:\:execute\(\)$#'
-			identifier: method.childParameterType
-			count: 1
-			path: src/Action/NotifyAction.php
-
-		-
-			message: '#^Parameter \#1 \$request \(Payum\\Core\\Request\\GetStatusInterface\) of method Setono\\SyliusQuickpayPlugin\\Action\\StatusAction\:\:execute\(\) should be contravariant with parameter \$request \(mixed\) of method Payum\\Core\\Action\\ActionInterface\:\:execute\(\)$#'
-			identifier: method.childParameterType
-			count: 1
-			path: src/Action/StatusAction.php
 
 		-
 			message: '#^Cannot access offset ''base'' on mixed\.$#'
@@ -152,12 +74,6 @@ parameters:
 
 		-
 			message: '#^Method Setono\\SyliusQuickpayPlugin\\Fixture\\KlarnaTestShopUserFixture\:\:getSupportedCountries\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Fixture/KlarnaTestShopUserFixture.php
-
-		-
-			message: '#^Method Setono\\SyliusQuickpayPlugin\\Fixture\\KlarnaTestShopUserFixture\:\:load\(\) has parameter \$options with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: src/Fixture/KlarnaTestShopUserFixture.php

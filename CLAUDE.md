@@ -4,13 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Sylius plugin that adds **QuickPay** (a Danish payment gateway, with Klarna support) as a payment method.
+A Sylius plugin that adds **Quickpay** (a Danish payment gateway, with Klarna support) as a payment method.
 It is a thin Sylius/Payum integration layer on top of the lower-level Payum gateway package
-[`setono/payum-quickpay`](https://github.com/Setono/PayumQuickPay) — that package owns the actual QuickPay API
-client and models (`QuickPayPayment`, `QuickPayPaymentOperation`, `ConfirmPayment`, etc.); this package wires
-it into Sylius's checkout, state machine, and admin.
+[`setono/payum-quickpay`](https://github.com/Setono/payum-quickpay) 2.x, which in turn delegates HTTP to
+[`setono/quickpay-php-sdk`](https://github.com/Setono/quickpay-php-sdk) (PSR-18/17). The SDK owns the API
+client (`Setono\Quickpay\Client\*`), request/response DTOs (`Setono\Quickpay\Request\Payment\*`,
+`Setono\Quickpay\Response\Payment\*`) and enums; the gateway package owns the Payum actions plus the
+`Setono\Payum\Quickpay\{Api,Operations}` helpers; this package wires it all into Sylius's checkout,
+state machine, and admin.
 
-Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `1.x` (also the default/PR base).
+Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
+base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@alpha` + the SDK `^1.0@beta`).
+The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
+`quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
 
 All dev tooling (PHPStan, PHPUnit, Rector, Infection, ECS, composer-dependency-analyser, composer-normalize) is
 delegated to the **`setono/sylius-plugin-pack`** meta-package — it is not listed package-by-package in
@@ -54,26 +60,28 @@ Run any Symfony console command for the plugin from inside that directory, e.g.
 
 ## Architecture
 
-The payment lifecycle is implemented with **Payum's action pattern**. The three actions in `src/Action/` are each
-registered in `src/Resources/config/services.xml` with `<tag name="payum.action" factory="quickpay">`, which binds
-them to the QuickPay gateway. They use `ApiAwareTrait`/`GatewayAwareTrait` from `setono/payum-quickpay`.
+The payment lifecycle is implemented with **Payum's action pattern**. The plugin overrides exactly one library
+action: `src/Action/ConvertPaymentAction.php`, registered in `src/Resources/config/services.xml` with
+`<tag name="payum.action" factory="quickpay">` (tagged actions are consulted before the factory defaults, so it
+shadows the library's own convert action). Everything else — authorize (payment-link creation + notify-token
+minting), capture, refund, cancel, status (balance-aware), notify (HMAC validation) — is handled by the library's
+2.x actions.
 
-- **`ConvertPaymentAction`** — turns a Sylius payment into the QuickPay request array (amount, basket, addresses,
-  callback/continue/cancel URLs). On first run it calls the API to create the QuickPay payment and stashes
-  `quickpayPayment` + `quickpayPaymentId` into the Sylius payment's `details`. It also mints a Payum *notify token*
-  whose target URL becomes the QuickPay `callback_url`.
-- **`StatusAction`** — maps QuickPay payment state + latest operation onto Payum's status markers
-  (`markAuthorized`/`markCaptured`/`markRefunded`/`markCanceled`). Default is `markNew` so the payment can be reused
-  for further operations.
-- **`Action/NotifyAction`** (Payum action) — validates the `quickpay-checksum-sha256` header against the raw body,
-  parses the callback JSON into a `QuickPayPayment`, writes it into the payment details, and dispatches `ConfirmPayment`.
+- **`ConvertPaymentAction`** — turns a Sylius payment into a Quickpay payment. On first run it builds SDK DTOs
+  (`Address` with Klarna street splitting, `BasketItem` per order item, `Shipping`) and calls
+  `$this->api->payments()->create(new CreatePaymentRequest(...))`, then stores the scalar `quickpayPaymentId` +
+  `order_id` in the Sylius payment's `details` along with `amount`, `currency` and continue/cancel URLs. The
+  Payum `Convert` source is Payum's *synthetic* payment; the real Sylius order is resolved via the token identity
+  through `$this->payum->getStorage(...)`.
 
-### Two NotifyActions — don't confuse them
+### The notify flow
 - `src/Controller/NotifyAction.php` is the **HTTP entry point** (route `setono_sylius_quickpay_notify` →
-  `POST /payment/quickpay/notify`, in `src/Resources/config/routing.yaml`). It receives the raw QuickPay server
-  callback, resolves the order by `order_id`, finds the matching payment by `quickpayPaymentId`, then dispatches the
-  Payum `Notify` request.
-- `src/Action/NotifyAction.php` is the **Payum action** that actually handles that `Notify` request (checksum + confirm).
+  `POST /payment/quickpay/notify`, in `src/Resources/config/routing.yaml`). It receives the raw Quickpay server
+  callback, resolves the order by `order_id`, finds the matching payment by `quickpayPaymentId`, then dispatches
+  the Payum `Notify` request with the Sylius payment.
+- Sylius's `ExecuteSameRequestWithPaymentDetailsAction` rewraps that as `Notify(details)`, which the **library's**
+  `NotifyAction` handles: it validates the `QuickPay-Checksum-Sha256` HMAC against the gateway `privatekey` and
+  dispatches `ConfirmPayment`.
 
 The controller strips `QUICKPAY_ORDER_PREFIX` from the incoming `order_id` to recover the Sylius order number — this
 prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
@@ -82,8 +90,11 @@ prefix handling is the source of several documented "order_id" troubleshooting c
 `src/Resources/config/app/config.yaml` registers a `winzou_state_machine` **before** callback on the
 `sylius_payment` machine for the `complete`, `refund`, and `cancel` transitions, invoking
 `StateMachine/PaymentProcessor`. That processor translates each transition into the corresponding Payum request
-(`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId` and
-the operation hasn't already been approved. Each operation can be turned off via the plugin config
+(`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
+and it guards each operation by first executing `GetHumanStatus` (the library's status action re-fetches the
+payment from Quickpay), skipping operations that already happened. A failed cancel
+(`Payum\Core\Exception\ExceptionInterface` or the SDK's `Setono\Quickpay\Exception\QuickpayException`) is logged
+but does not block the transition. Each operation can be turned off via the plugin config
 `disable_capture` / `disable_refund` / `disable_cancel` (defined in `DependencyInjection/Configuration.php`, passed
 to the processor as container parameters). This config file must be imported by the host app (see README install steps).
 
