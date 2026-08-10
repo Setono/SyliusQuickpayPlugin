@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Sylius plugin that adds **Quickpay** (a Danish payment gateway, with Klarna support) as a payment method.
+A Sylius plugin that adds **Quickpay** (a Danish payment gateway) as a payment method.
 It is a thin Sylius/Payum integration layer on top of the lower-level Payum gateway package
 [`setono/payum-quickpay`](https://github.com/Setono/payum-quickpay) 2.x, which in turn delegates HTTP to
 [`setono/quickpay-php-sdk`](https://github.com/Setono/quickpay-php-sdk) (PSR-18/17). The SDK owns the API
@@ -29,7 +29,7 @@ composer phpunit          # run the PHPUnit test suite (tests/)
 composer analyse          # PHPStan (level max) — boots the test app via tests/PHPStan/*.php loaders
 composer check-style      # ECS dry-run (sylius-labs coding standard)
 composer fix-style        # ECS auto-fix
-vendor/bin/phpunit --filter CountryCurrencyMatcherTest   # run a single test
+vendor/bin/phpunit --filter PaymentProcessorTest         # run a single test
 vendor/bin/rector process --dry-run                      # Rector (UP_TO_PHP_81), dry-run
 vendor/bin/composer-dependency-analyser                  # unused/undeclared dependency check
 ```
@@ -51,8 +51,8 @@ the old Psalm setup — prefer fixing an issue over leaving it baselined, and sh
 static analysis, PHPUnit bootstrapping, and integration testing. PHPStan boots it through
 `tests/PHPStan/console_application.php` (Symfony) and `tests/PHPStan/object_manager.php` (Doctrine); PHPUnit
 bootstraps from `tests/Application/config/bootstrap.php`. The plugin is wired into the app via
-`config/packages/setono_sylius_quickpay.yaml` (imports the plugin's `app/config.yaml` + `app/fixtures.yaml`),
-`config/routes/setono_sylius_quickpay.yaml`, and `config/validator/Address.xml` (Klarna constraint, see below).
+`config/packages/setono_sylius_quickpay.yaml` (imports the plugin's `app/config.yaml` + `app/fixtures.yaml`)
+and `config/routes/setono_sylius_quickpay.yaml`.
 
 Run any Symfony console command for the plugin from inside that directory, e.g.
 `(cd tests/Application && bin/console debug:container setono_sylius_quickpay)`. For a manual run:
@@ -68,7 +68,7 @@ minting), capture, refund, cancel, status (balance-aware), notify (HMAC validati
 2.x actions.
 
 - **`ConvertPaymentAction`** — turns a Sylius payment into a Quickpay payment. On first run it builds SDK DTOs
-  (`Address` with Klarna street splitting, `BasketItem` per order item, `Shipping`) and calls
+  (`Address`, `BasketItem` per order item, `Shipping`) and calls
   `$this->api->payments()->create(new CreatePaymentRequest(...))`, then stores the scalar `quickpayPaymentId` +
   `order_id` in the Sylius payment's `details` along with `amount`, `currency` and continue/cancel URLs. The
   Payum `Convert` source is Payum's *synthetic* payment; the real Sylius order is resolved via the token identity
@@ -97,16 +97,6 @@ payment from Quickpay), skipping operations that already happened. A failed canc
 but does not block the transition. Each operation can be turned off via the plugin config
 `disable_capture` / `disable_refund` / `disable_cancel` (defined in `DependencyInjection/Configuration.php`, passed
 to the processor as container parameters). This config file must be imported by the host app (see README install steps).
-
-### Klarna-specific pieces
-QuickPay's Klarna requires structured data that plain Sylius addresses don't provide:
-- `Action/ConvertPaymentAction::convertAddress()` splits a one-line street into street + house number for `DE`/`NL`
-  using `viison/address-splitter`.
-- `Validator/Constraints/AddressStreetEligibility` + `AddressStreetEligibilityValidator` + `Checker/StreetEligibilityChecker`
-  enforce that an address street can be split — the host app must opt in by registering the constraint on
-  `Sylius\Component\Addressing\Model\Address` (see README step 5 and `tests/Application/config/validator/Address.xml`).
-- `Klarna/Matcher/CountryCurrencyMatcher` validates country↔currency pairs supported by QuickPay's acquirer.
-- `Fixture/KlarnaTestShopUserFixture` seeds a test user/address for manual Klarna testing.
 
 ### Gateway config & language
 - `Form/Type/QuickPayGatewayConfigurationType` is the admin form for the gateway (tagged

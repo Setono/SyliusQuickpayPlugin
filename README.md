@@ -5,9 +5,9 @@
 [![Build Status][ico-github-actions]][link-github-actions]
 [![Code Coverage][ico-code-coverage]][link-code-coverage]
 
-Adds [Quickpay](https://quickpay.net) as a payment gateway to your Sylius store, including credit card and Klarna
-payments. The plugin integrates the [`setono/payum-quickpay`](https://github.com/Setono/payum-quickpay) Payum gateway
-into Sylius' checkout, state machine, and admin.
+Adds [Quickpay](https://quickpay.net) as a payment gateway to your Sylius store. The plugin integrates the
+[`setono/payum-quickpay`](https://github.com/Setono/payum-quickpay) Payum gateway into Sylius' checkout,
+state machine, and admin.
 
 ## Requirements
 
@@ -90,33 +90,7 @@ The prefix is prepended to your order numbers before they are sent to Quickpay a
 defined for the container to compile, and it must be **unique per project and environment** sharing the same
 Quickpay account — see [Troubleshooting](#troubleshooting). Keep it at 11 characters or less.
 
-### 6. Add the validator constraint (optional, Klarna only)
-
-Klarna requires structured street addresses. In Germany and the Netherlands the plugin splits a one-line street
-into street and house number, and this constraint prevents customers from entering an address that cannot be split.
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- config/validator/Address.xml -->
-<constraint-mapping xmlns="http://symfony.com/schema/dic/constraint-mapping"
-                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                    xsi:schemaLocation="http://symfony.com/schema/dic/constraint-mapping http://symfony.com/schema/dic/services/constraint-mapping-1.0.xsd">
-    <class name="Sylius\Component\Addressing\Model\Address">
-        <constraint name="Setono\SyliusQuickpayPlugin\Validator\Constraints\AddressStreetEligibility">
-            <option name="message">setono_sylius_quickpay.address.street_eligibility</option>
-            <option name="groups">
-                <value>sylius_shipping_address_update</value>
-                <value>sylius_checkout_complete</value>
-                <value>sylius</value>
-            </option>
-        </constraint>
-    </class>
-</constraint-mapping>
-```
-
-See the [test application](tests/Application/config/validator/Address.xml) for a working example.
-
-### 7. Import fixtures (optional, development only)
+### 6. Import fixtures (optional, development only)
 
 ```yaml
 # config/packages/setono_sylius_quickpay.yaml
@@ -124,8 +98,8 @@ imports:
     - { resource: "@SetonoSyliusQuickpayPlugin/Resources/config/app/fixtures.yaml" }
 ```
 
-The fixtures create Quickpay credit card and Klarna payment methods, matching channels, and a test customer. They
-read the gateway credentials from these environment variables:
+The fixtures create a Quickpay credit card payment method and matching channels. They read the gateway
+credentials from these environment variables:
 
 ```dotenv
 QUICKPAY_API_KEY=
@@ -144,7 +118,7 @@ out the gateway configuration:
 | Private key | The private key of your merchant account (*Settings* → *Integration*) |
 | Agreement id | *(optional)* The agreement id used for the payment window |
 | Order prefix | Prepended to order numbers sent to Quickpay — keep in sync with `QUICKPAY_ORDER_PREFIX` |
-| Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `klarna-payments` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
+| Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `mobilepay` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
 | Auto capture | Capture the payment automatically right after authorization — useful for digital products |
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
 | Branding id | *(optional)* The payment window branding to use |

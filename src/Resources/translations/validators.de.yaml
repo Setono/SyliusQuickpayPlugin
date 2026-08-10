@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: Privater Schlüssel ist erforderlich.
                 order_prefix:
                     max_length: Darf nicht länger als 11 Zeichen sein.
-    address:
-        street_eligibility: Die Straße muss eine Hausnummer enthalten (und für NL einen Zusatz)

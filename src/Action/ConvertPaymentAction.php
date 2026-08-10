@@ -28,8 +28,6 @@ use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\PaymentInterface as SyliusPaymentInterface;
 use Sylius\Component\Core\Model\ProductVariantInterface;
 use Symfony\Component\Intl\Countries;
-use VIISON\AddressSplitter\AddressSplitter;
-use VIISON\AddressSplitter\Exceptions\SplittingException;
 use Webmozart\Assert\Assert;
 
 /**
@@ -126,43 +124,10 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
         $street = $address->getStreet();
         Assert::notNull($street);
 
-        $houseNumber = null;
-        $houseExtension = null;
-        switch (mb_strtoupper($countryCode)) {
-            case 'DE':
-                try {
-                    /** @var array<string, string> $splittedStreet */
-                    $splittedStreet = AddressSplitter::splitAddress($street);
-
-                    $street = $splittedStreet['streetName'];
-                    $houseNumber = $splittedStreet['houseNumber'];
-                } catch (SplittingException) {
-                    $houseNumber = '';
-                }
-
-                break;
-            case 'NL':
-                try {
-                    /** @var array{streetName: string, houseNumberParts: array{base: string, extension: string}} $splittedStreet */
-                    $splittedStreet = AddressSplitter::splitAddress($street);
-
-                    $street = $splittedStreet['streetName'];
-                    $houseNumber = $splittedStreet['houseNumberParts']['base'];
-                    $houseExtension = $splittedStreet['houseNumberParts']['extension'];
-                } catch (SplittingException) {
-                    $houseNumber = '';
-                    $houseExtension = '';
-                }
-
-                break;
-        }
-
         return new Address(
             name: sprintf('%s %s', (string) $address->getFirstName(), (string) $address->getLastName()),
             companyName: $address->getCompany(),
             street: $street,
-            houseNumber: $houseNumber,
-            houseExtension: $houseExtension,
             city: $address->getCity(),
             zipCode: $address->getPostcode(),
             region: $address->getProvinceName() ?? $address->getProvinceCode(),

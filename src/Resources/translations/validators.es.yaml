@@ -8,5 +8,3 @@ setono_sylius_quickpay:
                     not_blank: La clave privada es obligatoria.
                 order_prefix:
                     max_length: No debe superar los 11 caracteres.
-    address:
-        street_eligibility: La calle debe contener el número de casa (y la extensión para NL)
