@@ -24,19 +24,13 @@ class QuickPayGatewayConfigurationType extends AbstractType
             ->add('apikey', TextType::class, [
                 'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.apikey',
                 'constraints' => [
-                    new NotBlank([
-                        'message' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.apikey.not_blank',
-                        'groups' => 'sylius',
-                    ]),
+                    new NotBlank(['groups' => 'sylius']),
                 ],
             ])
             ->add('privatekey', TextType::class, [
                 'label' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.privatekey',
                 'constraints' => [
-                    new NotBlank([
-                        'message' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.privatekey.not_blank',
-                        'groups' => 'sylius',
-                    ]),
+                    new NotBlank(['groups' => 'sylius']),
                 ],
             ])
             ->add('agreement', TextType::class, [
@@ -48,7 +42,6 @@ class QuickPayGatewayConfigurationType extends AbstractType
                 'required' => false,
                 'constraints' => [
                     new Length([
-                        'maxMessage' => 'setono_sylius_quickpay.form.gateway_configuration.quickpay.order_prefix.max_length',
                         'max' => 11,
                         'groups' => 'sylius',
                     ]),
