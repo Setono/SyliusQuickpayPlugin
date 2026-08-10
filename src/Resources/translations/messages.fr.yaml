@@ -1,0 +1,18 @@
+setono_sylius_quickpay:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: Clé API
+                privatekey: Clé privée
+                agreement: ID de l'accord
+                order_prefix: Préfixe de commande
+                payment_methods: Méthodes de paiement
+                auto_capture: Capture automatique
+                auto_capture_option:
+                    no: Non
+                    yes: Oui
+                synchronized: Opérations synchrones
+                synchronized_help: Exécuter la capture, le remboursement et l'annulation de manière synchrone au lieu de s'appuyer sur le callback Quickpay
+                branding_id: ID de branding

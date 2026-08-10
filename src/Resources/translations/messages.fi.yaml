@@ -1,0 +1,18 @@
+setono_sylius_quickpay:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: API-avain
+                privatekey: Yksityinen avain
+                agreement: Sopimuksen tunnus
+                order_prefix: Tilauksen etuliite
+                payment_methods: Maksutavat
+                auto_capture: Automaattinen veloitus
+                auto_capture_option:
+                    no: Ei
+                    yes: Kyllä
+                synchronized: Synkroniset toiminnot
+                synchronized_help: Suorita veloitus, hyvitys ja peruutus synkronisesti sen sijaan, että luotettaisiin Quickpayn callback-kutsuun
+                branding_id: Branding-tunnus

@@ -1,0 +1,18 @@
+setono_sylius_quickpay:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: API-nyckel
+                privatekey: Privat nyckel
+                agreement: Avtals-id
+                order_prefix: Orderprefix
+                payment_methods: Betalningsmetoder
+                auto_capture: Automatisk debitering
+                auto_capture_option:
+                    no: Nej
+                    yes: Ja
+                synchronized: Synkrona operationer
+                synchronized_help: Utför debitering, återbetalning och annullering synkront i stället för att förlita sig på Quickpay-callbacket
+                branding_id: Branding-id

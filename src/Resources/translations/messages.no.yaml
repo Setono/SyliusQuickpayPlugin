@@ -1,0 +1,18 @@
+setono_sylius_quickpay:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: API-nøkkel
+                privatekey: Privat nøkkel
+                agreement: Avtale-id
+                order_prefix: Ordreprefiks
+                payment_methods: Betalingsmetoder
+                auto_capture: Automatisk trekk
+                auto_capture_option:
+                    no: Nei
+                    yes: Ja
+                synchronized: Synkrone operasjoner
+                synchronized_help: Utfør trekk, refusjon og kansellering synkront i stedet for å vente på Quickpay-callbacket
+                branding_id: Branding-id

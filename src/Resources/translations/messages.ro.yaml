@@ -1,0 +1,18 @@
+setono_sylius_quickpay:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: Cheie API
+                privatekey: Cheie privată
+                agreement: ID acord
+                order_prefix: Prefix comandă
+                payment_methods: Metode de plată
+                auto_capture: Capturare automată
+                auto_capture_option:
+                    no: Nu
+                    yes: Da
+                synchronized: Operațiuni sincrone
+                synchronized_help: Execută capturarea, rambursarea și anularea sincron în loc să se bazeze pe callback-ul Quickpay
+                branding_id: ID branding

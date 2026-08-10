@@ -1,0 +1,18 @@
+setono_sylius_quickpay:
+    payum_gateway_factory:
+        quickpay: Quickpay
+    form:
+        gateway_configuration:
+            quickpay:
+                apikey: API-kulcs
+                privatekey: Privát kulcs
+                agreement: Megállapodás azonosító
+                order_prefix: Rendelési előtag
+                payment_methods: Fizetési módok
+                auto_capture: Automatikus terhelés
+                auto_capture_option:
+                    no: Nem
+                    yes: Igen
+                synchronized: Szinkron műveletek
+                synchronized_help: A terhelés, visszatérítés és törlés szinkron végrehajtása a Quickpay-visszahívásra való támaszkodás helyett
+                branding_id: Branding azonosító
