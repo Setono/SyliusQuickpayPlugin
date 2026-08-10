@@ -99,6 +99,7 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
             'private_key' => '',
             'agreement' => '',
             'order_prefix' => 'longer_than_eleven_characters',
+            'payment_methods' => '',
         ]);
 
         self::assertFalse($form->isValid());
@@ -106,8 +107,11 @@ final class QuickpayGatewayConfigurationTypeTest extends TypeTestCase
             self::assertGreaterThan(0, \count($form->get($field)->getErrors()), sprintf('Expected a validation error on the "%s" field', $field));
         }
 
-        // The agreement id is optional since Quickpay only requires the api and private keys
-        self::assertCount(0, $form->get('agreement')->getErrors());
+        // Quickpay only requires the api and private keys; an empty payment_methods
+        // makes the payment window offer every method enabled on the agreement
+        foreach (['agreement', 'payment_methods'] as $field) {
+            self::assertCount(0, $form->get($field)->getErrors(), sprintf('Expected no validation error on the "%s" field', $field));
+        }
     }
 
     /**
