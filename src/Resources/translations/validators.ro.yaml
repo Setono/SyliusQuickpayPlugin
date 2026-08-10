@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'Quickpay a respins această cheie API. Verifică dacă este cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori).'

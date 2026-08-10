@@ -1,0 +1,4 @@
+setono_sylius_quickpay:
+    gateway_configuration:
+        api_key:
+            invalid: 'Quickpay tento API klíč odmítl. Zkontrolujte, že jde o API klíč API uživatele ve vašem Quickpay manageru (Nastavení → Uživatelé).'

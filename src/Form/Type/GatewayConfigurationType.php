@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
+use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\CallbackTransformer;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
@@ -32,6 +33,7 @@ final class GatewayConfigurationType extends AbstractType
                 'help' => self::TRANSLATION_PREFIX . 'api_key_help',
                 'constraints' => [
                     new NotBlank(['groups' => 'sylius']),
+                    new QuickpayCredentials(['groups' => 'sylius']),
                 ],
             ])
             ->add('private_key', TextType::class, [

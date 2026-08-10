@@ -128,7 +128,10 @@ passed to the processor as container parameters).
   (16 locales in `Resources/translations/`); `auto_capture` is a checkbox whose model transformer keeps
   the stored `0`/`1` int shape, and a `PRE_SET_DATA` listener migrates configs stored under the pre-2.0
   option names (`apikey`/`privatekey`/`agreement` → `api_key`/`private_key`/`agreement_id`, the last
-  normalized to int/null for the integer field). Sylius' admin form theme ignores Symfony's `help_html` option, so the
+  normalized to int/null for the integer field). The `api_key` carries a `QuickpayCredentials` constraint
+  (sylius group) whose validator pings Quickpay via `Quickpay/ClientFactory` (short timeout when
+  symfony/http-client is available) — an explicit 401/403 raises a violation, anything else fails open.
+  Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/Form/theme.html.twig`, scoped to that field's block prefix and registered by
   `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`).

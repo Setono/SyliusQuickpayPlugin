@@ -109,6 +109,11 @@ out the gateway configuration:
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
 | Branding id | *(optional)* The payment window branding to use |
 
+When you save the payment method, the plugin verifies the API key against Quickpay's API (a lightweight
+ping) and rejects the form if Quickpay rejects the key — a typo'd key is caught immediately instead of by
+the first customer whose checkout fails. If Quickpay cannot be reached, the check is skipped so an outage
+never blocks saving.
+
 ## How it works
 
 * During checkout the customer is redirected to the Quickpay payment window through a payment link. The payment is

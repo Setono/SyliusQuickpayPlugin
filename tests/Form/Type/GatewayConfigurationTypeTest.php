@@ -4,22 +4,87 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Form\Type;
 
+use Nyholm\Psr7\Response;
+use Prophecy\Argument;
+use Prophecy\PhpUnit\ProphecyTrait;
+use Setono\Quickpay\Client\ClientInterface;
+use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType;
+use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormExtensionInterface;
 use Symfony\Component\Form\Test\TypeTestCase;
+use Symfony\Component\Validator\Constraint;
+use Symfony\Component\Validator\ConstraintValidatorFactory;
+use Symfony\Component\Validator\ConstraintValidatorFactoryInterface;
+use Symfony\Component\Validator\ConstraintValidatorInterface;
 use Symfony\Component\Validator\Validation;
 
 final class GatewayConfigurationTypeTest extends TypeTestCase
 {
+    use ProphecyTrait;
+
     /**
+     * Quickpay accepts every api key except 'rejected-api-key'
+     *
      * @return list<FormExtensionInterface>
      */
     protected function getExtensions(): array
     {
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+
+        $rejectingClient = $this->prophesize(ClientInterface::class);
+        $rejectingClient->ping()->willThrow(new UnauthorizedException(new Response(401)));
+
+        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
+        $clientFactory->create(Argument::type('string'))->willReturn($client);
+        $clientFactory->create('rejected-api-key')->willReturn($rejectingClient);
+
+        $credentialsValidator = new QuickpayCredentialsValidator($clientFactory->reveal());
+
+        $validator = Validation::createValidatorBuilder()
+            ->setConstraintValidatorFactory(new class($credentialsValidator) implements ConstraintValidatorFactoryInterface {
+                private readonly ConstraintValidatorFactory $fallback;
+
+                public function __construct(private readonly QuickpayCredentialsValidator $credentialsValidator)
+                {
+                    $this->fallback = new ConstraintValidatorFactory();
+                }
+
+                public function getInstance(Constraint $constraint): ConstraintValidatorInterface
+                {
+                    if (QuickpayCredentialsValidator::class === $constraint->validatedBy()) {
+                        return $this->credentialsValidator;
+                    }
+
+                    return $this->fallback->getInstance($constraint);
+                }
+            })
+            ->getValidator();
+
         return [
-            new ValidatorExtension(Validation::createValidator()),
+            new ValidatorExtension($validator),
         ];
+    }
+
+    /**
+     * @test
+     */
+    public function it_is_invalid_when_quickpay_rejects_the_api_key(): void
+    {
+        $form = $this->factory->create(GatewayConfigurationType::class, null, [
+            'validation_groups' => ['sylius'],
+        ]);
+
+        $form->submit([
+            'api_key' => 'rejected-api-key',
+            'private_key' => 'private-key',
+        ]);
+
+        self::assertFalse($form->isValid());
+        self::assertGreaterThan(0, \count($form->get('api_key')->getErrors()));
     }
 
     /**
