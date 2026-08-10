@@ -65,7 +65,7 @@ final class PaymentProcessor
                     return;
                 }
 
-                $gateway->execute(new Capture($payment->getDetails()));
+                $gateway->execute(new Capture($payment));
 
                 break;
             case PaymentTransitions::TRANSITION_REFUND:
@@ -78,7 +78,10 @@ final class PaymentProcessor
                     return;
                 }
 
-                $gateway->execute(new Refund($payment->getDetails()));
+                // An unqualified Refund refunds the remaining balance,
+                // so a payment partially refunded directly in the Quickpay manager refunds only what
+                // is left; an explicit refund_amount in the details is passed through untouched
+                $gateway->execute(new Refund($payment));
 
                 break;
             case PaymentTransitions::TRANSITION_CANCEL:
@@ -92,7 +95,7 @@ final class PaymentProcessor
                         return;
                     }
 
-                    $gateway->execute(new Cancel($payment->getDetails()));
+                    $gateway->execute(new Cancel($payment));
                 } catch (ExceptionInterface|QuickpayException $e) {
                     // Cancelling the order must not be blocked by Quickpay being unable to cancel
                     // the payment, e.g. because it was never authorized or has already expired.
