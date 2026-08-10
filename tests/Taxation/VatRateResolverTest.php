@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Taxation;
 
 use Doctrine\Common\Collections\ArrayCollection;
 use PHPUnit\Framework\TestCase;
+use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItemInterface;
@@ -14,6 +15,8 @@ use Sylius\Component\Order\Model\AdjustmentInterface;
 
 final class VatRateResolverTest extends TestCase
 {
+    use ProphecyTrait;
+
     /**
      * @test
      */
@@ -49,13 +52,13 @@ final class VatRateResolverTest extends TestCase
      */
     public function it_resolves_the_shipping_rate_from_the_shipment_tax_adjustment(): void
     {
-        $shipment = $this->createMock(ShipmentInterface::class);
-        $shipment->method('getAdjustments')->willReturn(new ArrayCollection([$this->createAdjustment(['taxRateAmount' => 0.19])]));
+        $shipment = $this->prophesize(ShipmentInterface::class);
+        $shipment->getAdjustments('tax')->willReturn(new ArrayCollection([$this->createAdjustment(['taxRateAmount' => 0.19])]));
 
-        $order = $this->createMock(OrderInterface::class);
-        $order->method('getShipments')->willReturn(new ArrayCollection([$shipment]));
+        $order = $this->prophesize(OrderInterface::class);
+        $order->getShipments()->willReturn(new ArrayCollection([$shipment->reveal()]));
 
-        self::assertSame(0.19, (new VatRateResolver())->forShipping($order));
+        self::assertSame(0.19, (new VatRateResolver())->forShipping($order->reveal()));
     }
 
     /**
@@ -63,10 +66,10 @@ final class VatRateResolverTest extends TestCase
      */
     public function it_resolves_zero_shipping_rate_without_shipments(): void
     {
-        $order = $this->createMock(OrderInterface::class);
-        $order->method('getShipments')->willReturn(new ArrayCollection());
+        $order = $this->prophesize(OrderInterface::class);
+        $order->getShipments()->willReturn(new ArrayCollection());
 
-        self::assertSame(0.0, (new VatRateResolver())->forShipping($order));
+        self::assertSame(0.0, (new VatRateResolver())->forShipping($order->reveal()));
     }
 
     /**
@@ -74,10 +77,10 @@ final class VatRateResolverTest extends TestCase
      */
     private function createAdjustment(array $details): AdjustmentInterface
     {
-        $adjustment = $this->createMock(AdjustmentInterface::class);
-        $adjustment->method('getDetails')->willReturn($details);
+        $adjustment = $this->prophesize(AdjustmentInterface::class);
+        $adjustment->getDetails()->willReturn($details);
 
-        return $adjustment;
+        return $adjustment->reveal();
     }
 
     /**
@@ -85,11 +88,11 @@ final class VatRateResolverTest extends TestCase
      */
     private function createOrderItem(array $adjustments, int $taxTotal = 0, int $total = 0): OrderItemInterface
     {
-        $orderItem = $this->createMock(OrderItemInterface::class);
-        $orderItem->method('getAdjustmentsRecursively')->willReturn(new ArrayCollection($adjustments));
-        $orderItem->method('getTaxTotal')->willReturn($taxTotal);
-        $orderItem->method('getTotal')->willReturn($total);
+        $orderItem = $this->prophesize(OrderItemInterface::class);
+        $orderItem->getAdjustmentsRecursively('tax')->willReturn(new ArrayCollection($adjustments));
+        $orderItem->getTaxTotal()->willReturn($taxTotal);
+        $orderItem->getTotal()->willReturn($total);
 
-        return $orderItem;
+        return $orderItem->reveal();
     }
 }

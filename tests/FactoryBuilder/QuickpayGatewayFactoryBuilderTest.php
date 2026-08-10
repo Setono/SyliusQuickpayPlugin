@@ -6,26 +6,30 @@ namespace Setono\SyliusQuickpayPlugin\Tests\FactoryBuilder;
 
 use Payum\Core\GatewayFactoryInterface;
 use PHPUnit\Framework\TestCase;
+use Prophecy\Argument;
+use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder;
 use Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesserInterface;
 
 final class QuickpayGatewayFactoryBuilderTest extends TestCase
 {
+    use ProphecyTrait;
+
     /**
      * @test
      */
     public function it_builds_the_gateway_factory_with_the_guessed_language(): void
     {
-        $languageGuesser = $this->createMock(QuickpayLanguageGuesserInterface::class);
-        $languageGuesser->expects(self::once())->method('guess')->willReturn('da');
+        $languageGuesser = $this->prophesize(QuickpayLanguageGuesserInterface::class);
+        $languageGuesser->guess()->shouldBeCalledOnce()->willReturn('da');
 
-        $coreGatewayFactory = $this->createMock(GatewayFactoryInterface::class);
-        $coreGatewayFactory->method('createConfig')->willReturn([]);
+        $coreGatewayFactory = $this->prophesize(GatewayFactoryInterface::class);
+        $coreGatewayFactory->createConfig(Argument::cetera())->willReturn([]);
 
-        $builder = new QuickpayGatewayFactoryBuilder(QuickpayGatewayFactory::class, $languageGuesser);
+        $builder = new QuickpayGatewayFactoryBuilder(QuickpayGatewayFactory::class, $languageGuesser->reveal());
 
-        $factory = $builder->build([], $coreGatewayFactory);
+        $factory = $builder->build([], $coreGatewayFactory->reveal());
 
         self::assertInstanceOf(QuickpayGatewayFactory::class, $factory);
 

@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Guesser;
 
 use PHPUnit\Framework\TestCase;
+use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\SyliusQuickpayPlugin\Guesser\QuickpayLanguageGuesser;
 use Sylius\Component\Locale\Context\LocaleContextInterface;
 use Sylius\Component\Locale\Context\LocaleNotFoundException;
 
 final class QuickpayLanguageGuesserTest extends TestCase
 {
+    use ProphecyTrait;
+
     /**
      * @test
      *
@@ -18,10 +21,10 @@ final class QuickpayLanguageGuesserTest extends TestCase
      */
     public function it_guesses_the_language_from_the_locale(string $locale, string $expectedLanguage): void
     {
-        $localeContext = $this->createMock(LocaleContextInterface::class);
-        $localeContext->method('getLocaleCode')->willReturn($locale);
+        $localeContext = $this->prophesize(LocaleContextInterface::class);
+        $localeContext->getLocaleCode()->willReturn($locale);
 
-        self::assertSame($expectedLanguage, (new QuickpayLanguageGuesser($localeContext))->guess());
+        self::assertSame($expectedLanguage, (new QuickpayLanguageGuesser($localeContext->reveal()))->guess());
     }
 
     /**
@@ -47,9 +50,9 @@ final class QuickpayLanguageGuesserTest extends TestCase
      */
     public function it_falls_back_to_the_default_language_when_the_locale_cannot_be_resolved(): void
     {
-        $localeContext = $this->createMock(LocaleContextInterface::class);
-        $localeContext->method('getLocaleCode')->willThrowException(new LocaleNotFoundException());
+        $localeContext = $this->prophesize(LocaleContextInterface::class);
+        $localeContext->getLocaleCode()->willThrow(new LocaleNotFoundException());
 
-        self::assertSame('en', (new QuickpayLanguageGuesser($localeContext))->guess());
+        self::assertSame('en', (new QuickpayLanguageGuesser($localeContext->reveal()))->guess());
     }
 }
