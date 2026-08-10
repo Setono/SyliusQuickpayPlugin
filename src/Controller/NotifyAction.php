@@ -36,23 +36,17 @@ final class NotifyAction
             return new Response('', 204);
         }
 
-        try {
-            /**
-             * https://learn.quickpay.net/tech-talk/api/callback/#request-example
-             *
-             * @var \stdClass $data
-             */
-            $data = json_decode($request->getContent(), false, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
+        // @see https://learn.quickpay.net/tech-talk/api/callback/#request-example
+        // Invalid JSON or a non-object payload makes toArray() throw Symfony's JsonException,
+        // which the framework converts to a 400 response by itself
+        $data = $request->toArray();
+
+        if (!isset($data['id'], $data['order_id']) || !is_numeric($data['id']) || !is_string($data['order_id'])) {
             throw new BadRequestHttpException();
         }
 
-        if (!isset($data->id, $data->order_id) || !is_numeric($data->id) || !is_string($data->order_id)) {
-            throw new BadRequestHttpException();
-        }
-
-        $quickpayPaymentId = (int) $data->id;
-        $orderNumber = $data->order_id;
+        $quickpayPaymentId = (int) $data['id'];
+        $orderNumber = $data['order_id'];
 
         // an attempt to remove the order prefix in non-prod environments
         // it's optimistic because the prefix saved in the database might be different
