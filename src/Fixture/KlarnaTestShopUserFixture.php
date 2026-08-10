@@ -28,6 +28,9 @@ class KlarnaTestShopUserFixture extends AbstractFixture
         $this->faker = Factory::create();
     }
 
+    /**
+     * @param array<mixed> $options
+     */
     public function load(array $options): void
     {
         for ($i = 0; $i < $options['amount']; ++$i) {
