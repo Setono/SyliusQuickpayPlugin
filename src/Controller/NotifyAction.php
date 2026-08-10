@@ -6,6 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\Controller;
 
 use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
+use Setono\Quickpay\Callback\Callback;
+use Setono\Quickpay\Enum\ResourceType;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -29,10 +31,10 @@ final class NotifyAction
 
     public function __invoke(Request $request): Response
     {
-        $type = (string) $request->headers->get('QuickPay-Resource-Type');
+        $type = ResourceType::tryFrom((string) $request->headers->get(Callback::RESOURCE_TYPE_HEADER));
 
         // only handle payments for now
-        if ($type !== 'Payment') {
+        if (ResourceType::Payment !== $type) {
             return new Response('', 204);
         }
 
