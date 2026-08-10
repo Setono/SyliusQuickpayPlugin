@@ -14,6 +14,8 @@ use Payum\Core\Request\Capture;
 use Payum\Core\Request\GetHumanStatus;
 use Payum\Core\Request\Refund;
 use PHPUnit\Framework\TestCase;
+use Prophecy\Argument;
+use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\Quickpay\Exception\ValidationException;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -22,6 +24,8 @@ use Sylius\Component\Payment\PaymentTransitions;
 
 final class PaymentProcessorTest extends TestCase
 {
+    use ProphecyTrait;
+
     /** @var list<object> */
     private array $executedRequests = [];
 
@@ -174,14 +178,14 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_does_nothing_when_the_payment_has_no_quickpay_payment_id(): void
     {
-        $gateway = $this->createMock(GatewayInterface::class);
-        $gateway->expects(self::never())->method('execute');
+        $gateway = $this->prophesize(GatewayInterface::class);
+        $gateway->execute(Argument::any())->shouldNotBeCalled();
 
-        $payment = $this->createMock(PaymentInterface::class);
-        $payment->method('getDetails')->willReturn([]);
+        $payment = $this->prophesize(PaymentInterface::class);
+        $payment->getDetails()->willReturn([]);
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
-        $processor($payment, PaymentTransitions::TRANSITION_CANCEL);
+        $processor = new PaymentProcessor($this->createPayum($gateway->reveal()), true, true, true);
+        $processor($payment->reveal(), PaymentTransitions::TRANSITION_CANCEL);
     }
 
     /**
@@ -189,10 +193,10 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_does_nothing_when_the_operation_is_disabled(): void
     {
-        $gateway = $this->createMock(GatewayInterface::class);
-        $gateway->expects(self::never())->method('execute');
+        $gateway = $this->prophesize(GatewayInterface::class);
+        $gateway->execute(Argument::any())->shouldNotBeCalled();
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway->reveal()), true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
     }
 
@@ -210,43 +214,43 @@ final class PaymentProcessorTest extends TestCase
 
     private function createGateway(?callable $handler = null): GatewayInterface
     {
-        $gateway = $this->createMock(GatewayInterface::class);
-        $gateway->method('execute')->willReturnCallback(function (object $request) use ($handler): void {
-            $this->executedRequests[] = $request;
+        $executedRequests = &$this->executedRequests;
 
-            if (null !== $handler) {
-                $handler($request);
-            }
-        });
+        $gateway = $this->prophesize(GatewayInterface::class);
+        $gateway
+            ->execute(Argument::type('object'))
+            ->will(function (array $args) use (&$executedRequests, $handler): void {
+                $executedRequests[] = $args[0];
 
-        return $gateway;
+                if (null !== $handler) {
+                    $handler($args[0]);
+                }
+            })
+        ;
+
+        return $gateway->reveal();
     }
 
     private function createPayum(GatewayInterface $gateway): Payum
     {
-        $payum = $this->createMock(Payum::class);
-        $payum->method('getGateway')->willReturn($gateway);
+        $payum = $this->prophesize(Payum::class);
+        $payum->getGateway(Argument::type('string'))->willReturn($gateway);
 
-        return $payum;
+        return $payum->reveal();
     }
 
-    /**
-     * @param array<string, mixed> $details
-     *
-     * @return PaymentInterface&\PHPUnit\Framework\MockObject\MockObject
-     */
-    private function createPayment(array $details = ['quickpayPaymentId' => 12345]): PaymentInterface
+    private function createPayment(): PaymentInterface
     {
-        $gatewayConfig = $this->createMock(GatewayConfigInterface::class);
-        $gatewayConfig->method('getGatewayName')->willReturn('quickpay');
+        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
+        $gatewayConfig->getGatewayName()->willReturn('quickpay');
 
-        $method = $this->createMock(PaymentMethodInterface::class);
-        $method->method('getGatewayConfig')->willReturn($gatewayConfig);
+        $method = $this->prophesize(PaymentMethodInterface::class);
+        $method->getGatewayConfig()->willReturn($gatewayConfig->reveal());
 
-        $payment = $this->createMock(PaymentInterface::class);
-        $payment->method('getDetails')->willReturn($details);
-        $payment->method('getMethod')->willReturn($method);
+        $payment = $this->prophesize(PaymentInterface::class);
+        $payment->getDetails()->willReturn(['quickpayPaymentId' => 12345]);
+        $payment->getMethod()->willReturn($method->reveal());
 
-        return $payment;
+        return $payment->reveal();
     }
 }

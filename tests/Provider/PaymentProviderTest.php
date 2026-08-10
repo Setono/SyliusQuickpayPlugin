@@ -6,12 +6,15 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Provider;
 
 use Doctrine\Common\Collections\ArrayCollection;
 use PHPUnit\Framework\TestCase;
+use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProvider;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 
 final class PaymentProviderTest extends TestCase
 {
+    use ProphecyTrait;
+
     /**
      * @test
      */
@@ -59,10 +62,10 @@ final class PaymentProviderTest extends TestCase
      */
     private function createPayment(array $details): PaymentInterface
     {
-        $payment = $this->createMock(PaymentInterface::class);
-        $payment->method('getDetails')->willReturn($details);
+        $payment = $this->prophesize(PaymentInterface::class);
+        $payment->getDetails()->willReturn($details);
 
-        return $payment;
+        return $payment->reveal();
     }
 
     /**
@@ -70,9 +73,9 @@ final class PaymentProviderTest extends TestCase
      */
     private function createOrder(array $payments): OrderInterface
     {
-        $order = $this->createMock(OrderInterface::class);
-        $order->method('getPayments')->willReturn(new ArrayCollection($payments));
+        $order = $this->prophesize(OrderInterface::class);
+        $order->getPayments()->willReturn(new ArrayCollection($payments));
 
-        return $order;
+        return $order->reveal();
     }
 }

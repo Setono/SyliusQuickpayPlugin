@@ -6,6 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Controller;
 
 use Payum\Core\Payum;
 use PHPUnit\Framework\TestCase;
+use Prophecy\Argument;
+use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProvider;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
@@ -15,6 +17,8 @@ use Symfony\Component\HttpFoundation\Request;
 
 final class NotifyActionTest extends TestCase
 {
+    use ProphecyTrait;
+
     /** @var list<string> */
     private array $requestedOrderNumbers = [];
 
@@ -37,7 +41,7 @@ final class NotifyActionTest extends TestCase
         array $expectedCandidates,
     ): void {
         $action = new NotifyAction(
-            $this->createMock(Payum::class),
+            $this->prophesize(Payum::class)->reveal(),
             $this->createOrderRepository(),
             new PaymentProvider(),
             $this->createGatewayConfigRepository($configuredPrefixes),
@@ -70,17 +74,19 @@ final class NotifyActionTest extends TestCase
      */
     private function createOrderRepository(): OrderRepositoryInterface
     {
-        $orderRepository = $this->createMock(OrderRepositoryInterface::class);
+        $requestedOrderNumbers = &$this->requestedOrderNumbers;
+
+        $orderRepository = $this->prophesize(OrderRepositoryInterface::class);
         $orderRepository
-            ->method('findOneByNumber')
-            ->willReturnCallback(function (string $number) {
-                $this->requestedOrderNumbers[] = $number;
+            ->findOneByNumber(Argument::type('string'))
+            ->will(function (array $args) use (&$requestedOrderNumbers): mixed {
+                $requestedOrderNumbers[] = $args[0];
 
                 return null;
             })
         ;
 
-        return $orderRepository;
+        return $orderRepository->reveal();
     }
 
     /**
@@ -92,15 +98,15 @@ final class NotifyActionTest extends TestCase
     {
         $gatewayConfigs = [];
         foreach ($prefixes as $prefix) {
-            $gatewayConfig = $this->createMock(GatewayConfigInterface::class);
-            $gatewayConfig->method('getConfig')->willReturn(['order_prefix' => $prefix]);
-            $gatewayConfigs[] = $gatewayConfig;
+            $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
+            $gatewayConfig->getConfig()->willReturn(['order_prefix' => $prefix]);
+            $gatewayConfigs[] = $gatewayConfig->reveal();
         }
 
-        $repository = $this->createMock(RepositoryInterface::class);
-        $repository->method('findBy')->with(['factoryName' => 'quickpay'])->willReturn($gatewayConfigs);
+        $repository = $this->prophesize(RepositoryInterface::class);
+        $repository->findBy(['factoryName' => 'quickpay'])->willReturn($gatewayConfigs);
 
-        return $repository;
+        return $repository->reveal();
     }
 
     private function createRequest(string $orderId): Request
