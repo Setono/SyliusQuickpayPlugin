@@ -105,7 +105,7 @@ out the gateway configuration:
 | Agreement id | *(optional)* The agreement id used for the payment window |
 | Order prefix | Prepended to order numbers sent to Quickpay as the `order_id` — must be **unique per project and environment** sharing the same Quickpay account (see [Troubleshooting](#troubleshooting)), and 11 characters or less |
 | Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `mobilepay` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
-| Auto capture | Capture the payment automatically right after authorization — useful for digital products |
+| Capture mode | When the money is taken. **On completion** (default) only authorizes the payment at checkout and captures it when the payment is completed in Sylius (e.g. when the order is shipped) — what shops that may not capture before dispatch need. **Immediately** lets Quickpay capture the moment the card is authorized — useful for digital products |
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
 | Branding id | *(optional)* The payment window branding to use |
 
@@ -116,8 +116,12 @@ never blocks saving.
 
 ## How it works
 
-* During checkout the customer is redirected to the Quickpay payment window through a payment link. The payment is
-  **authorized**, not captured (unless *Auto capture* is enabled).
+* During checkout the customer is redirected to the Quickpay payment window through a payment link. What happens to
+  the money is the payment method's **capture mode**: *on completion* (the default) only **authorizes** the payment
+  and the plugin captures it when the payment is completed in Sylius; *immediately* has Quickpay **capture** the
+  moment the card is authorized. Under the hood the mode is Sylius core's `use_authorize` gateway option — the
+  plugin runs Payum's `Authorize` or `Capture` accordingly, which is how the gateway library expresses the two
+  flows since 2.0.
 * Quickpay notifies your store of every payment change on the callback endpoint. The callback's
   `Quickpay-Checksum-SHA256` header is validated against your private key before the payment details are updated.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching

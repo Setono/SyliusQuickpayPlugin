@@ -56,7 +56,8 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                 }
 
                 // The status is resolved through the gateway so the payment is re-fetched from
-                // Quickpay, guarding against capturing a payment that was already auto captured
+                // Quickpay, guarding against capturing a payment that was already captured — at
+                // checkout by a payment method in the immediate capture mode, or in the Quickpay manager
                 $gateway->execute($status = new GetHumanStatus($payment));
                 if ($status->isCaptured()) {
                     return;

@@ -100,7 +100,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
             'agreement_id' => '67890',
             'order_prefix' => 'qp_',
             'payment_methods' => 'creditcard, mobilepay',
-            'auto_capture' => '1',
+            'use_authorize' => '0',
             'synchronized' => '1',
             'branding_id' => '42',
         ]);
@@ -114,7 +114,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         self::assertSame(67890, $data['agreement_id']);
         self::assertSame('qp_', $data['order_prefix']);
         self::assertSame('creditcard, mobilepay', $data['payment_methods']);
-        self::assertSame(1, $data['auto_capture']);
+        self::assertFalse($data['use_authorize']);
         self::assertTrue($data['synchronized']);
         self::assertSame('42', $data['branding_id']);
     }
@@ -122,32 +122,58 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     /**
      * @test
      */
-    public function it_saves_an_unchecked_auto_capture_as_zero(): void
+    public function it_defaults_a_new_configuration_to_the_authorize_flow(): void
     {
-        $form = $this->factory->create(GatewayConfigurationType::class);
+        $form = $this->factory->create(GatewayConfigurationType::class, []);
 
-        $form->submit([
-            'api_key' => 'api-key',
-            'private_key' => 'private-key',
+        self::assertTrue($form->get('use_authorize')->getData());
+        self::assertSame('1', $form->get('use_authorize')->getViewData());
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider provideStoredAutoCaptureValues
+     */
+    public function it_migrates_the_deprecated_auto_capture_option_into_the_capture_mode(mixed $autoCapture, bool $expectedUseAuthorize): void
+    {
+        $form = $this->factory->create(GatewayConfigurationType::class, [
+            'auto_capture' => $autoCapture,
+            'use_authorize' => true,
         ]);
 
-        self::assertTrue($form->isSynchronized());
+        self::assertSame($expectedUseAuthorize, $form->get('use_authorize')->getData());
 
         $data = $form->getData();
         self::assertIsArray($data);
-        self::assertSame(0, $data['auto_capture']);
+        self::assertArrayNotHasKey('auto_capture', $data);
+        self::assertSame($expectedUseAuthorize, $data['use_authorize']);
+    }
+
+    /**
+     * @return iterable<string, array{mixed, bool}>
+     */
+    public static function provideStoredAutoCaptureValues(): iterable
+    {
+        yield 'auto capture enabled as int' => [1, false];
+        yield 'auto capture enabled as string' => ['1', false];
+        yield 'auto capture enabled as bool' => [true, false];
+        yield 'auto capture disabled as int' => [0, true];
+        yield 'auto capture disabled as string' => ['0', true];
+        yield 'auto capture disabled as bool' => [false, true];
     }
 
     /**
      * @test
      */
-    public function it_displays_a_stored_auto_capture_int_as_a_checked_checkbox(): void
+    public function it_keeps_a_stored_capture_mode(): void
     {
         $form = $this->factory->create(GatewayConfigurationType::class, [
-            'auto_capture' => 1,
+            'use_authorize' => false,
         ]);
 
-        self::assertSame('1', $form->get('auto_capture')->getViewData());
+        self::assertFalse($form->get('use_authorize')->getData());
+        self::assertSame('0', $form->get('use_authorize')->getViewData());
     }
 
     /**

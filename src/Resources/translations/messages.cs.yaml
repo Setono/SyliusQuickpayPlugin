@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Volitelné: ID smlouvy použité pro platební okno'
                 payment_methods: 'Platební metody'
                 payment_methods_help: 'Čárkami oddělený seznam platebních metod nabízených v platebním okně — viz <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">dokumentace Quickpay</a>'
-                auto_capture: 'Automatické stržení'
-                auto_capture_help: 'Strhnout platbu automaticky ihned po autorizaci — užitečné pro digitální produkty'
+                capture_mode: 'Okamžik stržení platby'
+                capture_mode_help: 'Kdy jsou peníze strženy. "Při dokončení" platbu při pokladně pouze autorizuje a strhne ji, jakmile je platba v Sylius dokončena (např. při odeslání objednávky) — výchozí nastavení, které potřebují obchody, jež nesmějí strhnout platbu před odesláním. "Ihned" nechá Quickpay strhnout platbu v okamžiku autorizace karty — vhodné pro digitální produkty'
+                capture_mode_option:
+                    on_completion: 'Při dokončení — autorizovat při pokladně, strhnout po dokončení platby'
+                    immediately: 'Ihned — strhnout při pokladně'
                 synchronized: 'Synchronní operace'
                 synchronized_help: 'Provádět stržení, vrácení a zrušení synchronně místo spoléhání na callback Quickpay'
                 order_prefix: 'Předpona objednávky'

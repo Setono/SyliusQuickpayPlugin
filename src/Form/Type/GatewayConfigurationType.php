@@ -6,9 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
 use Symfony\Component\Form\AbstractType;
-use Symfony\Component\Form\CallbackTransformer;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
-use Symfony\Component\Form\Extension\Core\Type\HiddenType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -61,10 +60,18 @@ final class GatewayConfigurationType extends AbstractType
                     'placeholder' => 'creditcard, mobilepay',
                 ],
             ])
-            ->add('auto_capture', CheckboxType::class, [
-                'label' => self::TRANSLATION_PREFIX . 'auto_capture',
-                'help' => self::TRANSLATION_PREFIX . 'auto_capture_help',
-                'required' => false,
+            // Sylius core reads `use_authorize` to pick the checkout flow: true executes Authorize (the
+            // payment window only holds the money; the plugin captures it on the payment's complete
+            // transition), false executes Capture (Quickpay captures the moment the card is authorized).
+            // Since payum-quickpay 2.0 that is how "capture immediately" is expressed — the deprecated
+            // `auto_capture` gateway option is no longer written
+            ->add('use_authorize', ChoiceType::class, [
+                'label' => self::TRANSLATION_PREFIX . 'capture_mode',
+                'help' => self::TRANSLATION_PREFIX . 'capture_mode_help',
+                'choices' => [
+                    self::TRANSLATION_PREFIX . 'capture_mode_option.on_completion' => true,
+                    self::TRANSLATION_PREFIX . 'capture_mode_option.immediately' => false,
+                ],
             ])
             ->add('synchronized', CheckboxType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'synchronized',
@@ -91,9 +98,6 @@ final class GatewayConfigurationType extends AbstractType
                 'help' => self::TRANSLATION_PREFIX . 'branding_id_help',
                 'required' => false,
             ])
-            ->add('use_authorize', HiddenType::class, [
-                'data' => true,
-            ])
             // Gateway configurations stored before the options were renamed carry the old keys;
             // migrate them so the form shows the stored values and saves the new keys. The agreement
             // id may be stored as a string (or '' from an unset fixture env var), which the integer
@@ -110,17 +114,27 @@ final class GatewayConfigurationType extends AbstractType
                 $agreementId = $data['agreement_id'] ?? $data['agreement'] ?? null;
                 $data['agreement_id'] = is_numeric($agreementId) ? (int) $agreementId : null;
 
-                unset($data['apikey'], $data['privatekey'], $data['agreement']);
+                // Configurations saved before 2.0 carry the deprecated `auto_capture` option next to a
+                // hidden `use_authorize: true`. An enabled auto capture is what "capture immediately"
+                // now means, so it becomes `use_authorize: false`; a fresh configuration defaults to
+                // authorize — hold the money, capture on completion
+                if (array_key_exists('auto_capture', $data)) {
+                    $data['use_authorize'] = !self::toBool($data['auto_capture']);
+                }
+                $data['use_authorize'] = self::toBool($data['use_authorize'] ?? true);
+
+                unset($data['apikey'], $data['privatekey'], $data['agreement'], $data['auto_capture']);
 
                 $event->setData($data);
             })
         ;
+    }
 
-        // Stored configurations carry auto_capture as 0/1; the checkbox needs a bool and the
-        // stored shape stays an int either way
-        $builder->get('auto_capture')->addModelTransformer(new CallbackTransformer(
-            static fn (mixed $value): bool => (bool) $value,
-            static fn (?bool $value): int => true === $value ? 1 : 0,
-        ));
+    /**
+     * Stored booleans come in every shape Sylius has persisted over the years: bool, 0/1, '0'/'1'
+     */
+    private static function toBool(mixed $value): bool
+    {
+        return true === $value || 1 === $value || '1' === $value || 'true' === $value;
     }
 }

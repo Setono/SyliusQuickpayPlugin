@@ -73,11 +73,10 @@ sylius_fixtures:
                                     # https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods
                                     payment_methods: 'creditcard'
 
-                                    # Capture the payment automatically right after authorization, e.g. when selling digital products
-                                    auto_capture: 0
-
                                     synchronized: false
 
+                                    # Capture mode: true authorizes at checkout and captures when the payment is
+                                    # completed in Sylius; false has Quickpay capture at authorization
                                     use_authorize: true
                                 channels:
                                     - 'FASHION_WEB'

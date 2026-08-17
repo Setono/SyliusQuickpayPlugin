@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Opțional: ID-ul acordului folosit pentru fereastra de plată'
                 payment_methods: 'Metode de plată'
                 payment_methods_help: 'Listă separată prin virgulă a metodelor de plată oferite în fereastra de plată — vezi <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">documentația Quickpay</a>'
-                auto_capture: 'Capturare automată'
-                auto_capture_help: 'Capturează plata automat imediat după autorizare — util pentru produse digitale'
+                capture_mode: 'Momentul încasării'
+                capture_mode_help: 'Când sunt încasați banii. "La finalizare" doar autorizează plata la checkout și o încasează când plata este finalizată în Sylius (de ex. la expedierea comenzii) — valoarea implicită, și ceea ce au nevoie magazinele care nu pot încasa înainte de expediere. "Imediat" lasă Quickpay să încaseze în momentul autorizării cardului — util pentru produse digitale'
+                capture_mode_option:
+                    on_completion: 'La finalizare — autorizare la checkout, încasare la finalizarea plății'
+                    immediately: 'Imediat — încasare la checkout'
                 synchronized: 'Operațiuni sincrone'
                 synchronized_help: 'Execută capturarea, rambursarea și anularea sincron în loc să se bazeze pe callback-ul Quickpay'
                 order_prefix: 'Prefix comandă'

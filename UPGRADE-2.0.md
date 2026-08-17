@@ -35,8 +35,22 @@ Your `GatewayConfig` rows carry values written by the 1.x admin form. After upgr
   agreement id and Quickpay falls back to the account default.
 - **New optional options**: `synchronized` (run capture/refund/cancel synchronously instead of relying
   on the Quickpay callback) and `branding_id` (payment window branding).
-- `use_authorize` is unchanged and still required to be `true` — Sylius core reads it to select the
-  authorize checkout flow; the form keeps writing it automatically.
+- **`auto_capture` is gone from the form and is no longer written; the capture mode is now a visible
+  choice backed by `use_authorize`.** payum-quickpay 2.0 follows Payum's convention: executing `Capture`
+  at checkout opens the payment window with auto capture on the link, executing `Authorize` opens an
+  auth-only window that is settled later — so "capture immediately" is expressed by the flow Sylius
+  runs, not by the (now deprecated) `auto_capture` gateway option. Sylius core picks the flow from
+  `use_authorize`, which the form therefore exposes as **Capture mode**:
+
+  | Capture mode | Stored | Checkout | Money |
+  |---|---|---|---|
+  | On completion (default) | `use_authorize: true` | `Authorize` | held; captured on the payment's `complete` transition |
+  | Immediately | `use_authorize: false` | `Capture` | captured by Quickpay at authorization |
+
+  Stored configurations migrate on the first re-save: `auto_capture: 1` becomes `use_authorize: false`,
+  `auto_capture: 0` (the 1.x default) becomes `use_authorize: true`, and the `auto_capture` key is
+  dropped. **Behaviour does not change** for an unsaved configuration either — the gateway library still
+  honours a stored `auto_capture` on the authorize flow until 3.0 — so re-save at your convenience.
 
 ## Plugin configuration
 

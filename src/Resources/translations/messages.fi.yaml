@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Valinnainen: maksuikkunassa käytettävä sopimustunnus'
                 payment_methods: 'Maksutavat'
                 payment_methods_help: 'Pilkuin eroteltu lista maksuikkunassa tarjottavista maksutavoista — katso <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpayn dokumentaatio</a>'
-                auto_capture: 'Automaattinen veloitus'
-                auto_capture_help: 'Veloita maksu automaattisesti heti valtuutuksen jälkeen — kätevä digitaalisille tuotteille'
+                capture_mode: 'Veloitusajankohta'
+                capture_mode_help: 'Milloin rahat veloitetaan. "Valmistuttaessa" vain varaa maksun kassalla ja veloittaa sen, kun maksu merkitään valmiiksi Syliuksessa (esim. kun tilaus lähetetään) — oletus, ja se mitä kaupat, jotka eivät saa veloittaa ennen lähetystä, tarvitsevat. "Heti" antaa Quickpayn veloittaa heti, kun kortti on valtuutettu — kätevä digitaalisille tuotteille'
+                capture_mode_option:
+                    on_completion: 'Valmistuttaessa — varaa kassalla, veloita kun maksu valmistuu'
+                    immediately: 'Heti — veloita kassalla'
                 synchronized: 'Synkroniset toiminnot'
                 synchronized_help: 'Suorita veloitus, hyvitys ja peruutus synkronisesti sen sijaan, että luotettaisiin Quickpayn callback-kutsuun'
                 order_prefix: 'Tilauksen etuliite'
