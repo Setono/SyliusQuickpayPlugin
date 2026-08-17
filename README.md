@@ -73,7 +73,8 @@ setono_sylius_quickpay:
 ```
 
 This registers the callback endpoint (`POST /payment/quickpay/notify`) that Quickpay's servers use to notify your
-store about payment state changes.
+store about payment state changes. **Quickpay only delivers capture, refund and cancel callbacks to the account-wide
+callback url, which is empty by default** — point it at this endpoint, see [Callbacks](#callbacks).
 
 ### 5. Import fixtures (optional, development only)
 
@@ -122,8 +123,10 @@ never blocks saving.
   moment the card is authorized. Under the hood the mode is Sylius core's `use_authorize` gateway option — the
   plugin runs Payum's `Authorize` or `Capture` accordingly, which is how the gateway library expresses the two
   flows since 2.0.
-* Quickpay notifies your store of every payment change on the callback endpoint. The callback's
-  `Quickpay-Checksum-SHA256` header is validated against your private key before the payment details are updated.
+* Quickpay notifies your store of payment changes through callbacks — the payment window's outcome on a per-payment
+  url the plugin mints, capture/refund/cancel outcomes on your account-wide callback url (see [Callbacks](#callbacks)).
+  Every callback's `Quickpay-Checksum-SHA256` header is validated against your private key before the payment details
+  are updated.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
   completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order.
@@ -142,12 +145,40 @@ captured balance and a test-mode badge. The data is fetched from Quickpay *after
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, the panel shows an
 inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
 
+## Callbacks
+
+Quickpay sends its callbacks to **two different places**, and only one of them is set up for you:
+
+| What happened | Callback goes to |
+|---|---|
+| The customer paid (or failed to) in the hosted payment window | the **per-payment** callback url on the payment link — minted by the plugin, nothing to configure |
+| A **capture**, **refund** or **cancel** issued through the API — by the plugin on a state machine transition, or by you in the Quickpay manager | the **account-wide** callback url of your Quickpay account (*Settings* → *Integration* → *Callback url*) |
+
+The account-wide url is **empty by default**. Until you set it, operation callbacks are silently not delivered
+anywhere: a payment you complete in Sylius is captured at Quickpay, but your store is never told the capture
+settled. Set it to the plugin's callback endpoint:
+
+```
+https://your-shop.example/payment/quickpay/notify
+```
+
+That endpoint is built for exactly this: an account-wide url is one static url for every payment, so it
+cannot carry a Payum token — the plugin resolves the payment from the callback body instead (`order_id` →
+your order prefix → the Sylius payment), verifies the checksum, and updates the payment. Note that a Quickpay
+account has exactly one such url: if you share an account between environments (say staging and production),
+only the environment it points at receives operation callbacks — the others should use synchronized
+operations or the reconciliation command described below.
+
+If you would rather not depend on operation callbacks at all, enable **Synchronized operations** on the
+payment method (capture, refund and cancel then block until Quickpay has settled them) or rely on the
+[reconciliation command](#reconciling-missed-callbacks), which polls.
+
 ## Reconciling missed callbacks
 
-The Quickpay callback is normally the only way your store learns about a payment state change. If a
-callback never arrives — misconfigured callback URL on the Quickpay agreement, store unreachable while
-Quickpay retried — the payment stays stuck in a non-final state and the order never completes. The
-plugin ships a reconciliation command that closes this gap by polling Quickpay directly:
+Callbacks are normally how your store learns about a payment state change. If one never arrives — the
+account-wide callback url is not set (see [Callbacks](#callbacks)), the store was unreachable while Quickpay
+retried — the payment stays stuck in a non-final state and the order never completes. The plugin ships a
+reconciliation command that closes this gap by polling Quickpay directly:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments                             # last 7 days, max 100 payments
