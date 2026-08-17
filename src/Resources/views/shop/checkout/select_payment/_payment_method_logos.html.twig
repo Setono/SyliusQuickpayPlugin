@@ -1,0 +1,19 @@
+{#
+    Rendered inside each payment method's choice item on the checkout payment step
+    (sylius.shop.checkout.select_payment.choice_item_content). Shows the brands the Quickpay payment
+    window will offer for this method, derived from the gateway configuration's `payment_methods`.
+    Override this template, or the plugin's `checkout.payment_method_logos` configuration, to change
+    the images.
+#}
+{% set logos = setono_sylius_quickpay_payment_method_logos(method) %}
+{% if logos is not empty %}
+    <div class="setono-sylius-quickpay-payment-method-logos" style="display: flex; flex-wrap: wrap; align-items: center; gap: .4em; margin-top: .5em;">
+        {% for logo in logos %}
+            {% if logo.image is not null %}
+                <img src="{{ asset(logo.image) }}" alt="{{ logo.label }}" title="{{ logo.label }}" height="24" style="height: 24px; width: auto;">
+            {% else %}
+                <span class="ui tiny basic label">{{ logo.label }}</span>
+            {% endif %}
+        {% endfor %}
+    </div>
+{% endif %}

@@ -76,7 +76,17 @@ This registers the callback endpoint (`POST /payment/quickpay/notify`) that Quic
 store about payment state changes. **Quickpay only delivers capture, refund and cancel callbacks to the account-wide
 callback url, which is empty by default** — point it at this endpoint, see [Callbacks](#callbacks).
 
-### 5. Import fixtures (optional, development only)
+### 5. Install the assets
+
+```bash
+bin/console assets:install
+```
+
+The plugin ships the payment method logos shown on the checkout (see
+[Payment method logos on the checkout](#payment-method-logos-on-the-checkout)); like every bundle asset they are
+published to `public/bundles/setonosyliusquickpayplugin/` by `assets:install`.
+
+### 6. Import fixtures (optional, development only)
 
 ```yaml
 # config/packages/setono_sylius_quickpay.yaml
@@ -136,6 +146,38 @@ never blocks saving.
   `refund_amount` / `capture_amount` in the payment details is passed through to Quickpay untouched for
   programmatic partial operations; note that Sylius' payment state machine still treats the payment as a whole —
   the `refund` transition can only be applied once.
+
+## Payment method logos on the checkout
+
+On the checkout payment step, each Quickpay payment method shows the brands its payment window will offer — derived
+from the gateway configuration's **Payment methods** field, so nothing is configured twice and no API is called.
+`creditcard, mobilepay` renders the Visa and Mastercard marks (what `creditcard` stands for is configurable) and the
+MobilePay mark; a token without a bundled logo (e.g. `resurs`) renders as a small text label. Quickpay's token
+grammar is understood: exclusions (`!diners`) are skipped, forced 3-D Secure (`3d-creditcard`) is ignored, and
+regional/debit variants (`visa-dk`, `mastercard-debet-dk`, `mobilepay-subscriptions`) collapse onto their brand.
+
+Bundled logos cover cards (Visa, Visa Electron, Mastercard, Maestro, American Express, Diners Club, Discover, JCB,
+UnionPay, Dankort, Forbrugsforeningen) and MobilePay, Apple Pay, Google Pay, Klarna, Anyday, Vipps, Swish, PayPal,
+ViaBill, Trustly, iDEAL, Sofort and paysafecard. They come from Shopify's MIT-licensed
+[payment_icons](https://github.com/activemerchant/payment_icons); the marks remain their owners' trademarks and are
+shown only to indicate acceptance.
+
+To use your own images, add or override a token, or hide one, configure the plugin — the value is an asset path (or
+URL) as `asset()` understands it, or `null` to hide the token:
+
+```yaml
+setono_sylius_quickpay:
+    checkout:
+        payment_method_logos:
+            mobilepay: build/images/mobilepay.svg
+            resurs: https://cdn.example.com/resurs.png
+            apple-pay: ~
+        creditcard_brands: [dankort, visa, mastercard]   # what the `creditcard` token shows; default [visa, mastercard]
+```
+
+The markup lives in `@SetonoSyliusQuickpayPlugin/shop/checkout/select_payment/_payment_method_logos.html.twig` (a
+`sylius_ui` block on `sylius.shop.checkout.select_payment.choice_item_content`) and can be overridden like any bundle
+template.
 
 ## Operation history in the admin
 
