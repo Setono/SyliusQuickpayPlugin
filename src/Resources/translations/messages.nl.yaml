@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Nog geen bewerkingen'
         balance: 'Geïnd saldo'
         test_mode: 'Testmodus'
+        payment_link: 'Betaallink'
+        payment_link_help: 'Iedereen met deze link kan de bestelling betalen in het Quickpay-betaalvenster — stuur hem naar de klant om een telefonische of factuurbestelling te innen, of na een afgebroken afrekening.'
+        copy: 'Kopiëren'
+        copied: 'Gekopieerd'
+        send_payment_link: 'Betaallink e-mailen naar %email%'
+    email:
+        payment_link:
+            subject: 'Betaling voor bestelling %order_number%'
+            intro: 'Uw bestelling %order_number% wacht op betaling van %amount% — gebruik de knop hieronder om veilig te betalen in het Quickpay-betaalvenster.'
+            action: 'Nu betalen'
+            fallback: 'Werkt de knop niet, kopieer dan deze link in uw browser:'

@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'No operations yet'
         balance: 'Captured balance'
         test_mode: 'Test mode'
+        payment_link: 'Payment link'
+        payment_link_help: 'Anyone with this link can pay this order in the Quickpay payment window — send it to the customer to collect payment for a phone or invoice order, or after an abandoned checkout.'
+        copy: 'Copy'
+        copied: 'Copied'
+        send_payment_link: 'Email the payment link to %email%'
+    email:
+        payment_link:
+            subject: 'Payment for order %order_number%'
+            intro: 'Your order %order_number% is awaiting payment of %amount% — use the button below to pay securely in the Quickpay payment window.'
+            action: 'Pay now'
+            fallback: 'If the button does not work, copy this link into your browser:'

@@ -1,0 +1,3 @@
+setono_sylius_quickpay:
+    payment_link_sent: 'Betalningslänken skickades till %email%.'
+    payment_link_not_sent: 'Betalningslänken kunde inte skickas — betalningen väntar inte längre på betalning, eller så saknar kunden e-postadress.'

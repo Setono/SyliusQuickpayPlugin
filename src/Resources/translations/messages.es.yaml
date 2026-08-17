@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Aún no hay operaciones'
         balance: 'Saldo capturado'
         test_mode: 'Modo de prueba'
+        payment_link: 'Enlace de pago'
+        payment_link_help: 'Cualquiera con este enlace puede pagar el pedido en la ventana de pago de Quickpay — envíeselo al cliente para cobrar un pedido telefónico o con factura, o tras un checkout abandonado.'
+        copy: 'Copiar'
+        copied: 'Copiado'
+        send_payment_link: 'Enviar el enlace de pago a %email%'
+    email:
+        payment_link:
+            subject: 'Pago del pedido %order_number%'
+            intro: 'Su pedido %order_number% está pendiente de un pago de %amount% — use el botón de abajo para pagar de forma segura en la ventana de pago de Quickpay.'
+            action: 'Pagar ahora'
+            fallback: 'Si el botón no funciona, copie este enlace en su navegador:'

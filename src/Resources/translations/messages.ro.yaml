@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Nicio operațiune încă'
         balance: 'Sold capturat'
         test_mode: 'Mod de test'
+        payment_link: 'Link de plată'
+        payment_link_help: 'Oricine are acest link poate plăti comanda în fereastra de plată Quickpay — trimiteți-l clientului pentru a încasa o comandă telefonică sau pe factură, ori după o finalizare abandonată.'
+        copy: 'Copiază'
+        copied: 'Copiat'
+        send_payment_link: 'Trimite linkul de plată la %email%'
+    email:
+        payment_link:
+            subject: 'Plata comenzii %order_number%'
+            intro: 'Comanda dvs. %order_number% așteaptă o plată de %amount% — folosiți butonul de mai jos pentru a plăti în siguranță în fereastra de plată Quickpay.'
+            action: 'Plătește acum'
+            fallback: 'Dacă butonul nu funcționează, copiați acest link în browser:'

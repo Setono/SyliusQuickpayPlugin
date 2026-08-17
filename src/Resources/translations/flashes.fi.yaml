@@ -1,0 +1,3 @@
+setono_sylius_quickpay:
+    payment_link_sent: 'Maksulinkki lähetettiin osoitteeseen %email%.'
+    payment_link_not_sent: 'Maksulinkkiä ei voitu lähettää — maksu ei enää odota maksamista tai asiakkaalla ei ole sähköpostiosoitetta.'

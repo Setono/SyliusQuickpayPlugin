@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\DependencyInjection;
 
+use Setono\SyliusQuickpayPlugin\Mailer\Emails;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
@@ -53,6 +54,17 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
                                 'priority' => -10,
                             ],
                         ],
+                    ],
+                ],
+            ]);
+        }
+
+        if ($container->hasExtension('sylius_mailer')) {
+            $container->prependExtensionConfig('sylius_mailer', [
+                'emails' => [
+                    Emails::PAYMENT_LINK => [
+                        'subject' => 'setono_sylius_quickpay.email.payment_link.subject',
+                        'template' => '@SetonoSyliusQuickpayPlugin/email/payment_link.html.twig',
                     ],
                 ],
             ]);

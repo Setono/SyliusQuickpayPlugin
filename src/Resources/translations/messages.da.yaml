@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Ingen operationer endnu'
         balance: 'Hævet saldo'
         test_mode: 'Testtilstand'
+        payment_link: 'Betalingslink'
+        payment_link_help: 'Alle med dette link kan betale ordren i Quickpays betalingsvindue — send det til kunden for at opkræve betaling for en telefon- eller fakturaordre, eller efter en afbrudt checkout.'
+        copy: 'Kopiér'
+        copied: 'Kopieret'
+        send_payment_link: 'Send betalingslinket til %email%'
+    email:
+        payment_link:
+            subject: 'Betaling af ordre %order_number%'
+            intro: 'Din ordre %order_number% afventer betaling af %amount% — brug knappen herunder til at betale sikkert i Quickpays betalingsvindue.'
+            action: 'Betal nu'
+            fallback: 'Virker knappen ikke, så kopiér dette link ind i din browser:'

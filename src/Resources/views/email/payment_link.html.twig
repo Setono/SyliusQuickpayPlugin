@@ -1,0 +1,20 @@
+{% extends '@SyliusCore/Email/layout.html.twig' %}
+
+{% block subject %}
+    {{ 'setono_sylius_quickpay.email.payment_link.subject'|trans({'%order_number%': order.number}, null, localeCode)|raw }}
+{% endblock %}
+
+{% block content %}
+    <p style="text-align: center; font-size: 16px; color: #1a1a1a;">
+        {{ 'setono_sylius_quickpay.email.payment_link.intro'|trans({'%order_number%': order.number, '%amount%': payment.amount|sylius_format_money(payment.currencyCode, localeCode)}, null, localeCode) }}
+    </p>
+    <p style="text-align: center; margin: 24px 0;">
+        <a href="{{ paymentLink }}" style="display: inline-block; padding: 12px 24px; background-color: #1a1a1a; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px;">
+            {{ 'setono_sylius_quickpay.email.payment_link.action'|trans({}, null, localeCode) }}
+        </a>
+    </p>
+    <p style="text-align: center; font-size: 13px; color: #6a6a6a;">
+        {{ 'setono_sylius_quickpay.email.payment_link.fallback'|trans({}, null, localeCode) }}<br>
+        <a href="{{ paymentLink }}" style="color: #6a6a6a; word-break: break-all;">{{ paymentLink }}</a>
+    </p>
+{% endblock %}

@@ -1,0 +1,3 @@
+setono_sylius_quickpay:
+    payment_link_sent: 'A fizetési linket elküldtük ide: %email%.'
+    payment_link_not_sent: 'A fizetési linket nem sikerült elküldeni — a fizetés már nem vár fizetésre, vagy a vevőnek nincs e-mail-címe.'

@@ -5,3 +5,12 @@ setono_sylius_quickpay_admin_payment_operations:
         id: '\d+'
     defaults:
         _controller: Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction
+
+# A GET carrying the csrf token, like Sylius' sylius_admin_order_resend_confirmation_email
+setono_sylius_quickpay_admin_send_payment_link:
+    path: /quickpay/payments/{id}/send-payment-link
+    methods: [GET]
+    requirements:
+        id: '\d+'
+    defaults:
+        _controller: Setono\SyliusQuickpayPlugin\Controller\Admin\SendPaymentLinkAction

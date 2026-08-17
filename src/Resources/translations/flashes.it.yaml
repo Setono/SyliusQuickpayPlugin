@@ -1,0 +1,3 @@
+setono_sylius_quickpay:
+    payment_link_sent: 'Il link di pagamento è stato inviato a %email%.'
+    payment_link_not_sent: 'Non è stato possibile inviare il link di pagamento — il pagamento non è più in attesa, oppure il cliente non ha un indirizzo e-mail.'

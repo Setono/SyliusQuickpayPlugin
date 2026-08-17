@@ -1,0 +1,3 @@
+setono_sylius_quickpay:
+    payment_link_sent: 'Platební odkaz byl odeslán na %email%.'
+    payment_link_not_sent: 'Platební odkaz se nepodařilo odeslat — platba už nečeká na zaplacení, nebo zákazník nemá e-mailovou adresu.'

@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Noch keine Vorgänge'
         balance: 'Erfasster Saldo'
         test_mode: 'Testmodus'
+        payment_link: 'Zahlungslink'
+        payment_link_help: 'Jeder mit diesem Link kann die Bestellung im Quickpay-Zahlungsfenster bezahlen — senden Sie ihn dem Kunden, um eine Telefon- oder Rechnungsbestellung einzuziehen oder nach einem abgebrochenen Checkout.'
+        copy: 'Kopieren'
+        copied: 'Kopiert'
+        send_payment_link: 'Zahlungslink an %email% senden'
+    email:
+        payment_link:
+            subject: 'Zahlung für Bestellung %order_number%'
+            intro: 'Ihre Bestellung %order_number% wartet auf die Zahlung von %amount% — über die Schaltfläche unten bezahlen Sie sicher im Quickpay-Zahlungsfenster.'
+            action: 'Jetzt bezahlen'
+            fallback: 'Falls die Schaltfläche nicht funktioniert, kopieren Sie diesen Link in Ihren Browser:'
