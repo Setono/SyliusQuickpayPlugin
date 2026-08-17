@@ -14,13 +14,15 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
 {
     public function load(array $configs, ContainerBuilder $container): void
     {
-        /** @var array{operations: array{capture: bool, refund: bool, cancel: bool}} $config */
+        /** @var array{operations: array{capture: bool, refund: bool, cancel: bool}, checkout: array{payment_method_logos: array<string, string|null>, creditcard_brands: list<string>}} $config */
         $config = $this->processConfiguration($this->getConfiguration([], $container), $configs);
         $loader = new XmlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
 
         $container->setParameter('setono_sylius_quickpay.operations.capture', $config['operations']['capture']);
         $container->setParameter('setono_sylius_quickpay.operations.refund', $config['operations']['refund']);
         $container->setParameter('setono_sylius_quickpay.operations.cancel', $config['operations']['cancel']);
+        $container->setParameter('setono_sylius_quickpay.checkout.payment_method_logos', $config['checkout']['payment_method_logos']);
+        $container->setParameter('setono_sylius_quickpay.checkout.creditcard_brands', $config['checkout']['creditcard_brands']);
 
         $loader->load('services.xml');
     }
@@ -40,6 +42,14 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
                         'blocks' => [
                             'setono_sylius_quickpay_operations' => [
                                 'template' => '@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_quickpay.html.twig',
+                                'priority' => -10,
+                            ],
+                        ],
+                    ],
+                    'sylius.shop.checkout.select_payment.choice_item_content' => [
+                        'blocks' => [
+                            'setono_sylius_quickpay_payment_method_logos' => [
+                                'template' => '@SetonoSyliusQuickpayPlugin/shop/checkout/select_payment/_payment_method_logos.html.twig',
                                 'priority' => -10,
                             ],
                         ],

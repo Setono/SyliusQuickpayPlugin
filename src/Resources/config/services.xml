@@ -109,6 +109,25 @@
         <service id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface"
                  alias="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
 
+        <!-- Checkout presentation -->
+        <service id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider">
+            <argument>%setono_sylius_quickpay.checkout.payment_method_logos%</argument>
+            <argument>%setono_sylius_quickpay.checkout.creditcard_brands%</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider"/>
+
+        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentMethodLogoExtension">
+            <tag name="twig.extension"/>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentMethodLogoRuntime">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"/>
+
+            <tag name="twig.runtime"/>
+        </service>
+
         <!-- Guesser -->
         <service id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser">
             <argument type="service" id="sylius.context.locale"/>

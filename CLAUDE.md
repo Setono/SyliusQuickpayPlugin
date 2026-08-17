@@ -130,6 +130,20 @@ persisted into the details by the library's Status/Confirm/Sync actions. Each op
 `operations.capture` / `operations.refund` / `operations.cancel` (defined in `DependencyInjection/Configuration.php`,
 passed to the processor as container parameters).
 
+### Checkout presentation
+`Checkout/PaymentMethodLogoProvider` turns a Quickpay payment method's gateway `payment_methods` option into a
+list of `PaymentMethodLogo` value objects (token, label, `asset()` path or null) — parsing Quickpay's token
+grammar (`!` exclusions, `3d-` prefix, `-dk`/`-debet` variants collapsing onto the brand, `creditcard`
+expanding to the configured `checkout.creditcard_brands`) and applying the `checkout.payment_method_logos`
+config overrides (path adds/overrides, null hides). Exposed to Twig as
+`setono_sylius_quickpay_payment_method_logos(method)` (`Twig/PaymentMethodLogoExtension` + `PaymentMethodLogoRuntime`,
+the Twig runtime pattern; `phpstan.neon` ignores the one error Twig < 3.9's `callable|null` docblock raises for the
+`[Runtime::class, 'method']` form on the lowest-deps job) and
+rendered by `shop/checkout/select_payment/_payment_method_logos.html.twig`, a `sylius_ui` block prepended on
+`sylius.shop.checkout.select_payment.choice_item_content`. The SVGs in
+`Resources/public/images/payment-methods/` are Shopify's MIT-licensed payment_icons (attribution README
+in that folder) and need `assets:install` in the host app.
+
 ### Gateway config & language
 - `Form/Type/GatewayConfigurationType` is the admin form for the gateway (tagged
   `sylius.gateway_configuration_type` type `quickpay`). Every field carries a translated `help` text

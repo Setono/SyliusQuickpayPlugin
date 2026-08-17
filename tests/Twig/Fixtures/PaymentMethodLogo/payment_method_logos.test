@@ -1,0 +1,38 @@
+--TEST--
+"setono_sylius_quickpay_payment_method_logos" lists the brands a Quickpay method's payment window offers
+--TEMPLATE--
+{% for logo in setono_sylius_quickpay_payment_method_logos(method) %}{{ logo.token }}|{{ logo.label }}|{{ logo.image ?? '-' }}
+{% else %}nothing{% endfor %}
+--DATA--
+return ['method' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('quickpay');
+    $gatewayConfig->setGatewayName('quickpay');
+    $gatewayConfig->setConfig(['payment_methods' => '3d-creditcard, !diners, mobilepay-subscriptions, resurs, unzer-pay-later-invoice']);
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setGatewayConfig($gatewayConfig);
+
+    return $method;
+})()]
+--EXPECT--
+dankort|Dankort|bundles/setonosyliusquickpayplugin/images/payment-methods/dankort.svg
+visa|Visa|bundles/setonosyliusquickpayplugin/images/payment-methods/visa.svg
+mastercard|Mastercard|bundles/setonosyliusquickpayplugin/images/payment-methods/mastercard.svg
+mobilepay|MobilePay|bundles/setonosyliusquickpayplugin/images/payment-methods/mobilepay.svg
+resurs|Resurs Bank|https://cdn.example/resurs.png
+unzer-pay-later-invoice|Unzer Pay Later Invoice|-
+--DATA--
+return ['method' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('offline');
+    $gatewayConfig->setGatewayName('offline');
+    $gatewayConfig->setConfig(['payment_methods' => 'visa']);
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setGatewayConfig($gatewayConfig);
+
+    return $method;
+})()]
+--EXPECT--
+nothing

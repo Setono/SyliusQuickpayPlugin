@@ -33,6 +33,23 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
     /**
      * @test
      */
+    public function it_sets_the_checkout_presentation_parameters(): void
+    {
+        $container = new ContainerBuilder();
+        (new SetonoSyliusQuickpayExtension())->load([[
+            'checkout' => [
+                'payment_method_logos' => ['mobilepay' => 'build/mobilepay.svg', 'resurs' => null],
+                'creditcard_brands' => ['visa', 'mastercard', 'dankort'],
+            ],
+        ]], $container);
+
+        self::assertSame(['mobilepay' => 'build/mobilepay.svg', 'resurs' => null], $container->getParameter('setono_sylius_quickpay.checkout.payment_method_logos'));
+        self::assertSame(['visa', 'mastercard', 'dankort'], $container->getParameter('setono_sylius_quickpay.checkout.creditcard_brands'));
+    }
+
+    /**
+     * @test
+     */
     public function it_registers_the_payment_processor_service(): void
     {
         $this->load();
@@ -153,6 +170,14 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
                         'blocks' => [
                             'setono_sylius_quickpay_operations' => [
                                 'template' => '@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_quickpay.html.twig',
+                                'priority' => -10,
+                            ],
+                        ],
+                    ],
+                    'sylius.shop.checkout.select_payment.choice_item_content' => [
+                        'blocks' => [
+                            'setono_sylius_quickpay_payment_method_logos' => [
+                                'template' => '@SetonoSyliusQuickpayPlugin/shop/checkout/select_payment/_payment_method_logos.html.twig',
                                 'priority' => -10,
                             ],
                         ],

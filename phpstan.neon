@@ -22,3 +22,14 @@ parameters:
 
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
+
+    ignoreErrors:
+        # Twig functions are declared with the runtime form `[SomeRuntime::class, 'method']`, which is
+        # not a PHP callable and which Twig's TwigFunction constructor only documents from Twig 3.9
+        # (`callable|array{class-string, string}|null`). The plugin still allows Twig 2.15/3.0, so on
+        # the lowest-dependency matrix job the docblock says `callable|null` and PHPStan reports the
+        # array. The runtime form is what Twig expects at every version.
+        -
+            identifier: argument.type
+            message: '#Parameter \#2 \$callable of class Twig\\TwigFunction constructor expects \(callable\(\): mixed\)\|null, array\{#'
+            path: src/Twig/*

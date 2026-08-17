@@ -28,6 +28,10 @@ final class ConfigurationTest extends TestCase
                 'refund' => true,
                 'cancel' => true,
             ],
+            'checkout' => [
+                'payment_method_logos' => [],
+                'creditcard_brands' => ['visa', 'mastercard'],
+            ],
         ]);
     }
 
@@ -44,6 +48,31 @@ final class ConfigurationTest extends TestCase
                 'capture' => false,
                 'refund' => true,
                 'cancel' => false,
+            ],
+            'checkout' => [
+                'payment_method_logos' => [],
+                'creditcard_brands' => ['visa', 'mastercard'],
+            ],
+        ]);
+    }
+
+    /**
+     * @test
+     */
+    public function it_keeps_payment_method_tokens_as_configured(): void
+    {
+        $this->assertProcessedConfigurationEquals([
+            ['checkout' => ['payment_method_logos' => ['mobilepay' => 'build/images/mobilepay.svg', 'apple-pay' => null]]],
+            ['checkout' => ['creditcard_brands' => ['dankort', 'visa']]],
+        ], [
+            'operations' => [
+                'capture' => true,
+                'refund' => true,
+                'cancel' => true,
+            ],
+            'checkout' => [
+                'payment_method_logos' => ['mobilepay' => 'build/images/mobilepay.svg', 'apple-pay' => null],
+                'creditcard_brands' => ['dankort', 'visa'],
             ],
         ]);
     }

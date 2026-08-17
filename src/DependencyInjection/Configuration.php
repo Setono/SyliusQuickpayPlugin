@@ -36,6 +36,23 @@ final class Configuration implements ConfigurationInterface
                         ->end()
                     ->end()
                 ->end()
+                ->arrayNode('checkout')
+                    ->info('Presentation of Quickpay payment methods on the checkout payment step')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->arrayNode('payment_method_logos')
+                            ->info('Add or override the logo shown for a Quickpay payment method token (e.g. "mobilepay"): the value is an asset path or URL for the image, or null to hide the token. Bundled logos exist for the common tokens; anything else renders as a text label')
+                            ->useAttributeAsKey('token')
+                            ->normalizeKeys(false)
+                            ->scalarPrototype()->end()
+                        ->end()
+                        ->arrayNode('creditcard_brands')
+                            ->info('Which card brands the "creditcard" token (every card enabled on the Quickpay agreement) shows on the checkout')
+                            ->scalarPrototype()->end()
+                            ->defaultValue(['visa', 'mastercard'])
+                        ->end()
+                    ->end()
+                ->end()
         ;
 
         return $treeBuilder;
