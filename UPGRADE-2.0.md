@@ -123,6 +123,13 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
 | `Form\Type\QuickPayGatewayConfigurationType` | `Form\Type\GatewayConfigurationType` |
 | `Guesser\QuickpayLanguageGuesser(Interface)` | `Guesser\LanguageGuesser(Interface)` |
 
+## Check the account-wide callback url in the Quickpay manager
+
+Not new in 2.0, but never spelled out before: Quickpay only delivers **capture, refund and cancel** callbacks
+to the account-wide callback url (*Settings* → *Integration*), which is empty by default — the per-payment
+callback url on the payment link receives the payment window's outcome only. If yours is unset, point it at
+`https://your-shop.example/payment/quickpay/notify`; the README's *Callbacks* section has the details.
+
 ## Behavioral changes
 
 - **Payment details are scalar-only.** `quickpayPaymentId` is the source of truth and the payment is
