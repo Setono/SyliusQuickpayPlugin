@@ -111,6 +111,37 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
     /**
      * @test
      */
+    public function it_prepends_the_payment_link_email(): void
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class() extends Extension {
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return 'sylius_mailer';
+            }
+        });
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([
+            [
+                'emails' => [
+                    'setono_sylius_quickpay_payment_link' => [
+                        'subject' => 'setono_sylius_quickpay.email.payment_link.subject',
+                        'template' => '@SetonoSyliusQuickpayPlugin/email/payment_link.html.twig',
+                    ],
+                ],
+            ],
+        ], $container->getExtensionConfig('sylius_mailer'));
+    }
+
+    /**
+     * @test
+     */
     public function it_prepends_the_form_theme(): void
     {
         $container = new ContainerBuilder();

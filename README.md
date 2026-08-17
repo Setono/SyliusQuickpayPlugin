@@ -179,6 +179,22 @@ The markup lives in `@SetonoSyliusQuickpayPlugin/shop/checkout/select_payment/_p
 `sylius_ui` block on `sylius.shop.checkout.select_payment.choice_item_content`) and can be overridden like any bundle
 template.
 
+## Payment link in the admin
+
+Every Quickpay payment that is still **awaiting payment** shows a **Payment link** panel on the admin order view: a
+copy-able link, and a button that emails it to the customer. Use it to collect payment for a phone or invoice order,
+or after a customer abandoned the checkout — anyone opening the link is taken through the normal flow into the
+Quickpay payment window, and the payment resolves exactly as after checkout.
+
+The link is Sylius' own "pay for this order" url (`sylius_shop_order_pay`), built for the order's channel hostname:
+nothing happens at Quickpay until the customer clicks, so it can be shown, copied and sent as often as needed, and it
+also works for a payment whose Quickpay payment was never created (the flow creates it on first use). It is offered for
+the order's last payment in state `new` on a Quickpay method, as long as the order is not cancelled — the same payment
+Sylius' own "Pay" button in the customer account pays.
+
+The email (`@SetonoSyliusQuickpayPlugin/email/payment_link.html.twig`, code `setono_sylius_quickpay_payment_link`)
+is sent in the order's locale through Sylius' mailer and can be overridden like any Sylius email template.
+
 ## Operation history in the admin
 
 Each Quickpay payment on the admin order view shows its **live operation history** — every

@@ -33,6 +33,45 @@
             <argument type="service" id="twig"/>
         </service>
 
+        <service id="Setono\SyliusQuickpayPlugin\Controller\Admin\SendPaymentLinkAction" public="true">
+            <argument type="service" id="sylius.repository.payment"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Mailer\PaymentLinkEmailManagerInterface"/>
+            <argument type="service" id="security.csrf.token_manager"/>
+            <argument type="service" id="request_stack"/>
+            <argument type="service" id="router"/>
+        </service>
+
+        <!-- Mailer -->
+        <service id="Setono\SyliusQuickpayPlugin\Mailer\PaymentLinkEmailManager">
+            <argument type="service" id="sylius.email_sender"/>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Mailer\PaymentLinkEmailManagerInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Mailer\PaymentLinkEmailManager"/>
+
+        <!-- Payment link -->
+        <service id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider">
+            <argument type="service" id="router"/>
+            <argument type="service" id="url_helper"/>
+            <argument>%sylius.unsecured_urls%</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider"/>
+
+        <!-- Twig -->
+        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentExtension">
+            <tag name="twig.extension"/>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentRuntime">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProviderInterface"/>
+
+            <tag name="twig.runtime"/>
+        </service>
+
         <!-- Quickpay client -->
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
 
@@ -118,15 +157,6 @@
         <service id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider"/>
 
-        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentMethodLogoExtension">
-            <tag name="twig.extension"/>
-        </service>
-
-        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentMethodLogoRuntime">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"/>
-
-            <tag name="twig.runtime"/>
-        </service>
 
         <!-- Guesser -->
         <service id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser">

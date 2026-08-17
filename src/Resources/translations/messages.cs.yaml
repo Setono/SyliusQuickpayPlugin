@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Zatím žádné operace'
         balance: 'Stržený zůstatek'
         test_mode: 'Testovací režim'
+        payment_link: 'Platební odkaz'
+        payment_link_help: 'Kdokoli s tímto odkazem může objednávku zaplatit v platebním okně Quickpay — pošlete ho zákazníkovi pro zaplacení telefonické objednávky nebo objednávky na fakturu, případně po opuštěné pokladně.'
+        copy: 'Kopírovat'
+        copied: 'Zkopírováno'
+        send_payment_link: 'Odeslat platební odkaz na %email%'
+    email:
+        payment_link:
+            subject: 'Platba za objednávku %order_number%'
+            intro: 'Vaše objednávka %order_number% čeká na platbu ve výši %amount% — tlačítkem níže zaplatíte bezpečně v platebním okně Quickpay.'
+            action: 'Zaplatit nyní'
+            fallback: 'Pokud tlačítko nefunguje, zkopírujte tento odkaz do svého prohlížeče:'

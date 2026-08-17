@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Ei tapahtumia vielä'
         balance: 'Veloitettu saldo'
         test_mode: 'Testitila'
+        payment_link: 'Maksulinkki'
+        payment_link_help: 'Kuka tahansa, jolla on tämä linkki, voi maksaa tilauksen Quickpayn maksuikkunassa — lähetä se asiakkaalle puhelin- tai laskutilauksen maksamiseksi tai keskeytyneen kassan jälkeen.'
+        copy: 'Kopioi'
+        copied: 'Kopioitu'
+        send_payment_link: 'Lähetä maksulinkki osoitteeseen %email%'
+    email:
+        payment_link:
+            subject: 'Tilauksen %order_number% maksu'
+            intro: 'Tilauksesi %order_number% odottaa maksua %amount% — maksa turvallisesti Quickpayn maksuikkunassa alla olevalla painikkeella.'
+            action: 'Maksa nyt'
+            fallback: 'Jos painike ei toimi, kopioi tämä linkki selaimeesi:'

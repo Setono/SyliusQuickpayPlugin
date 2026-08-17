@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Még nincsenek műveletek'
         balance: 'Terhelt egyenleg'
         test_mode: 'Tesztmód'
+        payment_link: 'Fizetési link'
+        payment_link_help: 'Bárki, aki rendelkezik ezzel a linkkel, kifizetheti a rendelést a Quickpay fizetési ablakában — küldje el a vevőnek telefonos vagy számlás rendelés beszedéséhez, vagy megszakított fizetés után.'
+        copy: 'Másolás'
+        copied: 'Másolva'
+        send_payment_link: 'Fizetési link küldése: %email%'
+    email:
+        payment_link:
+            subject: 'Fizetés a(z) %order_number% rendeléshez'
+            intro: 'A(z) %order_number% rendelése %amount% összegű fizetésre vár — az alábbi gombbal biztonságosan fizethet a Quickpay fizetési ablakában.'
+            action: 'Fizetés most'
+            fallback: 'Ha a gomb nem működik, másolja ezt a linket a böngészőjébe:'

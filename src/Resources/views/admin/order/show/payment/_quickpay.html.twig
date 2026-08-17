@@ -1,3 +1,45 @@
+{% set paymentLink = setono_sylius_quickpay_payment_link(payment) %}
+{% if paymentLink is not null %}
+    <div class="ui top attached segment setono-quickpay-payment-link">
+        <h4 class="ui tiny dividing header">{{ 'setono_sylius_quickpay.ui.payment_link'|trans }}</h4>
+        <p><small>{{ 'setono_sylius_quickpay.ui.payment_link_help'|trans }}</small></p>
+        <div class="ui fluid small action input">
+            <input type="text" readonly value="{{ paymentLink }}" onclick="this.select();">
+            <button type="button" class="ui icon button setono-quickpay-payment-link__copy" data-copied="{{ 'setono_sylius_quickpay.ui.copied'|trans }}" title="{{ 'setono_sylius_quickpay.ui.copy'|trans }}">
+                <i class="copy icon"></i>
+            </button>
+        </div>
+        {# The same shape as Sylius' "resend order confirmation email" button: a GET carrying the csrf token #}
+        {% set sendPath = path('setono_sylius_quickpay_admin_send_payment_link', {'id': payment.id, '_csrf_token': csrf_token(payment.id)}) %}
+        <a href="{{ sendPath }}" class="ui icon labeled tiny fluid button" style="margin-top: .75em;" {{ sylius_test_html_attribute('send-quickpay-payment-link') }}>
+            <i class="send icon"></i> {{ 'setono_sylius_quickpay.ui.send_payment_link'|trans({'%email%': payment.order.customer.email|default('')}) }}
+        </a>
+    </div>
+    <script>
+        (function () {
+            var segment = document.currentScript.previousElementSibling;
+            var button = segment.querySelector('.setono-quickpay-payment-link__copy');
+            var input = segment.querySelector('input[type="text"]');
+
+            button.addEventListener('click', function () {
+                var done = function () {
+                    var icon = button.querySelector('i');
+                    icon.className = 'check icon';
+                    button.title = button.dataset.copied;
+                    setTimeout(function () { icon.className = 'copy icon'; }, 1500);
+                };
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(input.value).then(done);
+                } else {
+                    input.select();
+                    document.execCommand('copy');
+                    done();
+                }
+            });
+        })();
+    </script>
+{% endif %}
 {% if payment.details['quickpayPaymentId'] is defined %}
     <div class="ui top attached segment setono-quickpay-operations"
          data-url="{{ path('setono_sylius_quickpay_admin_payment_operations', {'id': payment.id}) }}">

@@ -130,15 +130,33 @@ persisted into the details by the library's Status/Confirm/Sync actions. Each op
 `operations.capture` / `operations.refund` / `operations.cancel` (defined in `DependencyInjection/Configuration.php`,
 passed to the processor as container parameters).
 
+### Payment link (admin)
+`PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel
+hostname, like Sylius' `sylius_channel_url`; `%sylius.unsecured_urls%` picks the scheme) for a Quickpay payment
+that is the order's last payment in state `new` on a non-cancelled order — null otherwise, also when the shop
+route is absent (headless). It is deliberately *not* a raw Quickpay window url: opening it mints a fresh Payum
+token and runs the normal Convert → payment-window flow, so nothing happens at Quickpay until the customer
+clicks and a payment without a `quickpayPaymentId` works too. Exposed to Twig as
+`setono_sylius_quickpay_payment_link(payment)` (on `Twig/PaymentExtension` + `PaymentRuntime`, the plugin's single
+Twig extension/runtime pair); `admin/order/show/payment/_quickpay.html.twig` renders the
+copy-able link plus a send link shaped like Sylius' resend-order-confirmation-email button (a GET carrying
+`_csrf_token`, token id = payment id) to `Controller/Admin/SendPaymentLinkAction`, which reads the flash bag via
+Sylius' `FlashBagProvider`, sends through `Mailer/PaymentLinkEmailManager` (the Sylius
+email-manager pattern; code `Mailer\Emails::PAYMENT_LINK`, prepended into `sylius_mailer` with
+`email/payment_link.html.twig`) in the order's locale and flashes in the `flashes` translation domain
+(`Resources/translations/flashes.*.yaml`). Both Twig functions are covered by the `Twig\Test\IntegrationTestCase`
+subclass `tests/Twig/PaymentExtensionTest` with `.test` fixtures in `tests/Twig/Fixtures/` (implement both `getFixturesDir()` for Twig < 3.13 and
+`getFixturesDirectory()`).
+
 ### Checkout presentation
 `Checkout/PaymentMethodLogoProvider` turns a Quickpay payment method's gateway `payment_methods` option into a
 list of `PaymentMethodLogo` value objects (token, label, `asset()` path or null) — parsing Quickpay's token
 grammar (`!` exclusions, `3d-` prefix, `-dk`/`-debet` variants collapsing onto the brand, `creditcard`
 expanding to the configured `checkout.creditcard_brands`) and applying the `checkout.payment_method_logos`
 config overrides (path adds/overrides, null hides). Exposed to Twig as
-`setono_sylius_quickpay_payment_method_logos(method)` (`Twig/PaymentMethodLogoExtension` + `PaymentMethodLogoRuntime`,
-the Twig runtime pattern; `phpstan.neon` ignores the one error Twig < 3.9's `callable|null` docblock raises for the
-`[Runtime::class, 'method']` form on the lowest-deps job) and
+`setono_sylius_quickpay_payment_method_logos(method)` (on `Twig/PaymentExtension` + `PaymentRuntime`, the plugin's
+single Twig extension/runtime pair; `phpstan.neon` ignores the one error Twig < 3.9's `callable|null` docblock raises
+for the `[Runtime::class, 'method']` form on the lowest-deps job) and
 rendered by `shop/checkout/select_payment/_payment_method_logos.html.twig`, a `sylius_ui` block prepended on
 `sylius.shop.checkout.select_payment.choice_item_content`. The SVGs in
 `Resources/public/images/payment-methods/` are Shopify's MIT-licensed payment_icons (attribution README

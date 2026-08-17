@@ -1,0 +1,56 @@
+--TEST--
+"setono_sylius_quickpay_payment_link" is the order's pay url for a Quickpay payment awaiting payment
+--TEMPLATE--
+{# assigned first: Twig < 3 only allows `??` on simple variables, not on a function call #}
+{% set link = setono_sylius_quickpay_payment_link(payment) %}{{ link ?? 'no link' }}
+--DATA--
+return ['payment' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('quickpay');
+    $gatewayConfig->setGatewayName('quickpay');
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setCode('quickpay');
+    $method->setGatewayConfig($gatewayConfig);
+
+    $channel = new \Sylius\Component\Core\Model\Channel();
+    $channel->setCode('WEB');
+    $channel->setHostname('shop.example');
+
+    $order = new \Sylius\Component\Core\Model\Order();
+    $order->setTokenValue('tok3n');
+    $order->setLocaleCode('da_DK');
+    $order->setChannel($channel);
+
+    $payment = new \Sylius\Component\Core\Model\Payment();
+    $payment->setMethod($method);
+    $payment->setState('new');
+    $order->addPayment($payment);
+
+    return $payment;
+})()]
+--EXPECT--
+https://shop.example/da_DK/order/tok3n/pay
+--DATA--
+return ['payment' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('quickpay');
+    $gatewayConfig->setGatewayName('quickpay');
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setCode('quickpay');
+    $method->setGatewayConfig($gatewayConfig);
+
+    $order = new \Sylius\Component\Core\Model\Order();
+    $order->setTokenValue('tok3n');
+    $order->setLocaleCode('da_DK');
+
+    $payment = new \Sylius\Component\Core\Model\Payment();
+    $payment->setMethod($method);
+    $payment->setState('completed');
+    $order->addPayment($payment);
+
+    return $payment;
+})()]
+--EXPECT--
+no link

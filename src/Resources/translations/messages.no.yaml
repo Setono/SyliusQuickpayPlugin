@@ -36,3 +36,14 @@ setono_sylius_quickpay:
         no_operations: 'Ingen operasjoner ennå'
         balance: 'Trukket saldo'
         test_mode: 'Testmodus'
+        payment_link: 'Betalingslenke'
+        payment_link_help: 'Alle med denne lenken kan betale ordren i Quickpays betalingsvindu — send den til kunden for å kreve inn betaling for en telefon- eller fakturaordre, eller etter en avbrutt kasse.'
+        copy: 'Kopier'
+        copied: 'Kopiert'
+        send_payment_link: 'Send betalingslenken til %email%'
+    email:
+        payment_link:
+            subject: 'Betaling for ordre %order_number%'
+            intro: 'Ordren din %order_number% venter på betaling av %amount% — bruk knappen nedenfor for å betale trygt i Quickpays betalingsvindu.'
+            action: 'Betal nå'
+            fallback: 'Hvis knappen ikke virker, kopier denne lenken inn i nettleseren din:'
