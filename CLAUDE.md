@@ -14,7 +14,7 @@ client (`Setono\Quickpay\Client\*`), request/response DTOs (`Setono\Quickpay\Req
 state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
-base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@alpha` + the SDK `^1.0@beta`).
+base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@beta`; the SDK is stable, `^1.0`).
 The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
 `UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x — keep it

@@ -10,11 +10,11 @@ gateway-level background; this document covers what a **Sylius shop upgrading th
 
 - Your project needs a PSR-18 HTTP client and PSR-17 factories discoverable by `php-http/discovery`
   (e.g. `composer require symfony/http-client nyholm/psr7`).
-- Until the gateway library and SDK have stable releases, allow the pre-release versions in your
+- Until the gateway library has a stable release, allow its pre-release versions in your
   **root** `composer.json`:
 
   ```bash
-  composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@alpha setono/quickpay-php-sdk:^1.0@beta
+  composer require setono/sylius-quickpay-plugin:^2.0@beta setono/payum-quickpay:^2.0@beta setono/quickpay-php-sdk:^1.0
   ```
 
 ## Gateway configuration stored in the database
