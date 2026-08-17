@@ -29,7 +29,7 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
     {
         if ($container->hasExtension('twig')) {
             $container->prependExtensionConfig('twig', [
-                'form_themes' => ['@SetonoSyliusQuickpayPlugin/Form/theme.html.twig'],
+                'form_themes' => ['@SetonoSyliusQuickpayPlugin/form/theme.html.twig'],
             ]);
         }
 
@@ -39,7 +39,7 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
                     'sylius.admin.order.show.payment_content' => [
                         'blocks' => [
                             'setono_sylius_quickpay_operations' => [
-                                'template' => '@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_quickpay.html.twig',
+                                'template' => '@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_quickpay.html.twig',
                                 'priority' => -10,
                             ],
                         ],

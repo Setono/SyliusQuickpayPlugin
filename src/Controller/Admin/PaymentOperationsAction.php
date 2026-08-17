@@ -50,12 +50,12 @@ final class PaymentOperationsAction
             ;
         } catch (\Throwable) {
             return new Response(
-                $this->twig->render('@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_operationsError.html.twig'),
+                $this->twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations_error.html.twig'),
                 Response::HTTP_BAD_GATEWAY,
             );
         }
 
-        return new Response($this->twig->render('@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_operations.html.twig', [
+        return new Response($this->twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig', [
             'quickpay_payment' => $quickpayPayment,
         ]));
     }

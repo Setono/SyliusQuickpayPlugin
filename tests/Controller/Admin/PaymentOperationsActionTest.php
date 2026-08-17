@@ -58,7 +58,7 @@ final class PaymentOperationsActionTest extends TestCase
 
         $twig = $this->prophesize(Environment::class);
         $twig->render(
-            '@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_operations.html.twig',
+            '@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig',
             Argument::that(static fn (array $context): bool => ($context['quickpay_payment'] ?? null) instanceof QuickpayPayment &&
                 999999 === $context['quickpay_payment']->id &&
                 1 === \count($context['quickpay_payment']->operations)),
@@ -80,7 +80,7 @@ final class PaymentOperationsActionTest extends TestCase
         $sdkClient->payments()->will(fn (): PaymentsEndpoint => new PaymentsEndpoint($sdkClient->reveal(), Client::configureMapperBuilder(new MapperBuilder())));
 
         $twig = $this->prophesize(Environment::class);
-        $twig->render('@SetonoSyliusQuickpayPlugin/Admin/Order/Show/Payment/_operationsError.html.twig')
+        $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations_error.html.twig')
             ->willReturn('<div>error</div>');
 
         $response = ($this->createAction($sdkClient, $twig))(1);
