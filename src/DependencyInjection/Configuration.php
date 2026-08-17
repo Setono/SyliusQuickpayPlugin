@@ -23,7 +23,7 @@ final class Configuration implements ConfigurationInterface
                     ->addDefaultsIfNotSet()
                     ->children()
                         ->booleanNode('capture')
-                            ->info("Forward the payment's complete transition to Quickpay as a capture")
+                            ->info("Forward the payment's complete transition to Quickpay as a capture (only relevant to payment methods in the authorize capture mode; a payment captured at checkout is left alone)")
                             ->defaultTrue()
                         ->end()
                         ->booleanNode('refund')

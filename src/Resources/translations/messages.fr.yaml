@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Facultatif : l''ID de l''accord utilisé pour la fenêtre de paiement'
                 payment_methods: 'Méthodes de paiement'
                 payment_methods_help: 'Liste séparée par des virgules des méthodes de paiement proposées dans la fenêtre de paiement — voir la <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">documentation Quickpay</a>'
-                auto_capture: 'Capture automatique'
-                auto_capture_help: 'Capturer le paiement automatiquement juste après l''autorisation — pratique pour les produits numériques'
+                capture_mode: 'Moment de la capture'
+                capture_mode_help: 'Quand l''argent est prélevé. « À la finalisation » se contente d''autoriser le paiement lors de la commande et le capture lorsque le paiement est finalisé dans Sylius (par ex. à l''expédition de la commande) — le réglage par défaut, et ce dont ont besoin les boutiques qui ne peuvent pas capturer avant l''expédition. « Immédiatement » laisse Quickpay capturer dès que la carte est autorisée — pratique pour les produits numériques'
+                capture_mode_option:
+                    on_completion: 'À la finalisation — autoriser lors de la commande, capturer lorsque le paiement est finalisé'
+                    immediately: 'Immédiatement — capturer lors de la commande'
                 synchronized: 'Opérations synchrones'
                 synchronized_help: 'Exécuter la capture, le remboursement et l''annulation de manière synchrone au lieu de s''appuyer sur le callback Quickpay'
                 order_prefix: 'Préfixe de commande'

@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Valgfrit: aftale-id''et der bruges til betalingsvinduet'
                 payment_methods: 'Betalingsmetoder'
                 payment_methods_help: 'Kommasepareret liste af betalingsmetoder i betalingsvinduet — se <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-dokumentationen</a>'
-                auto_capture: 'Auto capture'
-                auto_capture_help: 'Hæv betalingen automatisk umiddelbart efter autorisation — praktisk til digitale produkter'
+                capture_mode: 'Hævningstidspunkt'
+                capture_mode_help: 'Hvornår pengene hæves. "Ved gennemførelse" reserverer kun beløbet ved checkout og hæver det, når betalingen gennemføres i Sylius (fx når ordren afsendes) — standarden, og det butikker der ikke må hæve før afsendelse har brug for. "Straks" lader Quickpay hæve beløbet i det øjeblik kortet autoriseres — praktisk til digitale produkter'
+                capture_mode_option:
+                    on_completion: 'Ved gennemførelse — reservér ved checkout, hæv når betalingen gennemføres'
+                    immediately: 'Straks — hæv ved checkout'
                 synchronized: 'Synkrone operationer'
                 synchronized_help: 'Udfør capture, refund og cancel synkront i stedet for at afvente Quickpay-callbacket'
                 order_prefix: 'Ordrepræfiks'

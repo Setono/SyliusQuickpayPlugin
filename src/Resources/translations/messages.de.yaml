@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Optional: die für das Zahlungsfenster verwendete Vereinbarungs-ID'
                 payment_methods: 'Zahlungsarten'
                 payment_methods_help: 'Kommagetrennte Liste der im Zahlungsfenster angebotenen Zahlungsarten — siehe die <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-Dokumentation</a>'
-                auto_capture: 'Automatische Erfassung'
-                auto_capture_help: 'Die Zahlung direkt nach der Autorisierung automatisch erfassen — praktisch für digitale Produkte'
+                capture_mode: 'Zeitpunkt der Belastung'
+                capture_mode_help: 'Wann das Geld eingezogen wird. "Bei Abschluss" autorisiert die Zahlung beim Checkout nur und zieht sie ein, wenn die Zahlung in Sylius abgeschlossen wird (z. B. beim Versand der Bestellung) — der Standard, und was Shops benötigen, die vor dem Versand nicht einziehen dürfen. "Sofort" lässt Quickpay einziehen, sobald die Karte autorisiert ist — praktisch für digitale Produkte'
+                capture_mode_option:
+                    on_completion: 'Bei Abschluss — beim Checkout autorisieren, bei Abschluss der Zahlung einziehen'
+                    immediately: 'Sofort — beim Checkout einziehen'
                 synchronized: 'Synchrone Vorgänge'
                 synchronized_help: 'Erfassung, Erstattung und Stornierung synchron ausführen, statt auf den Quickpay-Callback zu warten'
                 order_prefix: 'Bestellpräfix'

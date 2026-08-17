@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Opcjonalne: ID umowy używane dla okna płatności'
                 payment_methods: 'Metody płatności'
                 payment_methods_help: 'Rozdzielona przecinkami lista metod płatności oferowanych w oknie płatności — zobacz <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">dokumentację Quickpay</a>'
-                auto_capture: 'Automatyczne pobranie'
-                auto_capture_help: 'Pobierz płatność automatycznie zaraz po autoryzacji — przydatne dla produktów cyfrowych'
+                capture_mode: 'Moment pobrania środków'
+                capture_mode_help: 'Kiedy pobierane są pieniądze. "Przy zakończeniu" jedynie autoryzuje płatność w kasie i pobiera środki, gdy płatność zostanie zakończona w Sylius (np. przy wysyłce zamówienia) — ustawienie domyślne, i to, czego potrzebują sklepy, które nie mogą pobierać środków przed wysyłką. "Natychmiast" pozwala Quickpay pobrać środki w chwili autoryzacji karty — przydatne dla produktów cyfrowych'
+                capture_mode_option:
+                    on_completion: 'Przy zakończeniu — autoryzuj w kasie, pobierz środki po zakończeniu płatności'
+                    immediately: 'Natychmiast — pobierz środki w kasie'
                 synchronized: 'Operacje synchroniczne'
                 synchronized_help: 'Wykonuj pobranie, zwrot i anulowanie synchronicznie zamiast polegać na callbacku Quickpay'
                 order_prefix: 'Prefiks zamówienia'

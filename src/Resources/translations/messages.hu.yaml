@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Opcionális: a fizetési ablakhoz használt megállapodás azonosító'
                 payment_methods: 'Fizetési módok'
                 payment_methods_help: 'A fizetési ablakban kínált fizetési módok vesszővel elválasztott listája — lásd a <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay dokumentációt</a>'
-                auto_capture: 'Automatikus terhelés'
-                auto_capture_help: 'A fizetés automatikus terhelése közvetlenül az engedélyezés után — digitális termékekhez hasznos'
+                capture_mode: 'Terhelés időpontja'
+                capture_mode_help: 'Mikor kerül levonásra az összeg. A "Befejezéskor" a pénztárban csak engedélyezteti a fizetést, és akkor vonja le, amikor a fizetés a Syliusban befejeződik (pl. a rendelés feladásakor) — ez az alapértelmezés, és erre van szükségük azoknak a boltoknak, amelyek a feladás előtt nem terhelhetnek. Az "Azonnal" hagyja, hogy a Quickpay a kártya engedélyezésének pillanatában terheljen — digitális termékekhez hasznos'
+                capture_mode_option:
+                    on_completion: 'Befejezéskor — engedélyeztetés a pénztárban, terhelés a fizetés befejezésekor'
+                    immediately: 'Azonnal — terhelés a pénztárban'
                 synchronized: 'Szinkron műveletek'
                 synchronized_help: 'A terhelés, visszatérítés és törlés szinkron végrehajtása a Quickpay-visszahívásra való támaszkodás helyett'
                 order_prefix: 'Rendelési előtag'

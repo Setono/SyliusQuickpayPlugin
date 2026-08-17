@@ -133,10 +133,13 @@ passed to the processor as container parameters).
 ### Gateway config & language
 - `Form/Type/GatewayConfigurationType` is the admin form for the gateway (tagged
   `sylius.gateway_configuration_type` type `quickpay`). Every field carries a translated `help` text
-  (16 locales in `Resources/translations/`); `auto_capture` is a checkbox whose model transformer keeps
-  the stored `0`/`1` int shape, and a `PRE_SET_DATA` listener migrates configs stored under the pre-2.0
-  option names (`apikey`/`privatekey`/`agreement` → `api_key`/`private_key`/`agreement_id`, the last
-  normalized to int/null for the integer field). The `api_key` carries a `QuickpayCredentials` constraint
+  (16 locales in `Resources/translations/`). The **capture mode** field is Sylius core's `use_authorize`
+  option rendered as a choice (`true` = authorize at checkout, capture on the payment's `complete`
+  transition — the default; `false` = Sylius executes `Capture`, Quickpay captures at authorization);
+  the deprecated `auto_capture` gateway option is never written. A `PRE_SET_DATA` listener migrates
+  configs stored under the pre-2.0 option names (`apikey`/`privatekey`/`agreement` →
+  `api_key`/`private_key`/`agreement_id`, the last normalized to int/null for the integer field) and folds
+  a stored `auto_capture` into `use_authorize` (enabled → `false`). The `api_key` carries a `QuickpayCredentials` constraint
   (sylius group) whose validator pings Quickpay via `Quickpay/ClientFactory` (symfony/http-client
   capped at 5s) — an explicit 401/403 raises a violation, anything else fails open.
   Sylius' admin form theme ignores Symfony's `help_html` option, so the

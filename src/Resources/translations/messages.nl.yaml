@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Optioneel: de overeenkomst-id voor het betaalvenster'
                 payment_methods: 'Betaalmethoden'
                 payment_methods_help: 'Kommagescheiden lijst van betaalmethoden in het betaalvenster — zie de <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-documentatie</a>'
-                auto_capture: 'Automatische capture'
-                auto_capture_help: 'De betaling direct na autorisatie automatisch innen — handig voor digitale producten'
+                capture_mode: 'Moment van incasso'
+                capture_mode_help: 'Wanneer het geld wordt geïncasseerd. "Bij afronding" autoriseert de betaling alleen bij het afrekenen en incasseert wanneer de betaling in Sylius wordt afgerond (bijv. bij verzending van de bestelling) — de standaard, en wat winkels nodig hebben die niet vóór verzending mogen incasseren. "Direct" laat Quickpay incasseren zodra de kaart is geautoriseerd — handig voor digitale producten'
+                capture_mode_option:
+                    on_completion: 'Bij afronding — autoriseren bij afrekenen, incasseren bij afronding van de betaling'
+                    immediately: 'Direct — incasseren bij afrekenen'
                 synchronized: 'Synchrone bewerkingen'
                 synchronized_help: 'Voer capture, terugbetaling en annulering synchroon uit in plaats van te vertrouwen op de Quickpay-callback'
                 order_prefix: 'Voorvoegsel bestelnummer'

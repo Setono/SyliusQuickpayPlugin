@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Valfritt: avtals-id som används för betalningsfönstret'
                 payment_methods: 'Betalningsmetoder'
                 payment_methods_help: 'Kommaseparerad lista över betalningsmetoder i betalningsfönstret — se <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-dokumentationen</a>'
-                auto_capture: 'Automatisk debitering'
-                auto_capture_help: 'Debitera betalningen automatiskt direkt efter auktorisation — praktiskt för digitala produkter'
+                capture_mode: 'Tidpunkt för debitering'
+                capture_mode_help: 'När pengarna dras. "Vid slutförande" auktoriserar bara betalningen i kassan och drar beloppet när betalningen slutförs i Sylius (t.ex. när ordern skickas) — standardvalet, och det butiker som inte får debitera före leverans behöver. "Direkt" låter Quickpay dra beloppet så snart kortet auktoriseras — praktiskt för digitala produkter'
+                capture_mode_option:
+                    on_completion: 'Vid slutförande — auktorisera i kassan, debitera när betalningen slutförs'
+                    immediately: 'Direkt — debitera i kassan'
                 synchronized: 'Synkrona operationer'
                 synchronized_help: 'Utför debitering, återbetalning och annullering synkront i stället för att förlita sig på Quickpay-callbacket'
                 order_prefix: 'Orderprefix'

@@ -12,8 +12,11 @@ setono_sylius_quickpay:
                 agreement_id_help: 'Facoltativo: l''ID accordo usato per la finestra di pagamento'
                 payment_methods: 'Metodi di pagamento'
                 payment_methods_help: 'Elenco separato da virgole dei metodi di pagamento offerti nella finestra di pagamento — vedi la <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">documentazione Quickpay</a>'
-                auto_capture: 'Cattura automatica'
-                auto_capture_help: 'Cattura il pagamento automaticamente subito dopo l''autorizzazione — utile per i prodotti digitali'
+                capture_mode: 'Momento dell''addebito'
+                capture_mode_help: 'Quando viene prelevato il denaro. "Al completamento" autorizza soltanto il pagamento al checkout e lo addebita quando il pagamento viene completato in Sylius (ad es. alla spedizione dell''ordine) — l''impostazione predefinita, e ciò di cui hanno bisogno i negozi che non possono addebitare prima della spedizione. "Immediatamente" lascia che Quickpay addebiti non appena la carta è autorizzata — utile per i prodotti digitali'
+                capture_mode_option:
+                    on_completion: 'Al completamento — autorizza al checkout, addebita quando il pagamento viene completato'
+                    immediately: 'Immediatamente — addebita al checkout'
                 synchronized: 'Operazioni sincrone'
                 synchronized_help: 'Esegui cattura, rimborso e annullamento in modo sincrono invece di affidarti al callback di Quickpay'
                 order_prefix: 'Prefisso ordine'
