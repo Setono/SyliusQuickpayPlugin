@@ -8,6 +8,7 @@ use Doctrine\Common\Collections\Collection;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\ApiAwareInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
+use Payum\Core\Exception\LogicException;
 use Payum\Core\Exception\RequestNotSupportedException;
 use Payum\Core\GatewayAwareInterface;
 use Payum\Core\GatewayAwareTrait;
@@ -58,7 +59,6 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
 
         $details = ArrayObject::ensureArrayObject($payumPayment->getDetails());
         $details['amount'] = $payumPayment->getTotalAmount();
-        $details['currency'] = $payumPayment->getCurrencyCode();
 
         $token = $request->getToken();
         Assert::notNull($token);
@@ -103,11 +103,44 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
 
             $details['quickpayPaymentId'] = $quickpayPayment->id;
             $details['order_id'] = $quickpayPayment->orderId;
+            $details['currency'] = $currency;
+        } else {
+            self::assertCurrencyUnchanged($details, $payumPayment->getCurrencyCode());
         }
 
-        $details['continue_url'] = $details['cancel_url'] = $token->getAfterUrl();
+        // The customer comes back to the token's TARGET url, not its after url: that re-executes the
+        // Authorize/Capture that sent them out, which finishes the job (or finds it done) the moment
+        // they are back — Payum's return-trip convention, and what the gateway library expects. A
+        // cancel skips straight to the after url: nothing was done, so there is nothing to finish.
+        $details['continue_url'] = $token->getTargetUrl();
+        $details['cancel_url'] = $token->getAfterUrl();
 
         $request->setResult((array) $details);
+    }
+
+    /**
+     * A Quickpay payment is created in one currency and cannot change it, so a Payum payment whose
+     * currency drifts afterwards must not silently re-label the details while Quickpay keeps charging
+     * in the original one. Mirrors the gateway library's own convert action.
+     */
+    private static function assertCurrencyUnchanged(ArrayObject $details, mixed $currency): void
+    {
+        if (!is_string($currency) || '' === $currency) {
+            return;
+        }
+
+        $stored = $details['currency'] ?? null;
+
+        if (is_string($stored) && '' !== $stored && $stored !== $currency) {
+            throw new LogicException(sprintf(
+                'The Quickpay payment %s was created in %s, but the Payum payment now says %s. A Quickpay payment cannot change currency — cancel it and convert a new payment instead.',
+                is_scalar($details['quickpayPaymentId']) ? (string) $details['quickpayPaymentId'] : '(unknown)',
+                $stored,
+                $currency,
+            ));
+        }
+
+        $details['currency'] = $currency;
     }
 
     private function getRelatedOrder(TokenInterface $token): OrderInterface
