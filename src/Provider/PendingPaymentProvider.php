@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Provider;
 
 use Doctrine\Persistence\ManagerRegistry;
 use Setono\Doctrine\ORMTrait;
+use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Sylius\Component\Core\Model\PaymentInterface;
 
 final class PendingPaymentProvider implements PendingPaymentProviderInterface
@@ -34,7 +35,7 @@ final class PendingPaymentProvider implements PendingPaymentProviderInterface
             ->andWhere('payment.state IN (:states)')
             ->andWhere('payment.createdAt >= :createdSince')
             ->orderBy('payment.id', 'ASC')
-            ->setParameter('factoryName', 'quickpay')
+            ->setParameter('factoryName', QuickpayGatewayFactory::NAME)
             ->setParameter('states', [
                 PaymentInterface::STATE_NEW,
                 PaymentInterface::STATE_PROCESSING,

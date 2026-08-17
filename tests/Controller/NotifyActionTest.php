@@ -8,6 +8,7 @@ use Payum\Core\Payum;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
+use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProvider;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
@@ -104,7 +105,7 @@ final class NotifyActionTest extends TestCase
         }
 
         $repository = $this->prophesize(RepositoryInterface::class);
-        $repository->findBy(['factoryName' => 'quickpay'])->willReturn($gatewayConfigs);
+        $repository->findBy(['factoryName' => QuickpayGatewayFactory::NAME])->willReturn($gatewayConfigs);
 
         return $repository->reveal();
     }

@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Controller;
 
 use Payum\Core\Payum;
 use Payum\Core\Request\Notify;
+use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface;
@@ -106,7 +107,7 @@ final class NotifyAction
         $candidates = [];
 
         /** @var GatewayConfigInterface $gatewayConfig */
-        foreach ($this->gatewayConfigRepository->findBy(['factoryName' => 'quickpay']) as $gatewayConfig) {
+        foreach ($this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME]) as $gatewayConfig) {
             $prefix = $gatewayConfig->getConfig()['order_prefix'] ?? null;
             if (is_string($prefix) && '' !== $prefix && str_starts_with($orderId, $prefix)) {
                 $candidates[] = substr($orderId, \strlen($prefix));
