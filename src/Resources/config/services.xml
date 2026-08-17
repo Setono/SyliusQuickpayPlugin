@@ -60,11 +60,13 @@
         <service id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider"/>
 
-        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentLinkExtension">
+        <!-- Twig -->
+        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentExtension">
             <tag name="twig.extension"/>
         </service>
 
-        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentLinkRuntime">
+        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentRuntime">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProviderInterface"/>
 
             <tag name="twig.runtime"/>
@@ -155,15 +157,6 @@
         <service id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider"/>
 
-        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentMethodLogoExtension">
-            <tag name="twig.extension"/>
-        </service>
-
-        <service id="Setono\SyliusQuickpayPlugin\Twig\PaymentMethodLogoRuntime">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProviderInterface"/>
-
-            <tag name="twig.runtime"/>
-        </service>
 
         <!-- Guesser -->
         <service id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser">
