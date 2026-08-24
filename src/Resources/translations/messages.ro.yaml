@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Cheie privată'
                 private_key_help: 'Cheia privată a contului tău (Setări → Integrare în managerul Quickpay)'
                 agreement_id: 'ID acord'
-                agreement_id_help: 'Opțional: ID-ul acordului folosit pentru fereastra de plată'
+                agreement_id_help: 'Opțional: ce acord folosește fereastra de plată. Lăsați gol pentru a folosi acordul implicit al ferestrei de plată din contul Quickpay — completați doar dacă contul are mai multe acorduri și fereastra trebuie să folosească unul anume'
                 payment_methods: 'Metode de plată'
                 payment_methods_help: 'Listă separată prin virgulă a metodelor de plată oferite în fereastra de plată — vezi <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">documentația Quickpay</a>'
                 capture_mode: 'Momentul încasării'

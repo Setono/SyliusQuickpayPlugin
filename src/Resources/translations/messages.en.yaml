@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Private key'
                 private_key_help: 'The private key of your merchant account (Settings → Integration in the Quickpay manager)'
                 agreement_id: 'Agreement id'
-                agreement_id_help: 'Optional: the agreement id used for the payment window'
+                agreement_id_help: 'Optional: which agreement the payment window runs on. Leave empty to use your Quickpay account''s default Payment Window agreement — set it only if your account has several agreements and the window should use a specific one'
                 payment_methods: 'Payment methods'
                 payment_methods_help: 'Comma-separated list of payment methods to offer in the payment window — see the <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay documentation</a>'
                 capture_mode: 'Capture mode'

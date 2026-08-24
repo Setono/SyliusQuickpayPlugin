@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Приватний ключ'
                 private_key_help: 'Приватний ключ вашого облікового запису (Налаштування → Інтеграція в менеджері Quickpay)'
                 agreement_id: 'ID угоди'
-                agreement_id_help: 'Необов''язково: ID угоди для платіжного вікна'
+                agreement_id_help: 'Необов''язково: яку угоду використовує платіжне вікно. Залиште порожнім, щоб використовувати стандартну угоду платіжного вікна вашого облікового запису Quickpay — заповнюйте лише тоді, коли обліковий запис має кілька угод і вікно має використовувати конкретну'
                 payment_methods: 'Способи оплати'
                 payment_methods_help: 'Розділений комами список способів оплати у платіжному вікні — див. <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">документацію Quickpay</a>'
                 capture_mode: 'Момент списання коштів'
