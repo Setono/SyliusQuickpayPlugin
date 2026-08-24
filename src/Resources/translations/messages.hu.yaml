@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Még nincsenek műveletek'
         balance: 'Terhelt egyenleg'
         test_mode: 'Tesztmód'
+        fraud_suspected: 'Csalásgyanú'
         payment_link: 'Fizetési link'
         payment_link_help: 'Bárki, aki rendelkezik ezzel a linkkel, kifizetheti a rendelést a Quickpay fizetési ablakában — küldje el a vevőnek telefonos vagy számlás rendelés beszedéséhez, vagy megszakított fizetés után.'
         copy: 'Másolás'

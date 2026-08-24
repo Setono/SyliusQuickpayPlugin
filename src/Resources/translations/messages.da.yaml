@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Ingen operationer endnu'
         balance: 'Hævet saldo'
         test_mode: 'Testtilstand'
+        fraud_suspected: 'Mistanke om svindel'
         payment_link: 'Betalingslink'
         payment_link_help: 'Alle med dette link kan betale ordren i Quickpays betalingsvindue — send det til kunden for at opkræve betaling for en telefon- eller fakturaordre, eller efter en afbrudt checkout.'
         copy: 'Kopiér'

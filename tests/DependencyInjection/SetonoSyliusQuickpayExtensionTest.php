@@ -28,6 +28,7 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
         $this->assertContainerBuilderHasParameter('setono_sylius_quickpay.operations.capture', true);
         $this->assertContainerBuilderHasParameter('setono_sylius_quickpay.operations.refund', true);
         $this->assertContainerBuilderHasParameter('setono_sylius_quickpay.operations.cancel', true);
+        $this->assertContainerBuilderHasParameter('setono_sylius_quickpay.fraud.block_capture', false);
     }
 
     /**

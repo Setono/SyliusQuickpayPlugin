@@ -9,13 +9,18 @@ use Payum\Core\Exception\ExceptionInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\GetHumanStatus;
 use Setono\Doctrine\ORMTrait;
+use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Exception\QuickpayException;
+use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
+use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -36,10 +41,15 @@ final class ReconcilePaymentsCommand extends Command
 {
     use ORMTrait;
 
+    /**
+     * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
+     */
     public function __construct(
         private readonly PendingPaymentProviderInterface $pendingPaymentProvider,
         private readonly Payum $payum,
         private readonly StateMachineInterface $stateMachine,
+        private readonly ClientFactoryInterface $clientFactory,
+        private readonly RepositoryInterface $gatewayConfigRepository,
         ManagerRegistry $managerRegistry,
     ) {
         parent::__construct();
@@ -53,6 +63,7 @@ final class ReconcilePaymentsCommand extends Command
             ->addOption('since', null, InputOption::VALUE_REQUIRED, 'Only reconcile payments created within this period', '7 days')
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Maximum number of payments to check', '100')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report what would happen without applying any transition')
+            ->addOption('fraud-suspected', null, InputOption::VALUE_NONE, 'Report the payments Quickpay flags as fraud suspected instead of reconciling; no transition is applied')
         ;
     }
 
@@ -73,6 +84,10 @@ final class ReconcilePaymentsCommand extends Command
 
         $limit = (int) $input->getOption('limit');
         $dryRun = (bool) $input->getOption('dry-run');
+
+        if (true === $input->getOption('fraud-suspected')) {
+            return $this->reportFraudSuspected($io, $createdSince, $limit);
+        }
 
         $checked = $transitioned = $unchanged = $errored = 0;
 
@@ -117,6 +132,61 @@ final class ReconcilePaymentsCommand extends Command
         ));
 
         return $errored > 0 ? Command::FAILURE : Command::SUCCESS;
+    }
+
+    /**
+     * Unlike reconciliation, which walks the local pending payments, this asks Quickpay directly:
+     * every configured Quickpay gateway is queried for payments flagged fraud suspected within the
+     * period, regardless of their local state. Report only — nothing is transitioned or persisted.
+     */
+    private function reportFraudSuspected(SymfonyStyle $io, \DateTimeImmutable $createdSince, int $limit): int
+    {
+        $rows = [];
+        $errored = false;
+
+        /** @var GatewayConfigInterface $gatewayConfig */
+        foreach ($this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME]) as $gatewayConfig) {
+            $apiKey = ApiKeyResolver::fromGatewayConfig($gatewayConfig->getConfig());
+            if (null === $apiKey) {
+                continue;
+            }
+
+            try {
+                $payments = $this->clientFactory->create($apiKey)->payments()->paginate(new PaymentsQuery(
+                    minTime: $createdSince,
+                    fraudSuspected: true,
+                    sortBy: 'created_at',
+                    sortDir: 'desc',
+                ));
+
+                foreach ($payments as $payment) {
+                    $rows[] = [
+                        (string) $gatewayConfig->getGatewayName(),
+                        (string) $payment->id,
+                        $payment->orderId,
+                        $payment->state,
+                        $payment->createdAt?->format('Y-m-d H:i:s') ?? '',
+                        $payment->testMode ? 'yes' : 'no',
+                    ];
+
+                    if (\count($rows) >= $limit) {
+                        break 2;
+                    }
+                }
+            } catch (QuickpayException $e) {
+                $errored = true;
+                $io->warning(sprintf('Gateway "%s": %s', (string) $gatewayConfig->getGatewayName(), $e->getMessage()));
+            }
+        }
+
+        if ([] === $rows) {
+            $io->success('Quickpay reports no fraud suspected payments in the period.');
+        } else {
+            $io->table(['Gateway', 'Quickpay id', 'Order id', 'State', 'Created', 'Test mode'], $rows);
+            $io->warning(sprintf('%d payment(s) flagged as fraud suspected. Review them in the Quickpay manager before capturing.', \count($rows)));
+        }
+
+        return $errored ? Command::FAILURE : Command::SUCCESS;
     }
 
     private static function resolveGatewayName(PaymentInterface $payment): string

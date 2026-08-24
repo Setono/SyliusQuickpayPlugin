@@ -38,4 +38,7 @@
     {% if quickpay_payment.testMode %}
         <span class="ui tiny orange label">{{ 'setono_sylius_quickpay.ui.test_mode'|trans }}</span>
     {% endif %}
+    {% if quickpay_payment.metadata is not null and quickpay_payment.metadata.fraudSuspected %}
+        <span class="ui tiny red label">{{ 'setono_sylius_quickpay.ui.fraud_suspected'|trans }}</span>
+    {% endif %}
 </div>
