@@ -111,6 +111,36 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
     /**
      * @test
      */
+    public function it_prepends_a_named_lock_resource(): void
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class() extends Extension {
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return 'framework';
+            }
+        });
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([
+            [
+                'lock' => [
+                    'resources' => [
+                        'setono_sylius_quickpay' => ['flock'],
+                    ],
+                ],
+            ],
+        ], $container->getExtensionConfig('framework'));
+    }
+
+    /**
+     * @test
+     */
     public function it_prepends_the_payment_link_email(): void
     {
         $container = new ContainerBuilder();

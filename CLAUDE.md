@@ -93,6 +93,18 @@ defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolv
   `NotifyAction` handles: it validates the `QuickPay-Checksum-Sha256` HMAC against the gateway `private_key` and
   dispatches `ConfirmPayment`.
 
+- `Payum/Extension/NotifyIdempotencyExtension` (tagged `payum.extension factory="quickpay"`, so it runs on
+  every Quickpay gateway execute) serializes concurrent notify handling per payment: it matches the
+  post-rewrap `Notify` whose model is the details array — the one shape both entry points (the per-payment
+  Payum token endpoint and the shared endpoint above) funnel through exactly once — and takes a
+  non-blocking Symfony lock keyed on `quickpayPaymentId`. The lock comes from the named
+  `framework.lock` resource `setono_sylius_quickpay` that `SetonoSyliusQuickpayExtension::prepend()`
+  registers (default `flock`; service `lock.setono_sylius_quickpay.factory`; the README shows the
+  multi-server override — apps redefine the resource, since framework.lock resources replace rather
+  than merge). An in-flight duplicate is resolved to a no-op action, so the controller still answers 2xx and
+  Quickpay stops retrying without anything being processed twice; a broken lock store fails open (the
+  callback is handled unguarded).
+
 The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
 `Controller/Admin/PaymentOperationsAction` (route `setono_sylius_quickpay_admin_payment_operations`,
