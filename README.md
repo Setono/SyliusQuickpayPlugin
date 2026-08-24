@@ -299,6 +299,24 @@ composer check-style   # coding standards
 For manual testing, use the credit card numbers from the
 [Quickpay test data](https://learn.quickpay.net/tech-talk/appendixes/test/#test-data).
 
+## Checking your configuration
+
+The plugin ships a doctor that runs the checks otherwise surfacing as support cases — try it first
+when something misbehaves, and after every configuration change:
+
+```bash
+bin/console setono:sylius-quickpay:doctor          # read-only
+bin/console setono:sylius-quickpay:doctor --live   # also probes the payment link permission
+```
+
+For every configured Quickpay gateway it verifies the api key against Quickpay, self-tests the private
+key's checksum computation, checks that a configured agreement id exists on the account, and validates
+the order prefix length — plus, across gateways, that no two share a prefix, and that the notify route
+is registered at all. With `--live` it also creates a money-less test payment and attempts the payment
+link `PUT` the checkout depends on, catching a missing *Create or update payment link* permission before
+a customer does (the test payment remains visible on the account; it never carries money). The command
+exits non-zero when any check fails, so it can run in CI or cron.
+
 ## Upgrading from 1.x
 
 See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the full list of changes an upgrading store has to make —
@@ -306,6 +324,8 @@ gateway configuration keys, removed imports, renamed routes and classes, the Kla
 behavioral changes around refunds and callbacks.
 
 ## Troubleshooting
+
+Run [the doctor](#checking-your-configuration) first — it detects every case below.
 
 - `Not authorized: Not authorized to PUT /payments/:id/link`
   at a `/payment/authorize/...` url:

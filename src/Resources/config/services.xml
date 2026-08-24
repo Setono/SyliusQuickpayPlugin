@@ -86,6 +86,14 @@
         </service>
 
         <!-- Command -->
+        <service id="Setono\SyliusQuickpayPlugin\Command\DoctorCommand">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>
+            <argument type="service" id="sylius.repository.gateway_config"/>
+            <argument type="service" id="router"/>
+
+            <tag name="console.command"/>
+        </service>
+
         <service id="Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"/>
             <argument type="service" id="payum"/>
