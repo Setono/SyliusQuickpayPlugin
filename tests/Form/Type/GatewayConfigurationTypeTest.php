@@ -7,10 +7,10 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Form\Type;
 use Nyholm\Psr7\Response;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
-use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType;
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormExtensionInterface;
@@ -32,17 +32,11 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
      */
     protected function getExtensions(): array
     {
-        $client = $this->prophesize(ClientInterface::class);
-        $client->ping()->willReturn(true);
+        $apiKeyVerifier = $this->prophesize(ApiKeyVerifierInterface::class);
+        $apiKeyVerifier->verify(Argument::type('string'))->willReturn(ApiKeyVerification::ViaPing);
+        $apiKeyVerifier->verify('rejected-api-key')->willThrow(new UnauthorizedException(new Response(401)));
 
-        $rejectingClient = $this->prophesize(ClientInterface::class);
-        $rejectingClient->ping()->willThrow(new UnauthorizedException(new Response(401)));
-
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory->create(Argument::type('string'))->willReturn($client);
-        $clientFactory->create('rejected-api-key')->willReturn($rejectingClient);
-
-        $credentialsValidator = new QuickpayCredentialsValidator($clientFactory->reveal());
+        $credentialsValidator = new QuickpayCredentialsValidator($apiKeyVerifier->reveal());
 
         $validator = Validation::createValidatorBuilder()
             ->setConstraintValidatorFactory(new class($credentialsValidator) implements ConstraintValidatorFactoryInterface {

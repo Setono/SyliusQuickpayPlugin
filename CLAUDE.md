@@ -116,7 +116,8 @@ inline retry notice (HTTP 502). The controller resolves the api key from the pay
 config and fetches via `Quickpay/ClientFactory`.
 
 `Command/DoctorCommand` (`setono:sylius-quickpay:doctor`) machine-checks the README's Troubleshooting
-section per configured gateway: api key ping, private key HMAC self-test (`CallbackValidator`), agreement
+section per configured gateway: api key (via the shared `Quickpay/ApiKeyVerifier` ping-then-payments
+probe), private key HMAC self-test (`CallbackValidator`), agreement
 existence (`GET agreements/{id}`, failing open on permission errors), order prefix length + cross-gateway
 uniqueness, and notify-route registration; `--live` creates a money-less test payment and attempts the
 link PUT to surface the missing-permission 403. Non-zero exit on any failed check; warnings don't fail.
@@ -195,8 +196,11 @@ in that folder) and need `assets:install` in the host app.
   configs stored under the pre-2.0 option names (`apikey`/`privatekey`/`agreement` →
   `api_key`/`private_key`/`agreement_id`, the last normalized to int/null for the integer field) and folds
   a stored `auto_capture` into `use_authorize` (enabled → `false`). The `api_key` carries a `QuickpayCredentials` constraint
-  (sylius group) whose validator pings Quickpay via `Quickpay/ClientFactory` (symfony/http-client
-  capped at 5s) — an explicit 401/403 raises a violation, anything else fails open.
+  (sylius group) whose validator verifies the key through `Quickpay/ApiKeyVerifier` (shared with the
+  doctor command; backed by `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first,
+  falling back to a one-item `/payments` read because Quickpay answers 401 on `/ping` both for an
+  invalid key and for a valid key whose api user lacks the `/ping` permission (verified live) — an
+  explicit 401/403 from the probe raises a violation, anything else fails open.
   Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/form/theme.html.twig`, scoped to that field's block prefix and registered by

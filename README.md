@@ -122,10 +122,11 @@ out the gateway configuration:
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
 | Branding id | *(optional)* The payment window branding to use |
 
-When you save the payment method, the plugin verifies the API key against Quickpay's API (a lightweight
-ping) and rejects the form if Quickpay rejects the key — a typo'd key is caught immediately instead of by
-the first customer whose checkout fails. If Quickpay cannot be reached, the check is skipped so an outage
-never blocks saving.
+When you save the payment method, the plugin verifies the API key against Quickpay's API and rejects the
+form if Quickpay rejects the key — a typo'd key is caught immediately instead of by the first customer
+whose checkout fails. A valid key whose API user lacks the `/ping` permission is verified through a
+`/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
+Quickpay — the check fails open on anything but an explicit rejection.
 
 ## How it works
 

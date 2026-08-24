@@ -8,10 +8,10 @@ use Nyholm\Psr7\Response;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
-use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\InternalServerErrorException;
 use Setono\Quickpay\Exception\UnauthorizedException;
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator;
 use Symfony\Component\Validator\Constraints\NotBlank;
@@ -25,20 +25,14 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
 {
     use ProphecyTrait;
 
-    /** @var ObjectProphecy<ClientFactoryInterface> */
-    private ObjectProphecy $clientFactory;
-
-    /** @var ObjectProphecy<ClientInterface> */
-    private ObjectProphecy $client;
+    /** @var ObjectProphecy<ApiKeyVerifierInterface> */
+    private ObjectProphecy $apiKeyVerifier;
 
     protected function createValidator(): QuickpayCredentialsValidator
     {
-        $this->client = $this->prophesize(ClientInterface::class);
+        $this->apiKeyVerifier = $this->prophesize(ApiKeyVerifierInterface::class);
 
-        $this->clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $this->clientFactory->create('the-api-key')->willReturn($this->client);
-
-        return new QuickpayCredentialsValidator($this->clientFactory->reveal());
+        return new QuickpayCredentialsValidator($this->apiKeyVerifier->reveal());
     }
 
     /**
@@ -46,7 +40,22 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
      */
     public function it_accepts_a_key_quickpay_accepts(): void
     {
-        $this->client->ping()->willReturn(true);
+        $this->apiKeyVerifier->verify('the-api-key')->willReturn(ApiKeyVerification::ViaPing);
+
+        $this->validator->validate('the-api-key', new QuickpayCredentials());
+
+        $this->assertNoViolation();
+    }
+
+    /**
+     * A valid key whose api user lacks the /ping permission is verified through /payments and must
+     * not raise a violation (see the verifier and issue #141)
+     *
+     * @test
+     */
+    public function it_accepts_a_key_verified_through_the_payments_fallback(): void
+    {
+        $this->apiKeyVerifier->verify('the-api-key')->willReturn(ApiKeyVerification::ViaPayments);
 
         $this->validator->validate('the-api-key', new QuickpayCredentials());
 
@@ -58,7 +67,7 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
      */
     public function it_raises_a_violation_when_quickpay_rejects_the_key(): void
     {
-        $this->client->ping()->willThrow(new UnauthorizedException(new Response(401)));
+        $this->apiKeyVerifier->verify('the-api-key')->willThrow(new UnauthorizedException(new Response(401)));
 
         $constraint = new QuickpayCredentials();
         $this->validator->validate('the-api-key', $constraint);
@@ -71,7 +80,7 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
      */
     public function it_fails_open_when_quickpay_cannot_be_reached(): void
     {
-        $this->client->ping()->willThrow(new InternalServerErrorException(new Response(500)));
+        $this->apiKeyVerifier->verify('the-api-key')->willThrow(new InternalServerErrorException(new Response(500)));
 
         $this->validator->validate('the-api-key', new QuickpayCredentials());
 
@@ -83,7 +92,7 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
      */
     public function it_ignores_empty_values(): void
     {
-        $this->clientFactory->create(Argument::any())->shouldNotBeCalled();
+        $this->apiKeyVerifier->verify(Argument::any())->shouldNotBeCalled();
 
         $this->validator->validate(null, new QuickpayCredentials());
         $this->validator->validate('', new QuickpayCredentials());
