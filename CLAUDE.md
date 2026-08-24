@@ -15,7 +15,8 @@ state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
 base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@RC`; the SDK is stable, `^1.2`).
-The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
+The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
+BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
 `UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x — keep it
 updated when further 2.x breaks land.
@@ -195,7 +196,9 @@ in that folder) and need `assets:install` in the host app.
   the deprecated `auto_capture` gateway option is never written. A `PRE_SET_DATA` listener migrates
   configs stored under the pre-2.0 option names (`apikey`/`privatekey`/`agreement` →
   `api_key`/`private_key`/`agreement_id`, the last normalized to int/null for the integer field) and folds
-  a stored `auto_capture` into `use_authorize` (enabled → `false`). The `api_key` carries a `QuickpayCredentials` constraint
+  a stored `auto_capture` into `use_authorize` (enabled → `false`). Reading the api key back out of a
+  stored config (old or new name) is `Quickpay/ApiKeyResolver`'s job — the one place that knows the
+  pre-2.0 `apikey` spelling; use it instead of reading the config array directly. The `api_key` carries a `QuickpayCredentials` constraint
   (sylius group) whose validator verifies the key through `Quickpay/ApiKeyVerifier` (shared with the
   doctor command; backed by `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first,
   falling back to a one-item `/payments` read because Quickpay answers 401 on `/ping` both for an

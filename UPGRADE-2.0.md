@@ -10,11 +10,11 @@ gateway-level background; this document covers what a **Sylius shop upgrading th
 
 - Your project needs a PSR-18 HTTP client and PSR-17 factories discoverable by `php-http/discovery`
   (e.g. `composer require symfony/http-client nyholm/psr7`).
-- Until the gateway library has a stable release, allow its pre-release versions in your
-  **root** `composer.json`:
+- Until the plugin's 2.x line and the gateway library have stable releases, allow the pre-release
+  versions in your **root** `composer.json`:
 
   ```bash
-  composer require setono/sylius-quickpay-plugin:^2.0@RC setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
+  composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
   ```
 
 ## Gateway configuration stored in the database
@@ -167,9 +167,10 @@ if you make those and want the store to notice. The README's *Callbacks* section
   badge, the reconciliation command gains a `--fraud-suspected` report mode, and an opt-in
   `fraud.block_capture` config flag skips the automatic capture on completion for fraud suspected
   payments, leaving them for manual review.
-- **New: the API key is verified at form-save time.** Saving a Quickpay payment method pings the
-  Quickpay API with the submitted key and rejects the form when Quickpay rejects it; an unreachable
-  Quickpay skips the check, so an outage never blocks saving.
+- **New: the API key is verified at form-save time.** Saving a Quickpay payment method verifies the
+  submitted key against the Quickpay API and rejects the form when Quickpay rejects it. A valid key
+  whose API user lacks the `/ping` permission is verified through a `/payments` read instead, and an
+  unreachable Quickpay skips the check — neither a locked-down API user nor an outage blocks saving.
 - **New: live operation history on the admin order view.** Each Quickpay payment shows its operations
   (type, amount, status, timestamp), captured balance and test-mode flag, fetched from Quickpay after
   the page has rendered — no storage, no migrations.
