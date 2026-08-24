@@ -159,6 +159,10 @@ if you make those and want the store to notice. The README's *Callbacks* section
 - **New: a reconciliation command.** `setono:sylius-quickpay:reconcile-payments` polls Quickpay for
   payments stuck in a non-final state — e.g. because a callback never arrived — and applies the
   matching payment transition. See the README for options and a suggested cron cadence.
+- **New: a doctor command.** `setono:sylius-quickpay:doctor` verifies every configured gateway —
+  api key, private key self-test, agreement existence, order prefix length and uniqueness, and the
+  notify route — and with `--live` probes the payment link permission. See the README's *Checking
+  your configuration* section.
 - **New: Quickpay's fraud signals are surfaced.** The admin operation history shows a *Fraud suspected*
   badge, the reconciliation command gains a `--fraud-suspected` report mode, and an opt-in
   `fraud.block_capture` config flag skips the automatic capture on completion for fraud suspected
