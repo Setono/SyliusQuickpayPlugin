@@ -9,6 +9,7 @@ use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
@@ -32,7 +33,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     protected function getExtensions(): array
     {
         $apiKeyVerifier = $this->prophesize(ApiKeyVerifierInterface::class);
-        $apiKeyVerifier->verify(Argument::type('string'))->willReturn(true);
+        $apiKeyVerifier->verify(Argument::type('string'))->willReturn(ApiKeyVerification::ViaPing);
         $apiKeyVerifier->verify('rejected-api-key')->willThrow(new UnauthorizedException(new Response(401)));
 
         $credentialsValidator = new QuickpayCredentialsValidator($apiKeyVerifier->reveal());

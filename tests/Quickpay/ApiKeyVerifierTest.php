@@ -10,6 +10,7 @@ use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Exception\InternalServerErrorException;
 use Setono\Quickpay\Exception\UnauthorizedException;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 
@@ -24,7 +25,7 @@ final class ApiKeyVerifierTest extends TestCase
     {
         $verifier = $this->createVerifier(new Response(200, [], '{}'));
 
-        self::assertTrue($verifier->verify('the-api-key'));
+        self::assertSame(ApiKeyVerification::ViaPing, $verifier->verify('the-api-key'));
     }
 
     /**
@@ -40,7 +41,7 @@ final class ApiKeyVerifierTest extends TestCase
             new Response(200, [], '[]'),
         );
 
-        self::assertFalse($verifier->verify('the-api-key'));
+        self::assertSame(ApiKeyVerification::ViaPayments, $verifier->verify('the-api-key'));
     }
 
     /**

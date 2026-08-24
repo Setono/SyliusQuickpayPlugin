@@ -14,20 +14,20 @@ final class ApiKeyVerifier implements ApiKeyVerifierInterface
     {
     }
 
-    public function verify(string $apiKey): bool
+    public function verify(string $apiKey): ApiKeyVerification
     {
         $client = $this->clientFactory->create($apiKey);
 
         try {
             $client->ping();
 
-            return true;
+            return ApiKeyVerification::ViaPing;
         } catch (UnauthorizedException|ForbiddenException) {
             // Either an invalid key or a valid key without the /ping permission — /payments decides
         }
 
         $client->payments()->getPage(new PaymentsQuery(pageSize: 1));
 
-        return false;
+        return ApiKeyVerification::ViaPayments;
     }
 }

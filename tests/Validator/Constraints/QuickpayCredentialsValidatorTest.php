@@ -10,6 +10,7 @@ use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
 use Setono\Quickpay\Exception\InternalServerErrorException;
 use Setono\Quickpay\Exception\UnauthorizedException;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator;
@@ -39,7 +40,7 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
      */
     public function it_accepts_a_key_quickpay_accepts(): void
     {
-        $this->apiKeyVerifier->verify('the-api-key')->willReturn(true);
+        $this->apiKeyVerifier->verify('the-api-key')->willReturn(ApiKeyVerification::ViaPing);
 
         $this->validator->validate('the-api-key', new QuickpayCredentials());
 
@@ -54,7 +55,7 @@ final class QuickpayCredentialsValidatorTest extends ConstraintValidatorTestCase
      */
     public function it_accepts_a_key_verified_through_the_payments_fallback(): void
     {
-        $this->apiKeyVerifier->verify('the-api-key')->willReturn(false);
+        $this->apiKeyVerifier->verify('the-api-key')->willReturn(ApiKeyVerification::ViaPayments);
 
         $this->validator->validate('the-api-key', new QuickpayCredentials());
 
