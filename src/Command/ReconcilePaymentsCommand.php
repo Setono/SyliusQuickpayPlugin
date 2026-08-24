@@ -13,6 +13,7 @@ use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
@@ -145,11 +146,8 @@ final class ReconcilePaymentsCommand extends Command
 
         /** @var GatewayConfigInterface $gatewayConfig */
         foreach ($this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME]) as $gatewayConfig) {
-            $config = $gatewayConfig->getConfig();
-
-            // Configurations written by the 1.x form may still carry the old key
-            $apiKey = $config['api_key'] ?? $config['apikey'] ?? null;
-            if (!is_string($apiKey) || '' === $apiKey) {
+            $apiKey = ApiKeyResolver::fromGatewayConfig($gatewayConfig->getConfig());
+            if (null === $apiKey) {
                 continue;
             }
 

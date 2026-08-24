@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Controller\Admin;
 
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -42,9 +41,14 @@ final class PaymentOperationsAction
             throw new NotFoundHttpException(sprintf('Payment %d has no Quickpay payment id', $id));
         }
 
+        $apiKey = ApiKeyResolver::fromPayment($payment);
+        if (null === $apiKey) {
+            throw new NotFoundHttpException('The payment\'s gateway carries no api key');
+        }
+
         try {
             $quickpayPayment = $this->clientFactory
-                ->create(self::resolveApiKey($payment))
+                ->create($apiKey)
                 ->payments()
                 ->getById((int) $quickpayPaymentId)
             ;
@@ -58,24 +62,5 @@ final class PaymentOperationsAction
         return new Response($this->twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig', [
             'quickpay_payment' => $quickpayPayment,
         ]));
-    }
-
-    private static function resolveApiKey(PaymentInterface $payment): string
-    {
-        /** @var PaymentMethodInterface $method */
-        $method = $payment->getMethod();
-
-        /** @var GatewayConfigInterface $gatewayConfig */
-        $gatewayConfig = $method->getGatewayConfig();
-
-        $config = $gatewayConfig->getConfig();
-
-        // Configurations written by the 1.x form may still carry the old key
-        $apiKey = $config['api_key'] ?? $config['apikey'] ?? null;
-        if (!is_string($apiKey) || '' === $apiKey) {
-            throw new NotFoundHttpException('The payment\'s gateway carries no api key');
-        }
-
-        return $apiKey;
     }
 }

@@ -6,9 +6,10 @@ namespace Setono\SyliusQuickpayPlugin\Fraud;
 
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
+use Setono\Payum\Quickpay\Details;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 
 final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
 {
@@ -20,22 +21,25 @@ final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
 
     public function isFraudSuspected(PaymentInterface $payment): bool
     {
-        $quickpayPaymentId = $payment->getDetails()['quickpayPaymentId'] ?? null;
-        if (!is_numeric($quickpayPaymentId)) {
+        $details = new \ArrayObject($payment->getDetails());
+        if (!Details::hasPaymentId($details)) {
             return false;
         }
 
-        $apiKey = self::resolveApiKey($payment);
+        $apiKey = ApiKeyResolver::fromPayment($payment);
         if (null === $apiKey) {
             return false;
         }
 
         try {
-            $quickpayPayment = $this->clientFactory->create($apiKey)->payments()->getById((int) $quickpayPaymentId);
+            // Details::paymentId() throws for a present but unusable id, which lands in the same
+            // fail-open catch as an unreachable Quickpay: the question cannot be answered
+            $quickpayPaymentId = Details::paymentId($details);
+
+            $quickpayPayment = $this->clientFactory->create($apiKey)->payments()->getById($quickpayPaymentId);
         } catch (\Throwable $e) {
-            // An unreachable Quickpay must not block the payment flow: report the payment as clean
             $this->logger?->warning(sprintf('Could not check the Quickpay payment for suspected fraud: %s', $e->getMessage()), [
-                'quickpayPaymentId' => (int) $quickpayPaymentId,
+                'quickpayPaymentId' => $details['quickpayPaymentId'] ?? null,
                 'paymentId' => $payment->getId(),
             ]);
 
@@ -43,20 +47,5 @@ final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
         }
 
         return true === $quickpayPayment->metadata?->fraudSuspected;
-    }
-
-    private static function resolveApiKey(PaymentInterface $payment): ?string
-    {
-        $method = $payment->getMethod();
-        if (!$method instanceof PaymentMethodInterface) {
-            return null;
-        }
-
-        $config = $method->getGatewayConfig()?->getConfig() ?? [];
-
-        // Configurations written by the 1.x form may still carry the old key
-        $apiKey = $config['api_key'] ?? $config['apikey'] ?? null;
-
-        return is_string($apiKey) && '' !== $apiKey ? $apiKey : null;
     }
 }

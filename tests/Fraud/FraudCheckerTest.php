@@ -96,6 +96,19 @@ final class FraudCheckerTest extends TestCase
     /**
      * @test
      */
+    public function it_fails_open_when_the_details_carry_an_unusable_quickpay_payment_id(): void
+    {
+        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
+        $clientFactory->create(Argument::any())->shouldNotBeCalled();
+
+        $checker = new FraudChecker($clientFactory->reveal());
+
+        self::assertFalse($checker->isFraudSuspected($this->createPayment(details: ['quickpayPaymentId' => 'foo'])));
+    }
+
+    /**
+     * @test
+     */
     public function it_fails_open_when_quickpay_cannot_be_reached(): void
     {
         $checker = new FraudChecker($this->createClientFactory(new Response(500, [], '{"message": "boom"}')));
