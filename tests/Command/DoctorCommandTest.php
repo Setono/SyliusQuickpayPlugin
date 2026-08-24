@@ -11,6 +11,7 @@ use Prophecy\Prophecy\ObjectProphecy;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Client\ClientInterface;
+use Setono\Quickpay\Exception\ForbiddenException;
 use Setono\Quickpay\Exception\NotFoundException;
 use Setono\SyliusQuickpayPlugin\Command\DoctorCommand;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
@@ -262,6 +263,201 @@ final class DoctorCommandTest extends TestCase
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         self::assertStringContainsString('Create or update payment link', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_quickpay_does_not_answer_the_ping(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willThrow(new \RuntimeException('Connection timed out'));
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Quickpay did not answer', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_quickpay_does_not_answer_the_payments_fallback(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+
+        $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
+            new Response(401, [], '{"message": "Invalid API key"}'),
+            new Response(500, [], '{"message": "boom"}'),
+        )));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Quickpay did not answer', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_fails_when_the_configured_agreement_is_not_a_number(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 'not-a-number'])]);
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('agreement id is not a number', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_skips_the_agreement_check_without_a_usable_api_key(): void
+    {
+        $this->configureGateways(['quickpay' => ['private_key' => 'the-private-key', 'agreement_id' => 12345]]);
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('Skipped verifying agreement 12345', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_the_agreement_cannot_be_verified(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 12345])]);
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $client->get('agreements/12345')->willThrow(new ForbiddenException(new Response(403), 'Not authorized'));
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('/agreements permission', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_the_agreement_check_errors(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 12345])]);
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $client->get('agreements/12345')->willThrow(new \RuntimeException('Connection timed out'));
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Could not verify agreement 12345', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_accepts_an_empty_order_prefix(): void
+    {
+        $this->configureGateways(['quickpay' => ['api_key' => 'the-api-key', 'private_key' => 'the-private-key']]);
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('No order prefix configured', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_fails_when_the_api_user_may_not_create_payments(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+
+        $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
+            new Response(200, [], '{}'),
+            new Response(403, [], '{"message": "Not authorized"}'),
+        )));
+
+        $tester = $this->executeCommand(['--live' => true]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('may not create payments', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_the_test_payment_cannot_be_created(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+
+        $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
+            new Response(200, [], '{}'),
+            new Response(500, [], '{"message": "boom"}'),
+        )));
+
+        $tester = $this->executeCommand(['--live' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Could not create a test payment', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_the_link_probe_errors(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+
+        $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
+            new Response(200, [], '{}'),
+            new Response(201, [], (string) json_encode(self::payment())),
+            new Response(500, [], '{"message": "boom"}'),
+            new Response(204, [], ''),
+        )));
+
+        $tester = $this->executeCommand(['--live' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Could not create a payment link', $tester->getDisplay());
+        self::assertStringContainsString('Test payment 999', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_ignores_a_failing_link_cleanup(): void
+    {
+        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+
+        $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
+            new Response(200, [], '{}'),
+            new Response(201, [], (string) json_encode(self::payment())),
+            new Response(200, [], '{"url": "https://payment.quickpay.net/x"}'),
+            new Response(500, [], '{"message": "boom"}'),
+        )));
+
+        $tester = $this->executeCommand(['--live' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('may create payment links', $tester->getDisplay());
     }
 
     /**
