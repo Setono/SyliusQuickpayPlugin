@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Yksityinen avain'
                 private_key_help: 'Tilisi yksityinen avain (Asetukset → Integraatio Quickpay-hallinnassa)'
                 agreement_id: 'Sopimuksen tunnus'
-                agreement_id_help: 'Valinnainen: maksuikkunassa käytettävä sopimustunnus'
+                agreement_id_help: 'Valinnainen: mitä sopimusta maksuikkuna käyttää. Jätä tyhjäksi, jolloin käytetään Quickpay-tilisi maksuikkunan oletussopimusta — täytä vain, jos tililläsi on useita sopimuksia ja ikkunan pitää käyttää tiettyä niistä'
                 payment_methods: 'Maksutavat'
                 payment_methods_help: 'Pilkuin eroteltu lista maksuikkunassa tarjottavista maksutavoista — katso <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpayn dokumentaatio</a>'
                 capture_mode: 'Veloitusajankohta'

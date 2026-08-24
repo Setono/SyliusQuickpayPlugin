@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Privat nøkkel'
                 private_key_help: 'Kontoens private nøkkel (Innstillinger → Integrasjon i Quickpay-manageren)'
                 agreement_id: 'Avtale-id'
-                agreement_id_help: 'Valgfritt: avtale-id-en som brukes for betalingsvinduet'
+                agreement_id_help: 'Valgfritt: hvilken avtale betalingsvinduet kjører på. La feltet stå tomt for å bruke Quickpay-kontoens standardavtale for betalingsvinduet — fyll det bare ut hvis kontoen har flere avtaler og vinduet skal bruke en bestemt'
                 payment_methods: 'Betalingsmetoder'
                 payment_methods_help: 'Kommaseparert liste over betalingsmetoder i betalingsvinduet — se <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-dokumentasjonen</a>'
                 capture_mode: 'Tidspunkt for belastning'

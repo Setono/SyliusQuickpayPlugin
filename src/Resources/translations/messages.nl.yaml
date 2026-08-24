@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Privésleutel'
                 private_key_help: 'De privésleutel van je account (Instellingen → Integratie in de Quickpay-manager)'
                 agreement_id: 'Overeenkomst-id'
-                agreement_id_help: 'Optioneel: de overeenkomst-id voor het betaalvenster'
+                agreement_id_help: 'Optioneel: welke overeenkomst het betaalvenster gebruikt. Laat leeg om de standaard betaalvenster-overeenkomst van uw Quickpay-account te gebruiken — vul dit alleen in als uw account meerdere overeenkomsten heeft en het venster een specifieke moet gebruiken'
                 payment_methods: 'Betaalmethoden'
                 payment_methods_help: 'Kommagescheiden lijst van betaalmethoden in het betaalvenster — zie de <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-documentatie</a>'
                 capture_mode: 'Moment van incasso'

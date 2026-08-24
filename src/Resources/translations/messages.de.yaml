@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Privater Schlüssel'
                 private_key_help: 'Der private Schlüssel Ihres Kontos (Einstellungen → Integration im Quickpay-Manager)'
                 agreement_id: 'Vereinbarungs-ID'
-                agreement_id_help: 'Optional: die für das Zahlungsfenster verwendete Vereinbarungs-ID'
+                agreement_id_help: 'Optional: welche Vereinbarung das Zahlungsfenster verwendet. Leer lassen, um die Standard-Zahlungsfenster-Vereinbarung Ihres Quickpay-Kontos zu verwenden — nur ausfüllen, wenn Ihr Konto mehrere Vereinbarungen hat und das Fenster eine bestimmte verwenden soll'
                 payment_methods: 'Zahlungsarten'
                 payment_methods_help: 'Kommagetrennte Liste der im Zahlungsfenster angebotenen Zahlungsarten — siehe die <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay-Dokumentation</a>'
                 capture_mode: 'Zeitpunkt der Belastung'

@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Soukromý klíč'
                 private_key_help: 'Soukromý klíč vašeho účtu (Nastavení → Integrace v Quickpay manageru)'
                 agreement_id: 'ID smlouvy'
-                agreement_id_help: 'Volitelné: ID smlouvy použité pro platební okno'
+                agreement_id_help: 'Volitelné: která smlouva se použije pro platební okno. Ponechte prázdné, aby se použila výchozí smlouva platebního okna vašeho účtu Quickpay — vyplňte jen tehdy, když má váš účet více smluv a okno má použít konkrétní z nich'
                 payment_methods: 'Platební metody'
                 payment_methods_help: 'Čárkami oddělený seznam platebních metod nabízených v platebním okně — viz <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">dokumentace Quickpay</a>'
                 capture_mode: 'Okamžik stržení platby'

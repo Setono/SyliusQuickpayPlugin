@@ -9,7 +9,7 @@ setono_sylius_quickpay:
                 private_key: 'Privát kulcs'
                 private_key_help: 'A fiókod privát kulcsa (Beállítások → Integráció a Quickpay managerben)'
                 agreement_id: 'Megállapodás azonosító'
-                agreement_id_help: 'Opcionális: a fizetési ablakhoz használt megállapodás azonosító'
+                agreement_id_help: 'Opcionális: melyik megállapodást használja a fizetési ablak. Hagyja üresen, hogy a Quickpay-fiók alapértelmezett fizetésiablak-megállapodása legyen használva — csak akkor töltse ki, ha a fiókhoz több megállapodás tartozik, és az ablaknak egy adottat kell használnia'
                 payment_methods: 'Fizetési módok'
                 payment_methods_help: 'A fizetési ablakban kínált fizetési módok vesszővel elválasztott listája — lásd a <a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">Quickpay dokumentációt</a>'
                 capture_mode: 'Terhelés időpontja'
