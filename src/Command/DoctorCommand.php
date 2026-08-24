@@ -12,8 +12,8 @@ use Setono\Quickpay\Exception\NotFoundException;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Request\Payment\CreateLinkRequest;
 use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
-use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
@@ -49,6 +49,7 @@ final class DoctorCommand extends Command
      */
     public function __construct(
         private readonly ClientFactoryInterface $clientFactory,
+        private readonly ApiKeyVerifierInterface $apiKeyVerifier,
         private readonly RepositoryInterface $gatewayConfigRepository,
         private readonly RouterInterface $router,
     ) {
@@ -164,26 +165,8 @@ final class DoctorCommand extends Command
             return null;
         }
 
-        $client = $this->clientFactory->create($apiKey);
-
         try {
-            $client->ping();
-
-            $this->ok($io, 'The api key is accepted by Quickpay');
-
-            return $client;
-        } catch (UnauthorizedException|ForbiddenException) {
-            // Quickpay answers 401 both for an invalid key and for a valid key whose api user
-            // lacks the /ping permission (verified live), so fall through to a request every
-            // integration needs anyway
-        } catch (\Throwable $e) {
-            $this->warn($io, sprintf('Could not verify the api key, Quickpay did not answer: %s', $e->getMessage()));
-
-            return null;
-        }
-
-        try {
-            $client->payments()->getPage(new PaymentsQuery(pageSize: 1));
+            $pingPermission = $this->apiKeyVerifier->verify($apiKey);
         } catch (UnauthorizedException|ForbiddenException) {
             $this->fail($io, 'Quickpay rejects the api key — use the API user\'s key (Settings → Users in the Quickpay manager), not a Payment Window agreement\'s');
 
@@ -194,9 +177,11 @@ final class DoctorCommand extends Command
             return null;
         }
 
-        $this->ok($io, 'The api key is accepted by Quickpay (verified via /payments — the api user lacks the /ping permission, which is harmless)');
+        $this->ok($io, $pingPermission
+            ? 'The api key is accepted by Quickpay'
+            : 'The api key is accepted by Quickpay (verified via /payments — the api user lacks the /ping permission, which is harmless)');
 
-        return $client;
+        return $this->clientFactory->create($apiKey);
     }
 
     /**

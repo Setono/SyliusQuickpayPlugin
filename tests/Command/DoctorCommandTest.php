@@ -14,6 +14,7 @@ use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\ForbiddenException;
 use Setono\Quickpay\Exception\NotFoundException;
 use Setono\SyliusQuickpayPlugin\Command\DoctorCommand;
+use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\QueuedResponsesHttpClient;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
@@ -532,8 +533,10 @@ final class DoctorCommandTest extends TestCase
     private function executeCommand(array $input = []): CommandTester
     {
         $application = new Application();
+        // A real verifier over the same client factory keeps the probe part of what is tested
         $application->add(new DoctorCommand(
             $this->clientFactory->reveal(),
+            new ApiKeyVerifier($this->clientFactory->reveal()),
             $this->gatewayConfigRepository->reveal(),
             $this->router->reveal(),
         ));
