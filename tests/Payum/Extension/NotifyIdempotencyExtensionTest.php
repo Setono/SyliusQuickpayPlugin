@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Payum\Extension;
 
+use Payum\Core\Exception\LogicException;
 use Payum\Core\Extension\Context;
 use Payum\Core\Gateway;
 use Payum\Core\Request\Notify;
@@ -100,7 +101,25 @@ final class NotifyIdempotencyExtensionTest extends TestCase
 
         yield 'notify without a quickpay payment id' => [new Notify(new \ArrayObject(['order_id' => 'qp_123']))];
 
-        yield 'notify with a non-numeric quickpay payment id' => [new Notify(new \ArrayObject(['quickpayPaymentId' => 'foo']))];
+        yield 'notify with a null quickpay payment id' => [new Notify(new \ArrayObject(['quickpayPaymentId' => null]))];
+    }
+
+    /**
+     * A present but unusable id means corrupted details; the extension surfaces the gateway
+     * library's own exception for that instead of processing the callback unguarded
+     *
+     * @test
+     */
+    public function it_throws_the_gateway_library_exception_for_an_unusable_quickpay_payment_id(): void
+    {
+        $store = $this->prophesize(PersistingStoreInterface::class);
+        $store->save(Argument::any())->shouldNotBeCalled();
+
+        $extension = new NotifyIdempotencyExtension(new LockFactory($store->reveal()));
+
+        $this->expectException(LogicException::class);
+
+        $extension->onPreExecute($this->createContext(new Notify(new \ArrayObject(['quickpayPaymentId' => 'foo']))));
     }
 
     /**

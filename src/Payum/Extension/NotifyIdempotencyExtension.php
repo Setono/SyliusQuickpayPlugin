@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Payum\Extension;
 
-use Payum\Core\Action\ActionInterface;
 use Payum\Core\Extension\Context;
 use Payum\Core\Extension\ExtensionInterface;
 use Payum\Core\Request\Notify;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
+use Setono\Payum\Quickpay\Details;
 use Symfony\Component\Lock\Exception\ExceptionInterface as LockExceptionInterface;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\LockInterface;
@@ -74,22 +74,7 @@ final class NotifyIdempotencyExtension implements ExtensionInterface, LoggerAwar
                 'quickpayPaymentId' => $quickpayPaymentId,
             ]);
 
-            $context->setAction(new class() implements ActionInterface {
-                /**
-                 * @param mixed $request
-                 */
-                public function execute($request): void
-                {
-                }
-
-                /**
-                 * @param mixed $request
-                 */
-                public function supports($request): bool
-                {
-                    return $request instanceof Notify;
-                }
-            });
+            $context->setAction(new AcknowledgeNotifyAction());
 
             return;
         }
@@ -123,13 +108,12 @@ final class NotifyIdempotencyExtension implements ExtensionInterface, LoggerAwar
             return null;
         }
 
+        /** @var \ArrayAccess<string, mixed>|mixed $model */
         $model = $request->getModel();
-        if (!$model instanceof \ArrayAccess) {
+        if (!$model instanceof \ArrayAccess || !Details::hasPaymentId($model)) {
             return null;
         }
 
-        $quickpayPaymentId = $model['quickpayPaymentId'] ?? null;
-
-        return is_numeric($quickpayPaymentId) ? (int) $quickpayPaymentId : null;
+        return Details::paymentId($model);
     }
 }

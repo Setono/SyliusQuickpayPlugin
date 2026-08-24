@@ -130,7 +130,6 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
         self::assertSame([
             [
                 'lock' => [
-                    'enabled' => true,
                     'resources' => [
                         'setono_sylius_quickpay' => ['flock'],
                     ],

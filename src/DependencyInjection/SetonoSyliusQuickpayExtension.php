@@ -76,7 +76,6 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
             // replace, not merge), e.g. `framework: { lock: { setono_sylius_quickpay: '%env(LOCK_DSN)%' } }`
             $container->prependExtensionConfig('framework', [
                 'lock' => [
-                    'enabled' => true,
                     'resources' => [
                         'setono_sylius_quickpay' => ['flock'],
                     ],
