@@ -20,11 +20,11 @@ state machine, and admin.
 
 ### 1. Install the plugin
 
-The plugin builds on `setono/payum-quickpay` 2.x, which is still in pre-release, so your project
-must allow the pre-release versions explicitly:
+The plugin 2.x line and the `setono/payum-quickpay` gateway it builds on are still in pre-release,
+so your project must allow the pre-release versions explicitly:
 
 ```bash
-composer require setono/sylius-quickpay-plugin:^2.0@RC setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
+composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
 ```
 
 If your project does not already provide PSR-17 factories:
@@ -113,7 +113,7 @@ out the gateway configuration:
 |---|---|
 | Api key | The API key of the **API user** in your Quickpay manager (*Settings* → *Users*) |
 | Private key | The private key of your merchant account (*Settings* → *Integration*) |
-| Agreement id | *(optional)* The agreement id used for the payment window |
+| Agreement id | *(optional)* Which agreement the payment window runs on. Leave empty to use your account's default Payment Window agreement — set it only if your account has several agreements and the window should use a specific one |
 | Order prefix | Prepended to order numbers sent to Quickpay as the `order_id` — must be **unique per project and environment** sharing the same Quickpay account (see [Troubleshooting](#troubleshooting)), and 11 characters or less |
 | Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `mobilepay` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
 | Capture mode | When the money is taken. **On completion** (default) only authorizes the payment at checkout and captures it when the payment is completed in Sylius (e.g. when the order is shipped) — what shops that may not capture before dispatch need. **Immediately** lets Quickpay capture the moment the card is authorized — useful for digital products |
@@ -227,14 +227,13 @@ the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries un
 backoff.
 
 Deliveries can race: Quickpay retries a callback it considers undelivered, and a retry can arrive while the
-original is still being handled. The plugin serializes callback handling per payment with a
-[Symfony lock](https://symfony.com/doc/current/components/lock.html) — a callback arriving while another one for
-the same payment is being processed is acknowledged with a 2xx and not processed, so nothing is applied twice and
-Quickpay stops retrying. Nothing is lost either: handling a callback re-fetches the payment from Quickpay, so the
-processing that holds the lock sees the state the duplicate carried. This guards both callback urls. The lock is a
-regular [Symfony lock](https://symfony.com/doc/current/lock.html): the plugin registers a named `framework.lock`
-resource, `setono_sylius_quickpay`, defaulting to the `flock` store — which serializes per server. If your shop
-runs on several servers, redefine the resource with a shared store:
+original is still being handled. The plugin serializes callback handling per payment — a callback arriving while
+another one for the same payment is being processed is acknowledged with a 2xx and not processed, so nothing is
+applied twice and Quickpay stops retrying. Nothing is lost either: handling a callback re-fetches the payment from
+Quickpay, so the processing that holds the lock sees the state the duplicate carried. This guards both callback
+urls. The lock is a regular [Symfony lock](https://symfony.com/doc/current/lock.html): the plugin registers a
+named `framework.lock` resource, `setono_sylius_quickpay`, defaulting to the `flock` store — which serializes per
+server. If your shop runs on several servers, redefine the resource with a shared store:
 
 ```yaml
 # config/packages/lock.yaml
@@ -289,26 +288,26 @@ behavioral changes around refunds and callbacks.
 ## Troubleshooting
 
 - `Not authorized: Not authorized to PUT /payments/:id/link`
-  at `/payment/authorize/...` url:
+  at a `/payment/authorize/...` url:
 
-  You should check at `https://manage.quickpay.net/account/{your merchant id}/settings/users`
-  that `System users` > `API User` > `User permissions` > `Create or update payment link` have `PUT`
-  checkbox checked. Also check `QUICKPAY_API_KEY` and `QUICKPAY_AGREEMENT_ID` is filled with `API User`'s
-  api key and agreement id rather than `Payment Window`'s.
+  In the Quickpay manager, check under *Settings* → *Users* that the API user's *User permissions* have the
+  `PUT` checkbox checked for *Create or update payment link*. Also make sure the **Api key** field of your
+  payment method holds the **API user's** key (*Settings* → *Users*) — not the api key of a Payment Window
+  agreement (*Settings* → *Integration*).
 
 - `Validation error: order_id already exists on another payment`
 
-  Make sure you changed the *Order prefix* of your Quickpay payment method to some unique string
-  like `qp_<projectname>_<date>_` (when `date` should be updated to actual
-  every time you recreate dev database) whenever you:
+  Quickpay requires the `order_id` to be unique across everything sharing the account, and the `order_id` is
+  your order number with the payment method's *Order prefix* prepended. Change the prefix to a string unique
+  per project **and** environment, e.g. `qp_<project>_<date>_`, whenever:
 
-  - Recreating your database on dev environment and your order IDs become same as they was before
-  - Use `SetonoSyliusQuickpayPlugin` at two different projects but with same Quickpay
-    (developer) account credentials
+  - you recreate a development database, so order numbers start over and collide with the ones already sent
+    to Quickpay — bump the `<date>` part;
+  - several projects or environments share the same Quickpay (developer) account credentials.
 
 - `Validation error: order_id must have length between 4 and 20`
 
-  You should cut the *Order prefix* of your Quickpay payment method to 11 chars or less.
+  Shorten the *Order prefix* of your Quickpay payment method to 11 characters or less.
 
 [ico-version]: https://poser.pugx.org/setono/sylius-quickpay-plugin/v/stable
 [ico-license]: https://poser.pugx.org/setono/sylius-quickpay-plugin/license
