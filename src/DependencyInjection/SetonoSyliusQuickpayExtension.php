@@ -70,6 +70,20 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
             ]);
         }
 
+        if ($container->hasExtension('framework')) {
+            // A named lock resource for serializing concurrent Quickpay callback handling. The
+            // application overrides the store by redefining the resource (framework.lock resources
+            // replace, not merge), e.g. `framework: { lock: { setono_sylius_quickpay: '%env(LOCK_DSN)%' } }`
+            $container->prependExtensionConfig('framework', [
+                'lock' => [
+                    'enabled' => true,
+                    'resources' => [
+                        'setono_sylius_quickpay' => ['flock'],
+                    ],
+                ],
+            ]);
+        }
+
         // The guard keeps the plugin bootable in applications running the sylius_payment graph on
         // the symfony_workflow adapter, where the winzou bundle is not necessarily registered
         if (!$container->hasExtension('winzou_state_machine')) {

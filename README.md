@@ -231,15 +231,16 @@ original is still being handled. The plugin serializes callback handling per pay
 [Symfony lock](https://symfony.com/doc/current/components/lock.html) — a callback arriving while another one for
 the same payment is being processed is acknowledged with a 2xx and not processed, so nothing is applied twice and
 Quickpay stops retrying. Nothing is lost either: handling a callback re-fetches the payment from Quickpay, so the
-processing that holds the lock sees the state the duplicate carried. This guards both callback urls. The default
-lock store is the filesystem, which serializes per server; if your shop runs on several servers, alias the
-plugin's lock factory to your framework's, backed by a shared store such as Redis or your database
-([`framework.lock`](https://symfony.com/doc/current/lock.html)):
+processing that holds the lock sees the state the duplicate carried. This guards both callback urls. The lock is a
+regular [Symfony lock](https://symfony.com/doc/current/lock.html): the plugin registers a named `framework.lock`
+resource, `setono_sylius_quickpay`, defaulting to the `flock` store — which serializes per server. If your shop
+runs on several servers, redefine the resource with a shared store:
 
 ```yaml
-# config/services.yaml
-services:
-    setono_sylius_quickpay.lock.factory: '@lock.factory'
+# config/packages/lock.yaml
+framework:
+    lock:
+        setono_sylius_quickpay: '%env(LOCK_DSN)%'   # e.g. LOCK_DSN=redis://localhost
 ```
 
 ## Reconciling missed callbacks
