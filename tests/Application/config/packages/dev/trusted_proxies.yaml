@@ -1,0 +1,7 @@
+# Trust the local tunnel client (e.g. expose/ngrok on this machine) so the forwarded host and scheme
+# are used for channel resolution and for the absolute callback urls Payum mints. This makes an
+# end-to-end test against the real Quickpay API possible: serve this app locally, tunnel it over
+# public HTTPS, point the Sylius channel hostname at the tunnel host and check out with a test card.
+framework:
+    trusted_proxies: '127.0.0.1'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port']

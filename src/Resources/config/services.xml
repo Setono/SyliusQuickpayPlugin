@@ -105,6 +105,29 @@
                  alias="setono_sylius_quickpay.quickpay.convert_payment"/>
         </service>
 
+        <!-- Payum extension -->
+        <service id="setono_sylius_quickpay.lock.store" class="Symfony\Component\Lock\Store\FlockStore"/>
+
+        <service id="setono_sylius_quickpay.lock.factory" class="Symfony\Component\Lock\LockFactory">
+            <argument type="service" id="setono_sylius_quickpay.lock.store"/>
+
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Payum\Extension\NotifyIdempotencyExtension" public="true">
+            <argument type="service" id="setono_sylius_quickpay.lock.factory"/>
+
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
+
+            <tag name="payum.extension"
+                 factory="quickpay"
+                 alias="setono_sylius_quickpay.notify_idempotency"/>
+        </service>
+
         <!-- State machine -->
         <service id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor" public="true">
             <argument type="service" id="payum"/>

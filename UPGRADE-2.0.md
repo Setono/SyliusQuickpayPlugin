@@ -144,6 +144,12 @@ if you make those and want the store to notice. The README's *Callbacks* section
   flipping to `refunded` on the first partial refund.
 - **Callbacks are HMAC-verified** (`QuickPay-Checksum-Sha256`) by the gateway library; unsigned or
   tampered callbacks are rejected with a 400 response.
+- **Concurrent callback deliveries are serialized per payment.** A callback arriving while another one
+  for the same payment is still being processed is acknowledged with a 2xx and not processed, so a
+  Quickpay retry racing the original delivery cannot apply a state change twice. Locking uses the
+  Symfony Lock component (a new dependency, installed by composer); the default filesystem store
+  serializes per server — the README's *Callbacks* section shows how a multi-server shop points the
+  plugin at a shared store.
 - **A failed cancel no longer blocks cancelling the order** — e.g. when the customer never completed
   checkout, so there is nothing to cancel at Quickpay; the failure is logged instead.
 - **Both state machine adapters are supported.** The winzou before-callback (the Sylius 1.14 default
