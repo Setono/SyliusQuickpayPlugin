@@ -10,11 +10,11 @@ It is a thin Sylius/Payum integration layer on top of the lower-level Payum gate
 [`setono/quickpay-php-sdk`](https://github.com/Setono/quickpay-php-sdk) (PSR-18/17). The SDK owns the API
 client (`Setono\Quickpay\Client\*`), request/response DTOs (`Setono\Quickpay\Request\Payment\*`,
 `Setono\Quickpay\Response\Payment\*`) and enums; the gateway package owns the Payum actions plus the
-`Setono\Payum\Quickpay\{Api,Operations}` helpers; this package wires it all into Sylius's checkout,
+`Setono\Payum\Quickpay\Api` helper; this package wires it all into Sylius's checkout,
 state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
-base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@beta`; the SDK is stable, `^1.0`).
+base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@RC`; the SDK is stable, `^1.2`).
 The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
 `UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x — keep it
