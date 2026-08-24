@@ -28,6 +28,9 @@ final class ConfigurationTest extends TestCase
                 'refund' => true,
                 'cancel' => true,
             ],
+            'fraud' => [
+                'block_capture' => false,
+            ],
             'checkout' => [
                 'payment_method_logos' => [],
                 'creditcard_brands' => ['visa', 'mastercard'],
@@ -49,6 +52,32 @@ final class ConfigurationTest extends TestCase
                 'refund' => true,
                 'cancel' => false,
             ],
+            'fraud' => [
+                'block_capture' => false,
+            ],
+            'checkout' => [
+                'payment_method_logos' => [],
+                'creditcard_brands' => ['visa', 'mastercard'],
+            ],
+        ]);
+    }
+
+    /**
+     * @test
+     */
+    public function it_allows_enabling_the_capture_fraud_guard(): void
+    {
+        $this->assertProcessedConfigurationEquals([
+            ['fraud' => ['block_capture' => true]],
+        ], [
+            'operations' => [
+                'capture' => true,
+                'refund' => true,
+                'cancel' => true,
+            ],
+            'fraud' => [
+                'block_capture' => true,
+            ],
             'checkout' => [
                 'payment_method_logos' => [],
                 'creditcard_brands' => ['visa', 'mastercard'],
@@ -69,6 +98,9 @@ final class ConfigurationTest extends TestCase
                 'capture' => true,
                 'refund' => true,
                 'cancel' => true,
+            ],
+            'fraud' => [
+                'block_capture' => false,
             ],
             'checkout' => [
                 'payment_method_logos' => ['mobilepay' => 'build/images/mobilepay.svg', 'apple-pay' => null],

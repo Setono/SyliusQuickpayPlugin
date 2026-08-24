@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'No operations yet'
         balance: 'Captured balance'
         test_mode: 'Test mode'
+        fraud_suspected: 'Fraud suspected'
         payment_link: 'Payment link'
         payment_link_help: 'Anyone with this link can pay this order in the Quickpay payment window — send it to the customer to collect payment for a phone or invoice order, or after an abandoned checkout.'
         copy: 'Copy'

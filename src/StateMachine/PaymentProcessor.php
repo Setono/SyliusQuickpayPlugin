@@ -13,6 +13,7 @@ use Payum\Core\Request\Refund;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\Quickpay\Exception\QuickpayException;
+use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
@@ -23,9 +24,11 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
 
     public function __construct(
         private readonly Payum $payum,
+        private readonly FraudCheckerInterface $fraudChecker,
         private readonly bool $captureEnabled,
         private readonly bool $refundEnabled,
         private readonly bool $cancelEnabled,
+        private readonly bool $blockCaptureOnSuspectedFraud,
     ) {
     }
 
@@ -60,6 +63,18 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                 // checkout by a payment method in the immediate capture mode, or in the Quickpay manager
                 $gateway->execute($status = new GetHumanStatus($payment));
                 if ($status->isCaptured()) {
+                    return;
+                }
+
+                // Opt-in guard: leave a fraud suspected payment for manual review instead of taking
+                // the money automatically. The transition itself proceeds — the merchant captures
+                // (or cancels) in the Quickpay manager after reviewing
+                if ($this->blockCaptureOnSuspectedFraud && $this->fraudChecker->isFraudSuspected($payment)) {
+                    $this->logger?->warning('Skipped the automatic capture: Quickpay reports the payment as fraud suspected. Review the payment and capture or cancel it manually', [
+                        'quickpayPaymentId' => $quickpayPaymentId,
+                        'paymentId' => $payment->getId(),
+                    ]);
+
                     return;
                 }
 

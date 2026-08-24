@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Zatím žádné operace'
         balance: 'Stržený zůstatek'
         test_mode: 'Testovací režim'
+        fraud_suspected: 'Podezření na podvod'
         payment_link: 'Platební odkaz'
         payment_link_help: 'Kdokoli s tímto odkazem může objednávku zaplatit v platebním okně Quickpay — pošlete ho zákazníkovi pro zaplacení telefonické objednávky nebo objednávky na fakturu, případně po opuštěné pokladně.'
         copy: 'Kopírovat'

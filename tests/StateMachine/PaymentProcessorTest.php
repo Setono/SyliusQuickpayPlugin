@@ -17,6 +17,7 @@ use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\Quickpay\Exception\ValidationException;
+use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -39,7 +40,7 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_captures_the_quickpay_payment_when_the_payment_is_completed(): void
     {
-        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
@@ -57,7 +58,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
 
         self::assertNotContainsInstanceOf(Capture::class, $this->executedRequests);
@@ -74,7 +75,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_REFUND);
 
         self::assertNotContainsInstanceOf(Refund::class, $this->executedRequests);
@@ -85,7 +86,7 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_refunds_the_quickpay_payment_when_the_payment_is_refunded(): void
     {
-        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_REFUND);
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
@@ -97,7 +98,7 @@ final class PaymentProcessorTest extends TestCase
      */
     public function it_cancels_the_quickpay_payment_when_the_payment_is_cancelled(): void
     {
-        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         self::assertInstanceOf(GetHumanStatus::class, $this->executedRequests[0] ?? null);
@@ -115,7 +116,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         self::assertNotContainsInstanceOf(Cancel::class, $this->executedRequests);
@@ -132,7 +133,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         // Reaching this point means the exception was caught and the transition can proceed
@@ -150,7 +151,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), $this->createFraudChecker(), true, true, true, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
 
         $this->addToAssertionCount(1);
@@ -167,7 +168,7 @@ final class PaymentProcessorTest extends TestCase
             }
         });
 
-        $processor = new PaymentProcessor($this->createPayum($gateway), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway), $this->createFraudChecker(), true, true, true, false);
 
         $this->expectException(HttpException::class);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
@@ -184,7 +185,7 @@ final class PaymentProcessorTest extends TestCase
         $payment = $this->prophesize(PaymentInterface::class);
         $payment->getDetails()->willReturn([]);
 
-        $processor = new PaymentProcessor($this->createPayum($gateway->reveal()), true, true, true);
+        $processor = new PaymentProcessor($this->createPayum($gateway->reveal()), $this->createFraudChecker(), true, true, true, false);
         $processor($payment->reveal(), PaymentTransitions::TRANSITION_CANCEL);
     }
 
@@ -196,8 +197,42 @@ final class PaymentProcessorTest extends TestCase
         $gateway = $this->prophesize(GatewayInterface::class);
         $gateway->execute(Argument::any())->shouldNotBeCalled();
 
-        $processor = new PaymentProcessor($this->createPayum($gateway->reveal()), true, true, false);
+        $processor = new PaymentProcessor($this->createPayum($gateway->reveal()), $this->createFraudChecker(), true, true, false, false);
         $processor($this->createPayment(), PaymentTransitions::TRANSITION_CANCEL);
+    }
+
+    /**
+     * @test
+     */
+    public function it_skips_capture_when_the_fraud_guard_is_enabled_and_fraud_is_suspected(): void
+    {
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), $this->createFraudChecker(true), true, true, true, true);
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
+
+        self::assertNotContainsInstanceOf(Capture::class, $this->executedRequests);
+    }
+
+    /**
+     * @test
+     */
+    public function it_captures_when_the_fraud_guard_is_enabled_and_no_fraud_is_suspected(): void
+    {
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), $this->createFraudChecker(false), true, true, true, true);
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
+
+        self::assertInstanceOf(Capture::class, $this->executedRequests[1] ?? null);
+    }
+
+    /**
+     * @test
+     */
+    public function it_does_not_consult_the_fraud_checker_when_the_guard_is_disabled(): void
+    {
+        // createFraudChecker() without an answer prophesies that the checker is never consulted
+        $processor = new PaymentProcessor($this->createPayum($this->createGateway()), $this->createFraudChecker(), true, true, true, false);
+        $processor($this->createPayment(), PaymentTransitions::TRANSITION_COMPLETE);
+
+        self::assertInstanceOf(Capture::class, $this->executedRequests[1] ?? null);
     }
 
     /**
@@ -229,6 +264,22 @@ final class PaymentProcessorTest extends TestCase
         ;
 
         return $gateway->reveal();
+    }
+
+    /**
+     * @param bool|null $suspected null prophesies that the checker is never consulted
+     */
+    private function createFraudChecker(?bool $suspected = null): FraudCheckerInterface
+    {
+        $fraudChecker = $this->prophesize(FraudCheckerInterface::class);
+
+        if (null === $suspected) {
+            $fraudChecker->isFraudSuspected(Argument::any())->shouldNotBeCalled();
+        } else {
+            $fraudChecker->isFraudSuspected(Argument::any())->willReturn($suspected);
+        }
+
+        return $fraudChecker->reveal();
     }
 
     private function createPayum(GatewayInterface $gateway): Payum

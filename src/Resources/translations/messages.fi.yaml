@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Ei tapahtumia vielä'
         balance: 'Veloitettu saldo'
         test_mode: 'Testitila'
+        fraud_suspected: 'Petosepäily'
         payment_link: 'Maksulinkki'
         payment_link_help: 'Kuka tahansa, jolla on tämä linkki, voi maksaa tilauksen Quickpayn maksuikkunassa — lähetä se asiakkaalle puhelin- tai laskutilauksen maksamiseksi tai keskeytyneen kassan jälkeen.'
         copy: 'Kopioi'

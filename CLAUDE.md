@@ -140,7 +140,12 @@ but does not block the transition. Operations execute with the Sylius payment th
 gateway-updated details persist; an unqualified `Refund` refunds Quickpay's remaining `balance` and the balance is
 persisted into the details by the library's Status/Confirm/Sync actions. Each operation can be turned off via the plugin config
 `operations.capture` / `operations.refund` / `operations.cancel` (defined in `DependencyInjection/Configuration.php`,
-passed to the processor as container parameters).
+passed to the processor as container parameters). An opt-in `fraud.block_capture` flag makes the processor consult
+`Fraud/FraudChecker` (fetches the payment via `Quickpay/ClientFactory`, reads `metadata.fraud_suspected`, fails
+open on any error) before the automatic capture and skip it with a warning when fraud is suspected — the
+transition itself proceeds. The operation-history admin panel shows a fraud badge from the same metadata, and the
+reconcile command has a `--fraud-suspected` report mode that queries each configured gateway's account directly
+(`PaymentsQuery`), transitioning nothing.
 
 ### Payment link (admin)
 `PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel

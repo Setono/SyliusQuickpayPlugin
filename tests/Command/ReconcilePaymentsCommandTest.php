@@ -14,13 +14,18 @@ use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
+use Setono\Payum\Quickpay\QuickpayGatewayFactory;
+use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Exception\ValidationException;
 use Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Tests\Quickpay\FixedResponseHttpClient;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -41,6 +46,12 @@ final class ReconcilePaymentsCommandTest extends TestCase
     /** @var ObjectProphecy<StateMachineInterface> */
     private ObjectProphecy $stateMachine;
 
+    /** @var ObjectProphecy<ClientFactoryInterface> */
+    private ObjectProphecy $clientFactory;
+
+    /** @var ObjectProphecy<RepositoryInterface<GatewayConfigInterface>> */
+    private ObjectProphecy $gatewayConfigRepository;
+
     /** @var ObjectProphecy<EntityManagerInterface> */
     private ObjectProphecy $entityManager;
 
@@ -53,6 +64,11 @@ final class ReconcilePaymentsCommandTest extends TestCase
         $this->payum = $this->prophesize(Payum::class);
         $this->gateway = $this->prophesize(GatewayInterface::class);
         $this->stateMachine = $this->prophesize(StateMachineInterface::class);
+        $this->clientFactory = $this->prophesize(ClientFactoryInterface::class);
+
+        /** @var ObjectProphecy<RepositoryInterface<GatewayConfigInterface>> $gatewayConfigRepository */
+        $gatewayConfigRepository = $this->prophesize(RepositoryInterface::class);
+        $this->gatewayConfigRepository = $gatewayConfigRepository;
         $this->entityManager = $this->prophesize(EntityManagerInterface::class);
         $this->managerRegistry = $this->prophesize(ManagerRegistry::class);
         $this->managerRegistry->getManagerForClass(Argument::type('string'))->willReturn($this->entityManager);
@@ -228,6 +244,45 @@ final class ReconcilePaymentsCommandTest extends TestCase
     }
 
     /**
+     * @test
+     */
+    public function it_reports_fraud_suspected_payments_without_touching_any_payment(): void
+    {
+        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
+        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
+        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
+
+        $this->gatewayConfigRepository
+            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
+            ->willReturn([$gatewayConfig->reveal()])
+        ;
+
+        $response = new Response(200, ['Content-Type' => 'application/json'], (string) json_encode([[
+            'id' => 501,
+            'order_id' => 'qp_000000123',
+            'currency' => 'DKK',
+            'state' => 'new',
+            'merchant_id' => 1,
+            'test_mode' => true,
+            'metadata' => ['fraud_suspected' => true],
+        ]]));
+
+        $this->clientFactory
+            ->create('the-api-key')
+            ->willReturn(new Client('the-api-key', new FixedResponseHttpClient($response)))
+        ;
+
+        $this->pendingPaymentProvider->findPending(Argument::cetera())->shouldNotBeCalled();
+        $this->stateMachine->apply(Argument::cetera())->shouldNotBeCalled();
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('qp_000000123', $tester->getDisplay());
+        self::assertStringContainsString('1 payment(s) flagged as fraud suspected', $tester->getDisplay());
+    }
+
+    /**
      * @param array<string, mixed> $input
      */
     private function executeCommand(array $input): CommandTester
@@ -237,6 +292,8 @@ final class ReconcilePaymentsCommandTest extends TestCase
             $this->pendingPaymentProvider->reveal(),
             $this->payum->reveal(),
             $this->stateMachine->reveal(),
+            $this->clientFactory->reveal(),
+            $this->gatewayConfigRepository->reveal(),
             $this->managerRegistry->reveal(),
         ));
 

@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Nog geen bewerkingen'
         balance: 'Geïnd saldo'
         test_mode: 'Testmodus'
+        fraud_suspected: 'Vermoeden van fraude'
         payment_link: 'Betaallink'
         payment_link_help: 'Iedereen met deze link kan de bestelling betalen in het Quickpay-betaalvenster — stuur hem naar de klant om een telefonische of factuurbestelling te innen, of na een afgebroken afrekening.'
         copy: 'Kopiëren'

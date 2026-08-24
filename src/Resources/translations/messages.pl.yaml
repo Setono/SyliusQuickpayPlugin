@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Brak operacji'
         balance: 'Pobrane saldo'
         test_mode: 'Tryb testowy'
+        fraud_suspected: 'Podejrzenie oszustwa'
         payment_link: 'Link do płatności'
         payment_link_help: 'Każdy, kto ma ten link, może opłacić zamówienie w oknie płatności Quickpay — wyślij go klientowi, aby pobrać płatność za zamówienie telefoniczne lub na fakturę, albo po porzuconym zamówieniu.'
         copy: 'Kopiuj'

@@ -58,6 +58,8 @@ setono_sylius_quickpay:
         capture: true  # forward the payment's complete transition to Quickpay as a capture
         refund: true   # forward the refund transition to Quickpay
         cancel: true   # forward the cancel transition to Quickpay
+    fraud:
+        block_capture: false  # skip the automatic capture when Quickpay reports the payment as fraud suspected (see Fraud signals)
 ```
 
 The plugin hooks into **both state machine adapters** supported by Sylius 1.14 — a `winzou_state_machine`
@@ -203,6 +205,24 @@ authorize/capture/refund/cancel with amount, Quickpay status code and message, a
 captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, the panel shows an
 inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
+
+## Fraud signals
+
+Quickpay flags payments it suspects of fraud, and the plugin surfaces that in three places:
+
+- A **Fraud suspected** badge on the admin operation history panel, next to the test-mode badge.
+- An **opt-in capture guard**: with `fraud.block_capture: true` (see [Configure the plugin](#3-configure-the-plugin-optional)),
+  the automatic capture on the payment's `complete` transition is skipped when Quickpay reports the payment as
+  fraud suspected — the completion itself is not blocked; the payment is logged and left for manual review, so
+  you capture or cancel it in the Quickpay manager after looking at it. The check asks Quickpay at capture time
+  and fails open: an unreachable Quickpay never blocks the payment flow. It costs one extra API call per
+  automatic capture, which is why it is off by default.
+- A **report mode** on the reconciliation command that asks Quickpay for every payment flagged in the period,
+  regardless of its local state — report only, nothing is transitioned:
+
+```bash
+bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
+```
 
 ## Callbacks
 

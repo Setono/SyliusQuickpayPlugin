@@ -36,6 +36,7 @@ setono_sylius_quickpay:
         no_operations: 'Nicio operațiune încă'
         balance: 'Sold capturat'
         test_mode: 'Mod de test'
+        fraud_suspected: 'Suspiciune de fraudă'
         payment_link: 'Link de plată'
         payment_link_help: 'Oricine are acest link poate plăti comanda în fereastra de plată Quickpay — trimiteți-l clientului pentru a încasa o comandă telefonică sau pe factură, ori după o finalizare abandonată.'
         copy: 'Copiază'
