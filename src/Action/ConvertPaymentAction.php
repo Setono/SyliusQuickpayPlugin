@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Action;
 
+use Composer\InstalledVersions;
 use Doctrine\Common\Collections\Collection;
 use Payum\Core\Action\ActionInterface;
 use Payum\Core\ApiAwareInterface;
@@ -21,6 +22,8 @@ use Setono\Quickpay\Request\Payment\Address;
 use Setono\Quickpay\Request\Payment\BasketItem;
 use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
 use Setono\Quickpay\Request\Payment\Shipping;
+use Setono\Quickpay\Request\Payment\Shopsystem;
+use Setono\Quickpay\Response\Payment\Payment;
 use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface;
 use function sprintf;
 use Sylius\Component\Core\Model\AddressInterface;
@@ -37,6 +40,8 @@ use Webmozart\Assert\Assert;
  */
 final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, GatewayAwareInterface
 {
+    private const PACKAGE = 'setono/sylius-quickpay-plugin';
+
     use GatewayAwareTrait;
     use ApiAwareTrait;
 
@@ -72,11 +77,17 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
             $currency = $payumPayment->getCurrencyCode();
             Assert::stringNotEmpty($currency);
 
+            // Quickpay's real rule, enforced with the SDK's own pattern — mirrors the gateway
+            // library's convert. It also catches an empty payment number, which would otherwise
+            // degrade to the bare prefix and collide for every such payment
             $orderId = $this->api->getOrderPrefix() . $number;
-            Assert::lengthBetween($orderId, 4, 20, sprintf(
-                'The Quickpay order id "%s" must be between 4 and 20 characters. Adjust the order_prefix gateway option accordingly.',
-                $orderId,
-            ));
+            if (1 !== preg_match(CreatePaymentRequest::ORDER_ID_PATTERN, $orderId)) {
+                throw new LogicException(sprintf(
+                    'The Quickpay order id "%s" (%d characters) is not one Quickpay accepts: 4–20 characters of letters, digits, space, ".", "_" and "-". It is built from the "order_prefix" gateway option and the order number — adjust the prefix so the two together fit.',
+                    $orderId,
+                    strlen($orderId),
+                ));
+            }
 
             $order = $this->getRelatedOrder($token);
 
@@ -89,17 +100,19 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
             $billingAddress = $order->getBillingAddress();
             Assert::isInstanceOf($billingAddress, AddressInterface::class);
 
-            $quickpayPayment = $this->api->payments()->create(new CreatePaymentRequest(
-                orderId: $orderId,
-                currency: $currency,
-                invoiceAddress: $this->convertAddress($billingAddress, $customer),
-                shippingAddress: $this->convertAddress($shippingAddress, $customer),
-                basket: $this->convertOrderItems($order->getItems()),
-                shipping: new Shipping(
-                    amount: $order->getShippingTotal(),
-                    vatRate: $this->vatRateResolver->forShipping($order),
-                ),
-            ));
+            $quickpayPayment = $this->findReusablePayment($orderId, $currency)
+                ?? $this->api->payments()->create(new CreatePaymentRequest(
+                    orderId: $orderId,
+                    currency: $currency,
+                    invoiceAddress: $this->convertAddress($billingAddress, $customer),
+                    shippingAddress: $this->convertAddress($shippingAddress, $customer),
+                    basket: $this->convertOrderItems($order->getItems()),
+                    shipping: new Shipping(
+                        amount: $order->getShippingTotal(),
+                        vatRate: $this->vatRateResolver->forShipping($order),
+                    ),
+                    shopsystem: new Shopsystem(name: self::PACKAGE, version: self::version()),
+                ));
 
             $details['quickpayPaymentId'] = $quickpayPayment->id;
             $details['order_id'] = $quickpayPayment->orderId;
@@ -141,6 +154,59 @@ final class ConvertPaymentAction implements ActionInterface, ApiAwareInterface, 
         }
 
         $details['currency'] = $currency;
+    }
+
+    /**
+     * Find-or-create, mirroring the gateway library's convert: Quickpay enforces `order_id`
+     * uniqueness per account, and the order id is built from the order NUMBER — so a customer who
+     * was declined and pays the same order again arrives here with an order id that already exists.
+     * A payment nobody ever paid (no approved operation) is picked up where it was left — the entry
+     * actions send the customer back to the window; the addresses and basket it was created with
+     * still describe the same order. One that WAS paid, or one in another currency, is never adopted
+     * silently — that is for the shop to untangle, so it is a clear exception.
+     *
+     * @throws LogicException if a payment with this order id exists but cannot be adopted
+     */
+    private function findReusablePayment(string $orderId, string $currency): ?Payment
+    {
+        $existing = $this->api->payments()->findByOrderId($orderId);
+
+        if (null === $existing) {
+            return null;
+        }
+
+        $approved = $existing->latestApprovedOperation();
+        if (null !== $approved) {
+            throw new LogicException(sprintf(
+                'A Quickpay payment with order id "%s" already exists (id %d, state %s) and has an approved %s. It will not be adopted: if it is this order\'s earlier payment, carry its quickpayPaymentId over; if another shop or environment shares this Quickpay account, give each its own "order_prefix".',
+                $orderId,
+                $existing->id,
+                $existing->state,
+                $approved->type,
+            ));
+        }
+
+        if ($existing->currency !== $currency) {
+            throw new LogicException(sprintf(
+                'A Quickpay payment with order id "%s" already exists (id %d) in %s, but this payment is in %s. A Quickpay payment cannot change currency; give the retry a different order id.',
+                $orderId,
+                $existing->id,
+                $existing->currency,
+                $currency,
+            ));
+        }
+
+        return $existing;
+    }
+
+    /**
+     * The installed version of this plugin, for the `shopsystem` Quickpay records on the payment
+     */
+    private static function version(): string
+    {
+        return InstalledVersions::isInstalled(self::PACKAGE)
+            ? (InstalledVersions::getPrettyVersion(self::PACKAGE) ?? 'unknown')
+            : 'unknown';
     }
 
     private function getRelatedOrder(TokenInterface $token): OrderInterface

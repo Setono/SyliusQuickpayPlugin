@@ -14,7 +14,7 @@ gateway-level background; this document covers what a **Sylius shop upgrading th
   **root** `composer.json`:
 
   ```bash
-  composer require setono/sylius-quickpay-plugin:^2.0@beta setono/payum-quickpay:^2.0@beta setono/quickpay-php-sdk:^1.0
+  composer require setono/sylius-quickpay-plugin:^2.0@RC setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
   ```
 
 ## Gateway configuration stored in the database
@@ -123,12 +123,13 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
 | `Form\Type\QuickPayGatewayConfigurationType` | `Form\Type\GatewayConfigurationType` |
 | `Guesser\QuickpayLanguageGuesser(Interface)` | `Guesser\LanguageGuesser(Interface)` |
 
-## Check the account-wide callback url in the Quickpay manager
+## The account-wide callback url is only needed for outside operations
 
-Not new in 2.0, but never spelled out before: Quickpay only delivers **capture, refund and cancel** callbacks
-to the account-wide callback url (*Settings* → *Integration*), which is empty by default — the per-payment
-callback url on the payment link receives the payment window's outcome only. If yours is unset, point it at
-`https://your-shop.example/payment/quickpay/notify`; the README's *Callbacks* section has the details.
+Callbacks for everything the store itself does — the payment window's outcome and the capture/refund/cancel
+operations the plugin issues — arrive on a per-payment url the gateway registers automatically. The account-wide
+callback url in the Quickpay manager (*Settings* → *Integration*) only matters for operations made *outside* the
+store (the Quickpay manager, other API clients); point it at `https://your-shop.example/payment/quickpay/notify`
+if you make those and want the store to notice. The README's *Callbacks* section has the details.
 
 ## Behavioral changes
 
