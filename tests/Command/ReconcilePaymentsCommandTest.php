@@ -283,6 +283,92 @@ final class ReconcilePaymentsCommandTest extends TestCase
     }
 
     /**
+     * @test
+     */
+    public function it_caps_the_fraud_report_at_the_limit(): void
+    {
+        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
+        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
+        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
+
+        $this->gatewayConfigRepository
+            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
+            ->willReturn([$gatewayConfig->reveal()])
+        ;
+
+        $payment = [
+            'id' => 501,
+            'order_id' => 'qp_000000123',
+            'currency' => 'DKK',
+            'state' => 'new',
+            'merchant_id' => 1,
+            'metadata' => ['fraud_suspected' => true],
+        ];
+        $response = new Response(200, ['Content-Type' => 'application/json'], (string) json_encode([
+            $payment,
+            ['order_id' => 'qp_000000124', 'id' => 502] + $payment,
+        ]));
+
+        $this->clientFactory
+            ->create('the-api-key')
+            ->willReturn(new Client('the-api-key', new FixedResponseHttpClient($response)))
+        ;
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => '1']);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('qp_000000123', $tester->getDisplay());
+        self::assertStringNotContainsString('qp_000000124', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_skips_gateways_without_an_api_key_in_the_fraud_report(): void
+    {
+        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
+        $gatewayConfig->getConfig()->willReturn([]);
+        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
+
+        $this->gatewayConfigRepository
+            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
+            ->willReturn([$gatewayConfig->reveal()])
+        ;
+
+        $this->clientFactory->create(Argument::any())->shouldNotBeCalled();
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('no fraud suspected payments', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_reports_an_error_when_a_gateway_cannot_be_queried_for_fraud(): void
+    {
+        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
+        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
+        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
+
+        $this->gatewayConfigRepository
+            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
+            ->willReturn([$gatewayConfig->reveal()])
+        ;
+
+        $this->clientFactory
+            ->create('the-api-key')
+            ->willReturn(new Client('the-api-key', new FixedResponseHttpClient(new Response(500, [], '{"message": "boom"}'))))
+        ;
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('quickpay_credit_card', $tester->getDisplay());
+    }
+
+    /**
      * @param array<string, mixed> $input
      */
     private function executeCommand(array $input): CommandTester

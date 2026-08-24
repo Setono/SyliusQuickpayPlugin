@@ -79,6 +79,23 @@ final class FraudCheckerTest extends TestCase
     /**
      * @test
      */
+    public function it_reports_clean_when_the_payment_has_no_method(): void
+    {
+        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
+        $clientFactory->create(Argument::any())->shouldNotBeCalled();
+
+        $payment = $this->prophesize(PaymentInterface::class);
+        $payment->getDetails()->willReturn(['quickpayPaymentId' => 501]);
+        $payment->getMethod()->willReturn(null);
+
+        $checker = new FraudChecker($clientFactory->reveal());
+
+        self::assertFalse($checker->isFraudSuspected($payment->reveal()));
+    }
+
+    /**
+     * @test
+     */
     public function it_fails_open_when_quickpay_cannot_be_reached(): void
     {
         $checker = new FraudChecker($this->createClientFactory(new Response(500, [], '{"message": "boom"}')));
