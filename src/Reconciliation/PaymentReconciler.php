@@ -9,6 +9,7 @@ use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\InvalidArgumentException;
 use Payum\Core\GatewayInterface;
 use Payum\Core\Payum;
+use Payum\Core\Request\Notify;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\LoggerInterface;
@@ -52,12 +53,7 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         // extension maps it. It runs on a copy of the stored details instead of the Sylius payment: the
         // extension only applies a transition after a request on a Sylius payment, and Payum's storage only
         // persists one, so neither a transition nor the details the status read refreshes reach the payment
-        $status = new GetStatus(new ArrayObject($payment->getDetails()));
-        $this->gatewayOf($payment)->execute($status);
-
-        // Sylius marks every status as a payment state string
-        $quickpayStatus = $status->getValue();
-        Assert::string($quickpayStatus);
+        $quickpayStatus = self::readStatus($this->gatewayOf($payment), new ArrayObject($payment->getDetails()));
 
         // The extension's own condition for applying a transition
         if ($quickpayStatus === $payment->getState() || PaymentInterface::STATE_UNKNOWN === $quickpayStatus) {
@@ -72,16 +68,40 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
 
     public function reconcile(PaymentInterface $payment): ReconcileResult
     {
+        // A status request on the Sylius payment itself, so the status it reads is the one the extension applies
+        return $this->reconcileWith($payment, static fn (GatewayInterface $gateway, PaymentInterface $payment): string => self::readStatus($gateway, $payment));
+    }
+
+    public function reconcileFromCallback(PaymentInterface $payment): ReconcileResult
+    {
         return $this->reconcileWith($payment, static function (GatewayInterface $gateway, PaymentInterface $payment): string {
-            // Sylius' own status request, so the status reads exactly as the extension maps it
-            $status = new GetStatus($payment);
-            $gateway->execute($status);
+            // The library validates the callback's HMAC and confirms the details from Quickpay. It runs on a
+            // copy of the details, not the Sylius payment: the reply rejecting a forged callback ends the
+            // request without an exception, so on the Sylius payment the extension would still apply the
+            // transition and Payum's storage would persist it
+            $details = new ArrayObject($payment->getDetails());
+            $gateway->execute(new Notify($details));
+            $payment->setDetails($details->getArrayCopy());
 
-            $quickpayStatus = $status->getValue();
-            Assert::string($quickpayStatus);
-
-            return $quickpayStatus;
+            // The callback is genuine: reconcile as on demand, persisting the confirmed details with the state
+            return self::readStatus($gateway, $payment);
         });
+    }
+
+    /**
+     * Runs Sylius' own status request, so the Quickpay status maps to a payment state exactly as Sylius'
+     * payment-state extension maps it
+     */
+    private static function readStatus(GatewayInterface $gateway, PaymentInterface|ArrayObject $model): string
+    {
+        $status = new GetStatus($model);
+        $gateway->execute($status);
+
+        // Sylius marks every status as a payment state string
+        $quickpayStatus = $status->getValue();
+        Assert::string($quickpayStatus);
+
+        return $quickpayStatus;
     }
 
     /**

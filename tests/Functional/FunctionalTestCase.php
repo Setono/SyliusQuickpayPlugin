@@ -28,6 +28,8 @@ use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\LockInterface;
 use Symfony\Component\Workflow\Event\CompletedEvent;
@@ -225,6 +227,40 @@ abstract class FunctionalTestCase extends KernelTestCase
             'operations' => $operations,
             'metadata' => ['fraud_suspected' => $fraudSuspected],
         ], \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Quickpay's callback about a Quickpay payment, as POSTed to the plugin's shared callback endpoint:
+     * the payment as JSON, signed with the gateway's private key unless another key is given
+     */
+    protected static function quickpayCallback(int $quickpayPaymentId, string $orderNumber = '000000001', string $privateKey = self::PRIVATE_KEY): Request
+    {
+        $body = json_encode([
+            'id' => $quickpayPaymentId,
+            'order_id' => self::ORDER_PREFIX . $orderNumber,
+            'accepted' => true,
+            'currency' => self::CURRENCY,
+        ], \JSON_THROW_ON_ERROR);
+
+        return Request::create('/payment/quickpay/notify', 'POST', server: [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_QUICKPAY_RESOURCE_TYPE' => 'Payment',
+            'HTTP_QUICKPAY_CHECKSUM_SHA256' => hash_hmac('sha256', $body, $privateKey),
+        ], content: $body);
+    }
+
+    /**
+     * Makes the callback the request being handled, in place of any received before, as Payum reads the
+     * main request
+     */
+    protected function receiveCallback(Request $callback): void
+    {
+        $requestStack = self::getContainer()->get('request_stack');
+        self::assertInstanceOf(RequestStack::class, $requestStack);
+
+        while (null !== $requestStack->pop()) {
+        }
+        $requestStack->push($callback);
     }
 
     protected function entityManager(): EntityManagerInterface

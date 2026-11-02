@@ -38,4 +38,22 @@ interface PaymentReconcilerInterface
      * @throws QuickpayException
      */
     public function reconcile(PaymentInterface $payment): ReconcileResult;
+
+    /**
+     * Reconcile from a callback: what reconcile on demand does, triggered by Quickpay's callback about the
+     * payment, which must be the request being handled. Payum's Notify runs first, so the gateway library
+     * validates the callback's HMAC and confirms the stored details before anything is reconciled: a forged
+     * callback changes nothing. Then Sylius' payment-state extension applies at most one transition, and the
+     * result, confirmed details included, is persisted.
+     *
+     * A payment whose lock is held, e.g. by a duplicate of the callback being handled, is skipped untouched.
+     *
+     * Errors propagate, so the callback is answered with an error and Quickpay retries it: the SDK's
+     * {@see QuickpayException} (e.g. Quickpay unreachable), Payum's {@see ExceptionInterface}, Payum's
+     * HttpResponse reply rejecting a callback whose HMAC doesn't match (a 400) or whatever a state-machine
+     * callback throws.
+     *
+     * @throws QuickpayException
+     */
+    public function reconcileFromCallback(PaymentInterface $payment): ReconcileResult;
 }
