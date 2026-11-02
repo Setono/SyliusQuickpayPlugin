@@ -145,10 +145,17 @@ link PUT to surface the missing-permission 403. Non-zero exit on any failed chec
 
 `Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`) is the backstop for
 callbacks that never arrive: `Provider/PendingPaymentProvider` queries non-final Quickpay payments with
-a `quickpayPaymentId`, the command polls each via `GetHumanStatus` and applies the matching transition
-through `Sylius\Abstraction\StateMachine` (adapter-agnostic, so it pairs with either state machine
-adapter). Doctrine access in these classes goes through `setono/doctrine-orm-trait`'s `ORMTrait`
-(inject `ManagerRegistry`, call `$this->getManager(...)`) rather than injecting an entity manager.
+a `quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()`
+(see GLOSSARY.md and docs/adr/0001-*.md): under the payment's lock (non-blocking, keyed on the Quickpay
+payment id, from the `setono_sylius_quickpay` lock resource; a held lock returns skipped, a broken store
+fails open) it reloads the payment and its order, runs Sylius' `GetStatus` as a top-level request on the
+Sylius payment so Sylius' payment-state extension applies at most one transition and Payum's storage
+flushes, then releases the lock and returns a `ReconcileResult` (state before/after, Quickpay status,
+outcome transitioned/unchanged/skipped). The plugin never applies the transition itself. The command
+counts the outcomes plus errors, keeps going after any error, and `--dry-run` uses the status check
+(`checkStatus()`) instead, writing nothing. Doctrine access in these classes goes through
+`setono/doctrine-orm-trait`'s `ORMTrait` (inject `ManagerRegistry`, call `$this->getManager(...)`) rather
+than injecting an entity manager.
 
 ### State machine integration
 Both Sylius 1.14 state machine adapters forward the `complete`, `refund`, and `cancel` transitions to

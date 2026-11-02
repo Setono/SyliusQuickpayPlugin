@@ -15,6 +15,7 @@ use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
+use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\Lock\Key;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\PersistingStoreInterface;
@@ -36,6 +37,7 @@ final class ReconcileTest extends FunctionalTestCase
 
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $transitions = $this->recordPaymentTransitions();
 
         $result = $this->reconciler()->reconcile($payment);
 
@@ -43,6 +45,7 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->quickpayStatus);
+        self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
 
         // Only reads at Quickpay: reconciling never captures, refunds or cancels anything
         self::assertSame(['GET /payments/501'], array_values(array_unique($this->quickpay()->sentRequests())));
@@ -198,12 +201,14 @@ final class ReconcileTest extends FunctionalTestCase
         $connection->executeStatement('UPDATE sylius_payment SET state = ? WHERE id = ?', [PaymentInterface::STATE_COMPLETED, $payment->getId()]);
         $connection->executeStatement('UPDATE sylius_order SET payment_state = ? WHERE id = ?', [OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getId()]);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        $transitions = $this->recordPaymentTransitions();
 
         $result = $this->reconciler()->reconcile($payment);
 
         self::assertSame(ReconcileOutcome::Unchanged, $result->outcome);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
+        self::assertSame([], $transitions->getArrayCopy());
 
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
