@@ -6,6 +6,10 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 
 use Doctrine\Persistence\ManagerRegistry;
 use Nyholm\Psr7\Response;
+use Payum\Core\Exception\InvalidArgumentException;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
@@ -18,6 +22,7 @@ use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\Lock\Key;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\PersistingStoreInterface;
+use Symfony\Component\Lock\Store\InMemoryStore;
 
 /**
  * Reconcile brings a Sylius payment's state in line with its Quickpay payment, applying at most one
@@ -281,11 +286,6 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
 
-        $stateMachine = self::getContainer()->get('sylius_abstraction.state_machine');
-        self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
-        $managerRegistry = self::getContainer()->get('doctrine');
-        self::assertInstanceOf(ManagerRegistry::class, $managerRegistry);
-
         // A store that cannot be reached, e.g. a Redis server that is down
         $unavailableStore = new class() implements PersistingStoreInterface {
             public function save(Key $key): void
@@ -309,11 +309,123 @@ final class ReconcileTest extends FunctionalTestCase
             }
         };
 
-        $reconciler = new PaymentReconciler($this->payum(), $stateMachine, new LockFactory($unavailableStore), $managerRegistry);
-
-        $result = $reconciler->reconcile($payment);
+        $result = $this->reconcilerWithLockStore($unavailableStore)->reconcile($payment);
 
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+    }
+
+    /**
+     * @test
+     */
+    public function a_lock_that_cannot_be_released_is_logged_and_the_reconcile_still_counts(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        // A store that takes the lock, then becomes unreachable before the lock is released
+        $storeLostOnRelease = new class() implements PersistingStoreInterface {
+            private readonly InMemoryStore $store;
+
+            public function __construct()
+            {
+                $this->store = new InMemoryStore();
+            }
+
+            public function save(Key $key): void
+            {
+                $this->store->save($key);
+            }
+
+            public function delete(Key $key): void
+            {
+                throw new \RuntimeException('The lock store is unavailable');
+            }
+
+            public function exists(Key $key): bool
+            {
+                return $this->store->exists($key);
+            }
+
+            public function putOffExpiration(Key $key, float $ttl): void
+            {
+                $this->store->putOffExpiration($key, $ttl);
+            }
+        };
+        $logger = new class() extends AbstractLogger {
+            /** @var list<array{mixed, string, array<array-key, mixed>}> */
+            public array $records = [];
+
+            /**
+             * @param mixed $level
+             * @param string|\Stringable $message
+             * @param array<array-key, mixed> $context
+             */
+            public function log($level, $message, array $context = []): void
+            {
+                $this->records[] = [$level, (string) $message, $context];
+            }
+        };
+
+        $result = $this->reconcilerWithLockStore($storeLostOnRelease, $logger)->reconcile($payment);
+
+        // The payment was reconciled, and is reported so: the lock just expires with its TTL
+        self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertStringStartsWith('Could not release the payment\'s lock', $message);
+        self::assertSame(['quickpayPaymentId' => 501], $context);
+    }
+
+    /**
+     * @test
+     */
+    public function a_payment_without_a_gateway_fails_with_an_error_saying_so_and_leaves_the_lock_free(): void
+    {
+        self::bootKernel();
+
+        // Its payment method was taken off the payment after the Quickpay payment was created
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $payment->setMethod(null);
+        $this->entityManager()->flush();
+
+        try {
+            $this->reconciler()->reconcile($payment);
+            self::fail('A payment without a gateway was reconciled');
+        } catch (InvalidArgumentException $e) {
+            // Payum's own error type, so callers handle it like any other Payum error, and a message they can
+            // put the payment's id in front of
+            self::assertSame('The payment has no payment method with a gateway', $e->getMessage());
+        }
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $this->reload($payment)->getState());
+
+        // Nothing is left holding the payment's lock
+        $this->holdLockOf(501);
+    }
+
+    /**
+     * The reconciliation module as the container wires it, but taking its locks in the given store
+     */
+    private function reconcilerWithLockStore(PersistingStoreInterface $store, ?LoggerInterface $logger = null): PaymentReconciler
+    {
+        $stateMachine = self::getContainer()->get('sylius_abstraction.state_machine');
+        self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
+        $managerRegistry = self::getContainer()->get('doctrine');
+        self::assertInstanceOf(ManagerRegistry::class, $managerRegistry);
+
+        $reconciler = new PaymentReconciler($this->payum(), $stateMachine, new LockFactory($store), $managerRegistry);
+        if (null !== $logger) {
+            $reconciler->setLogger($logger);
+        }
+
+        return $reconciler;
     }
 }

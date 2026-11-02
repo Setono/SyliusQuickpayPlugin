@@ -169,6 +169,31 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * @test
+     */
+    public function a_dry_run_counts_a_payment_already_in_line_with_quickpay_as_unchanged(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $details = $payment->getDetails();
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0));
+
+        $tester = $this->executeCommand(['--dry-run' => true]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString(
+            sprintf('Payment %s: "authorized", no transition (Quickpay → "authorized")', (string) $payment->getId()),
+            $tester->getDisplay(),
+        );
+        self::assertStringContainsString('1 checked, 0 transitioned (dry run), 1 unchanged, 0 skipped, 0 errored', $tester->getDisplay());
+
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertDetailsUnchanged($details, $payment);
+    }
+
+    /**
      * @param array<string, mixed> $input
      */
     private function executeCommand(array $input): CommandTester

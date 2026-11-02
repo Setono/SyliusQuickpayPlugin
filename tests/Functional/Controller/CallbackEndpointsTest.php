@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Controller;
 
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use Setono\SyliusQuickpayPlugin\Tests\Payum\OfflineNotifyAction;
 use Sylius\Component\Core\Factory\PaymentMethodFactoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
  * Quickpay's callbacks reconcile the payment they are about, the same way on both callback endpoints: the
@@ -122,15 +124,67 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     }
 
     /**
+     * @test
+     */
+    public function payums_token_less_notify_url_is_left_to_payum(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createOfflinePayment();
+
+        $router = self::getContainer()->get('router');
+        self::assertInstanceOf(UrlGeneratorInterface::class, $router);
+        $response = self::$kernel->handle(Request::create($router->generate('payum_notify_do_unsafe', ['gateway' => self::gatewayNameOf($payment)]), 'POST'));
+
+        // Payum ran the gateway's notify without a payment, and sent its answer
+        self::assertSame(202, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame(OfflineNotifyAction::TOKENLESS_NOTIFY_ANSWER, $response->getContent());
+        self::assertSame(PaymentInterface::STATE_NEW, $this->reload($payment)->getState());
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @test
+     */
+    public function a_callback_on_the_callback_url_of_a_payment_that_no_longer_exists_is_answered_with_a_404(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $callbackUrl = $this->callbackUrlOf($payment);
+
+        // E.g. deleted with its order, after Quickpay was given the url
+        $payment->getOrder()?->removePayment($payment);
+        $this->entityManager()->remove($payment);
+        $this->entityManager()->flush();
+
+        $response = self::$kernel->handle(self::sentTo($callbackUrl, self::quickpayCallback(501)));
+
+        // The token is genuine, its payment is what's missing
+        self::assertSame(404, $response->getStatusCode());
+        self::assertStringContainsString('The payment of the token', (string) $response->getContent());
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
      * Delivers Quickpay's callback about the payment to one of the callback endpoints
      */
     private function deliver(Request $callback, string $endpoint, PaymentInterface $payment): Response
     {
         if (self::PAYMENT_CALLBACK_URL === $endpoint) {
-            $callback = Request::create($this->callbackUrlOf($payment), 'POST', server: $callback->server->all(), content: $callback->getContent());
+            $callback = self::sentTo($this->callbackUrlOf($payment), $callback);
         }
 
         return self::$kernel->handle($callback);
+    }
+
+    /**
+     * The callback, sent to the given url instead
+     */
+    private static function sentTo(string $url, Request $callback): Request
+    {
+        return Request::create($url, 'POST', server: $callback->server->all(), content: $callback->getContent());
     }
 
     /**
