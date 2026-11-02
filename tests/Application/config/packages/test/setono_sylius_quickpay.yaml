@@ -9,3 +9,9 @@ services:
         arguments:
             - '@.inner'
             - '@Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient'
+
+    # The functional tests reach the reconciliation module through its interface, whether or not anything
+    # else in the container consumes it
+    Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface:
+        alias: Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler
+        public: true

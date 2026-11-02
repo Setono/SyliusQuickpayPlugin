@@ -137,6 +137,16 @@
                  alias="setono_sylius_quickpay.notify_idempotency"/>
         </service>
 
+        <!-- Reconciliation -->
+        <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler">
+            <argument type="service" id="payum"/>
+            <!-- the state machine Sylius' payment-state extension applies transitions with -->
+            <argument type="service" id="sylius_abstraction.state_machine"/>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler"/>
+
         <!-- Fraud -->
         <service id="Setono\SyliusQuickpayPlugin\Fraud\FraudChecker">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>
