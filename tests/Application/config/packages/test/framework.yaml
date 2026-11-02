@@ -2,3 +2,8 @@ framework:
     test: ~
     session:
         storage_factory_id: session.storage.factory.mock_file
+    lock:
+        resources:
+            # An in-process store: everything in one test contending for a payment's lock shares it,
+            # while parallel test runs on the same machine never contend on each other's lock files
+            setono_sylius_quickpay: 'in-memory'
