@@ -274,7 +274,8 @@ framework:
 Callbacks are normally how your store learns about a payment state change. If one never arrives — the store was
 unreachable until Quickpay gave up retrying, or the change was made outside the store and the account-wide callback
 url points elsewhere (see [Callbacks](#callbacks)) — the payment stays stuck in a non-final state and the order
-never completes. The plugin ships a reconciliation command that closes this gap by polling Quickpay directly:
+never completes. The plugin ships a reconciliation command that closes this gap by reconciling each stuck payment with
+its Quickpay payment:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments                             # last 7 days, max 100 payments

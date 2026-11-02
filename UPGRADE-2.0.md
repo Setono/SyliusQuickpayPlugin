@@ -162,8 +162,8 @@ if you make those and want the store to notice. The README's *Callbacks* section
   adapter) is complemented by a Symfony workflow event subscriber, so capture/refund/cancel reach
   Quickpay also when the `sylius_payment` graph runs on the `symfony_workflow` adapter — where 1.x
   was silently inert.
-- **New: a reconciliation command.** `setono:sylius-quickpay:reconcile-payments` polls Quickpay for
-  payments stuck in a non-final state — e.g. because a callback never arrived — and reconciles them,
+- **New: a reconciliation command.** `setono:sylius-quickpay:reconcile-payments` reconciles payments
+  stuck in a non-final state — e.g. because a callback never arrived — with their Quickpay payments,
   making the state change the callback would have made; `--dry-run` reports what would change and
   changes nothing. See the README for options and a suggested cron cadence.
 - **New: a doctor command.** `setono:sylius-quickpay:doctor` verifies every configured gateway —
