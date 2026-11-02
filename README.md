@@ -304,7 +304,9 @@ handled at that moment is skipped and reported as such, and the next run picks i
 *unchanged* kept its state; the payment details refreshed from Quickpay, such as its balance, are still saved. A
 payment that fails (Quickpay unreachable, a state-machine callback throwing, say Sylius failing to sell the order's
 inventory) is reported and counted, and nothing of it is saved, not even a state change that was halfway applied, so
-the next run retries it; the run goes on with the next payment.
+the next run retries it; the run goes on with the next payment. When the database fails to save a payment, Doctrine
+closes its entity manager and the rest of that run is reported as errored too; nothing of those payments is saved
+either, and the next run reconciles them.
 
 `--dry-run` only reads: it reports each payment's state, the transition that would be applied (or `no transition`)
 and the state the Quickpay payment's status maps to, and changes nothing — no state, no state-machine callbacks, no

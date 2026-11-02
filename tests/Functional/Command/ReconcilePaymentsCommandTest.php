@@ -112,7 +112,7 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     /**
      * @test
      */
-    public function a_payment_whose_changes_cannot_be_saved_does_not_stop_the_run(): void
+    public function a_payment_whose_changes_cannot_be_saved_is_saved_as_it_was_and_the_rest_of_the_run_errors(): void
     {
         self::bootKernel();
 
@@ -128,15 +128,35 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
 
         $tester = $this->executeCommand([]);
 
+        // With the entity manager closed, nothing more can be reconciled in this run: every payment after the
+        // failing one is reported as errored too
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         self::assertStringContainsString(sprintf('Payment %s:', (string) $failing->getId()), $tester->getDisplay());
-        self::assertStringContainsString('2 checked, 1 transitioned, 0 unchanged, 0 skipped, 1 errored', $tester->getDisplay());
+        self::assertStringContainsString(sprintf('Payment %s:', (string) $next->getId()), $tester->getDisplay());
+        self::assertStringContainsString('2 checked, 0 transitioned, 0 unchanged, 0 skipped, 2 errored', $tester->getDisplay());
 
+        // The next run is a new process, with an entity manager of its own
+        self::bootKernel();
+
+        // Nothing of the failing payment's transition was saved, and the run changed nothing else
         $failing = $this->reload($failing);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $failing->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $failing->getOrder()?->getPaymentState());
         self::assertSame(['onHand' => 5, 'onHold' => 1], $this->inventoryOf($variant));
+        $next = $this->reload($next);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $next->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $next->getOrder()?->getPaymentState());
 
+        // ...and that run reconciles both
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $this->quickpay()->respond('GET', '/payments/502', self::quickpayPayment(502, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $tester = $this->executeCommand([]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('2 checked, 2 transitioned, 0 unchanged, 0 skipped, 0 errored', $tester->getDisplay());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($failing)->getState());
+        self::assertSame(['onHand' => 4, 'onHold' => 0], $this->inventoryOf($variant));
         $next = $this->reload($next);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $next->getState());
         self::assertSame(OrderPaymentStates::STATE_PAID, $next->getOrder()?->getPaymentState());

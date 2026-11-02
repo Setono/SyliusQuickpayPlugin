@@ -38,8 +38,9 @@ interface PaymentReconcilerInterface
      * Errors propagate: the SDK's {@see QuickpayException} (e.g. Quickpay unreachable), Payum's
      * {@see ExceptionInterface} (e.g. a payment without a gateway) or whatever a state-machine callback throws.
      * A reconcile that fails saves nothing, not even a transition that was halfway applied when a
-     * state-machine callback threw: its transaction is rolled back and the entity manager cleared (or reset,
-     * when the failure closed it), so it is usable for the next payment.
+     * state-machine callback threw: its transaction is rolled back and the entity manager cleared, so it is
+     * usable for the next payment. A failed save is the exception: Doctrine closes the entity manager, and
+     * every later reconcile in the same process fails as well.
      *
      * @throws QuickpayException
      */

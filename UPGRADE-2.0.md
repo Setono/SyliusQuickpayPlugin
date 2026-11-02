@@ -218,8 +218,8 @@ mapping applies.
   token-less notify url, is passed on untouched. If your application decorates or replaces Payum's notify
   controller, Quickpay callbacks no longer reach it (nor a decorator of yours stacked inside the plugin's), and a
   replacement must still extend `NotifyController`, which the plugin's decorator receives as its inner service.
-- **`payum/payum-bundle` (`^2.5`), `doctrine/orm` (`^2.13`) and `doctrine/dbal` (`^3.0`) are direct
-  dependencies.** Sylius already requires them, so nothing new is installed.
+- **`payum/payum-bundle` (`^2.5`) and `doctrine/orm` (`^2.13`) are direct dependencies.** Sylius already
+  requires them, so nothing new is installed.
 
 ### Changed constructors
 
@@ -251,7 +251,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   the transition (Sylius failing to sell the order's inventory, say) left the payment and its order transitioned in
   the database while the callback was answered with an error or the command reported the payment as errored, and
   every retry then saw the payment as reconciled. The reconciliation command goes on with its next payment after
-  such an error, with Doctrine's entity manager cleared (or reset, when a failed flush closed it).
+  such an error, with Doctrine's entity manager cleared. When the database fails to save a payment, Doctrine closes
+  the entity manager, and the rest of that run is reported as errored; the next run reconciles those payments.
 - **Duplicate callbacks are answered 2xx without processing, on both callback urls.** Both urls reconcile the
   payment under its lock, held until the transition is applied and saved. A callback arriving while the lock is
   held is answered 204 and runs nothing; one arriving after it was released sees the saved state and changes

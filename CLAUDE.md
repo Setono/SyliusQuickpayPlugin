@@ -147,11 +147,12 @@ outside this module (a guard doing so inside a transition applied the transition
   `finally` (release errors are logged, never thrown) → compare the states. Errors propagate to the caller, and **a
   failed reconcile saves nothing**: Payum's `StorageExtension` flushes after a failed request too (e.g. a
   state-machine callback that threw halfway through the transition, the payment and its order already moved on), so
-  on any error the module rolls the transaction back, clears the entity manager (or resets it through the registry
-  when a failed flush closed it) and re-attaches the payment as committed (`UnitOfWork::registerManaged()` +
-  `refresh()`), because Payum's storage extension keeps a model whose save failed and saves it again after the next
-  request in the process, where a detached payment would fail that request. The reconcile command relies on this to
-  go on with its next payment.
+  on any error the module rolls the transaction back, clears the entity manager (dropping the half-applied changes it
+  holds in memory) and rethrows the request's own error. That is all the recovery there is, on purpose: a failed
+  flush (a database error) closes the entity manager, and the module doesn't reset it, so every later reconcile in
+  that process errors too. That only matters to the reconcile command, which then reports the rest of its run as
+  errored; nothing half-applied is saved and the next run reconciles them. A callback handles one payment per
+  request.
   - On demand, the request is Sylius' `GetStatus` on the Sylius payment.
   - From a callback, it is Payum's `Notify` on a **copy of the details** first: the **library's** `NotifyAction`
     validates the `QuickPay-Checksum-Sha256` HMAC of the request being handled (the request stack's main request,
@@ -221,8 +222,9 @@ link PUT to surface the missing-permission 403. Non-zero exit on any failed chec
 prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a skipped one is reported, and the summary is
 `N checked, N transitioned, N unchanged, N skipped, N errored` (unchanged = no state change; its refreshed details
 are still saved). It catches any `\Exception` per payment (Quickpay, Payum, a failing state-machine callback, a failed
-flush), counts it as errored and goes on with the next payment: the module saved nothing of the errored one and left
-the entity manager usable, and the next run retries it; any error → non-zero exit.
+flush), counts it as errored and goes on with the next payment: the module saved nothing of the errored one, and the
+next run retries it; any error → non-zero exit. After a failed flush the entity manager stays closed, so the rest of
+that run errors as well (accepted: nothing is saved half-applied, and the next run, a new process, reconciles them).
 `--dry-run` uses the status check (`checkStatus()`) instead and writes nothing, printing the transition that would
 be applied. The command has no status → transition mapping of its own. Doctrine access in `PaymentReconciler` and
 `PendingPaymentProvider` goes through `setono/doctrine-orm-trait`'s `ORMTrait` (inject `ManagerRegistry`, call

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Reconciliation;
 
-use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Payum\Core\Bridge\Spl\ArrayObject;
@@ -156,7 +155,11 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
                 $targetState = $runRequest($this->gatewayOf($payment), $payment);
                 $manager->getConnection()->commit();
             } catch (\Throwable $e) {
-                $this->rollBack($manager, $payment, $quickpayPaymentId);
+                // The entity manager still holds the half-applied changes in memory, so they go too. When the
+                // flush itself failed, Doctrine has closed the entity manager, and nothing more can be
+                // reconciled with it.
+                $manager->getConnection()->rollBack();
+                $manager->clear();
 
                 throw $e;
             }
@@ -191,46 +194,6 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         }
 
         return $payment;
-    }
-
-    /**
-     * Rolls back what the failed request flushed and leaves the entity manager usable for what comes next
-     * (the reconcile command goes on with its next payment), holding the payment as committed.
-     */
-    private function rollBack(EntityManagerInterface $manager, PaymentInterface $payment, int $quickpayPaymentId): void
-    {
-        try {
-            $manager->getConnection()->rollBack();
-        } catch (DBALException $e) {
-            // The request's own error is the one to report
-            $this->logger?->error(sprintf('Could not roll back the failed reconcile: %s', $e->getMessage()), [
-                'quickpayPaymentId' => $quickpayPaymentId,
-            ]);
-        }
-
-        // The entity manager still holds the half-applied changes in memory. A flush that failed closed it.
-        if ($manager->isOpen()) {
-            $manager->clear();
-        } else {
-            $name = array_search($manager, $this->managerRegistry->getManagers(), true);
-            $this->managerRegistry->resetManager(is_string($name) ? $name : null);
-
-            $this->managers = [];
-            $manager = $this->getManager($payment);
-        }
-
-        // When saving the payment failed, Payum's storage extension keeps it and saves it again after the next
-        // Payum request in this process, in whatever entity manager is current. Detached, it would be taken
-        // for a new payment and fail that request too, so it is managed again, as committed: saving it again
-        // then changes nothing. This is the payment instance Payum holds, so it can only be attached, not loaded.
-        try {
-            $manager->getUnitOfWork()->registerManaged($payment, $manager->getClassMetadata($payment::class)->getIdentifierValues($payment), []);
-            $manager->refresh($payment);
-        } catch (\Throwable $e) {
-            $this->logger?->error(sprintf('Could not reload the payment after the failed reconcile: %s', $e->getMessage()), [
-                'quickpayPaymentId' => $quickpayPaymentId,
-            ]);
-        }
     }
 
     /**
