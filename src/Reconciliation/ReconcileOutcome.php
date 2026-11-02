@@ -15,7 +15,8 @@ enum ReconcileOutcome
     case Transitioned;
 
     /**
-     * The payment's state already matched its Quickpay payment, or no transition leads there
+     * No state change: the payment's state already matched its Quickpay payment, or no transition leads
+     * there. The details the status read refreshed, such as Quickpay's balance, are still saved.
      */
     case Unchanged;
 

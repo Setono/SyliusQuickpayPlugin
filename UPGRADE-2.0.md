@@ -142,8 +142,8 @@ if you make those and want the store to notice. The README's *Callbacks* section
 - **A refund targets Quickpay's `balance`** (what is still captured) rather than the original amount,
   so a payment partially refunded directly in the Quickpay manager refunds only the remainder instead
   of failing. The balance is persisted into the payment details whenever a callback or the reconciliation
-  command reconciles the payment. An explicit `refund_amount`/`capture_amount` in the details is passed
-  through untouched.
+  command reconciles the payment, also when its state doesn't change. An explicit
+  `refund_amount`/`capture_amount` in the details is passed through untouched.
 - **A partially refunded payment stays `completed`** until the full amount is refunded, instead of
   flipping to `refunded` on the first partial refund.
 - **Callbacks are HMAC-verified** (`QuickPay-Checksum-Sha256`) by the gateway library; unsigned or
@@ -241,9 +241,16 @@ The service definitions changed accordingly; only a redefinition or decoration o
   the transition, so reconciling makes exactly the change a callback would have made: a pending Quickpay payment
   now moves a `new` payment to `processing`. Each payment is saved as soon as it is reconciled. A changed payment
   prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a payment whose lock is held is skipped
-  and reported, and the summary reads `N checked, N transitioned, N unchanged, N skipped, N errored`. Before, a
-  payment Sylius had just moved was counted as unchanged. The run continues after any error, including a failing
-  state-machine callback, and exits non-zero when a payment errored.
+  and reported, and the summary reads `N checked, N transitioned, N unchanged, N skipped, N errored`, where
+  unchanged means no state change (the payment details refreshed from Quickpay, such as the balance, are still
+  saved). Before, a payment Sylius had just moved was counted as unchanged. The run continues after any error,
+  including a failing state-machine callback, and exits non-zero when a payment errored.
+- **A reconcile that fails saves nothing.** A callback or the reconciliation command reconciles a payment in a
+  database transaction that is rolled back on any error. Before, a state-machine callback throwing halfway through
+  the transition (Sylius failing to sell the order's inventory, say) left the payment and its order transitioned in
+  the database while the callback was answered with an error or the command reported the payment as errored, and
+  every retry then saw the payment as reconciled. The reconciliation command goes on with its next payment after
+  such an error, with Doctrine's entity manager cleared (or reset, when a failed flush closed it).
 - **Duplicate callbacks are answered 2xx without processing, on both callback urls.** Both urls reconcile the
   payment under its lock, held until the transition is applied and saved. A callback arriving while the lock is
   held is answered 204 and runs nothing; one arriving after it was released sees the saved state and changes
@@ -255,7 +262,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   lock store still fails open.
 - **A forged callback changes nothing.** A callback whose HMAC doesn't match is answered 400 before anything about
   the payment changes, on both callback urls. Before, Sylius still reconciled and saved the payment (against
-  Quickpay's real status) before the 400 was sent.
+  Quickpay's real status) before the 400 was sent. The payment's lock is taken before the HMAC is checked, so a
+  forged callback arriving while the lock is held is answered 204 like any duplicate, and runs nothing.
 - **Admin operations no longer apply a transition inside themselves.** The guards before capture, refund and
   cancel (skip the operation when Quickpay already did it) use the status check. Before, completing a payment
   Quickpay had already captured ran `complete` and its callbacks a second time from inside the first, and the

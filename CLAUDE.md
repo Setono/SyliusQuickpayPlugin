@@ -78,7 +78,13 @@ assert on `$this->quickpay()->sentRequests()`. The gateway, Sylius' payment-stat
 lock and the database are real. `$this->holdLockOf($quickpayPaymentId)` holds a payment's lock (as a callback
 being handled would) until you release it. To count how often a payment transition (and so its callbacks) ran, under either
 adapter, take `$transitions = $this->recordPaymentTransitions()` before acting and assert on
-`$transitions->getArrayCopy()`. `self::quickpayCallback($quickpayPaymentId)` builds Quickpay's signed callback for
+`$transitions->getArrayCopy()`. For inventory evidence, order tracked variants:
+`$variant = $this->createTrackedVariant($code, onHand: 5, onHold: 1)` and
+`createSyliusPayment(..., orderedVariants: [$variant])` (the order then totals the payment's amount and paying it sells
+one unit of each); read the committed counts with `$this->inventoryOf($variant)`. A variant with fewer units on hold
+than ordered makes Sylius' sale throw mid-transition, a real failing state-machine callback. `$this->reconciler()` is
+the module as wired; `transitioningQuickpayStatuses` is the shared Quickpay status → transition data provider.
+`self::quickpayCallback($quickpayPaymentId)` builds Quickpay's signed callback for
 the shared endpoint (pass `privateKey:` to forge one): `self::$kernel->handle()` it to POST it, or
 `$this->receiveCallback()` it to make it the request being handled when calling the module directly (Payum reads
 the callback from the request stack). For a gateway other than Quickpay, the `test` env gives Payum's offline
@@ -130,13 +136,22 @@ outside this module (a guard doing so inside a transition applied the transition
   so the extension never fires and nothing is persisted, not even refreshed details. One `GET /payments/{id}`.
 - **`reconcile()`, reconcile on demand** and **`reconcileFromCallback()`, reconcile from a callback** →
   `ReconcileResult` (`outcome`: `ReconcileOutcome` `Transitioned`/`Unchanged`/`Skipped`, `stateBefore`,
-  `stateAfter`, `targetState`, null only when skipped). Both run the same private sequence, `reconcileWith()`:
-  take the payment's lock (key `setono_sylius_quickpay_payment_<quickpayPaymentId>`, TTL 60s, not auto-released,
-  non-blocking: held → `Skipped`, nothing read or written; a lock store error is logged and the payment is reconciled
-  unguarded) → `refresh()` the payment and its order, so state committed before the lock was taken is seen → run one
-  top-level request on the Sylius payment (the extension applies at most one transition, storage flushes) → release
-  the lock in a `finally` (release errors are logged, never thrown) → compare the states. The module has no flush of
-  its own. Errors propagate to the caller.
+  `stateAfter`, `targetState`, null only when skipped). `Unchanged` means no state change, not nothing written: the
+  details the status read refreshed (e.g. Quickpay's `balance`) are still persisted. Both run the same private
+  sequence, `reconcileWith()`: take the payment's lock (key `setono_sylius_quickpay_payment_<quickpayPaymentId>`, TTL
+  60s, not auto-released, non-blocking: held → `Skipped`, nothing read or written; a lock store error is logged and the
+  payment is reconciled unguarded) → reload the payment and its order (`refresh()`; a payment the entity manager no
+  longer manages is loaded afresh with `find()`), so state committed before the lock was taken is seen → begin a
+  transaction on the entity manager's connection → run one top-level request on the Sylius payment (the extension
+  applies at most one transition, Payum's storage flushes inside the transaction) → commit → release the lock in a
+  `finally` (release errors are logged, never thrown) → compare the states. Errors propagate to the caller, and **a
+  failed reconcile saves nothing**: Payum's `StorageExtension` flushes after a failed request too (e.g. a
+  state-machine callback that threw halfway through the transition, the payment and its order already moved on), so
+  on any error the module rolls the transaction back, clears the entity manager (or resets it through the registry
+  when a failed flush closed it) and re-attaches the payment as committed (`UnitOfWork::registerManaged()` +
+  `refresh()`), because Payum's storage extension keeps a model whose save failed and saves it again after the next
+  request in the process, where a detached payment would fail that request. The reconcile command relies on this to
+  go on with its next payment.
   - On demand, the request is Sylius' `GetStatus` on the Sylius payment.
   - From a callback, it is Payum's `Notify` on a **copy of the details** first: the **library's** `NotifyAction`
     validates the `QuickPay-Checksum-Sha256` HMAC of the request being handled (the request stack's main request,
@@ -145,7 +160,7 @@ outside this module (a guard doing so inside a transition applied the transition
     Sylius payment and `GetStatus` runs on it as the top-level request. Never run `Notify` on the Sylius payment
     itself: the library rejects a forged callback with an `HttpResponse` reply, and Payum still runs the extension's
     post-execute for a reply (only an exception stops it), so a forged callback would reconcile the payment and
-    persist it before its 400.
+    persist it before its 400 (recorded in ADR 0001's consequences).
 - The lock comes from the named `framework.lock` resource `setono_sylius_quickpay` that
   `SetonoSyliusQuickpayExtension::prepend()` registers (default `flock`; service
   `lock.setono_sylius_quickpay.factory`; the README shows the multi-server override — apps redefine the resource,
@@ -158,7 +173,10 @@ Callbacks arrive on two endpoints, which behave identically for the same callbac
 `reconcileFromCallback()` and answer 204 whether the payment was reconciled or skipped because its lock is held (a
 duplicate of a callback being handled: the lock's holder reconciles it, and Quickpay stops retrying); errors
 propagate to an error response (a forged callback → Payum's reply listener turns the `HttpResponse` into a 400,
-anything else a 500), so Quickpay retries.
+anything else a 500), so Quickpay retries, and since a failed reconcile saves nothing, the retry finds the payment as
+it was. The lock is taken before the HMAC is checked (the check is the `Notify` inside the sequence), so a forged
+callback arriving while the payment's lock is held is answered 204 too and runs nothing: nothing is read or changed,
+but a 2xx is no proof a callback was genuine.
 - `src/Controller/PayumNotifyController.php` **decorates Payum's notify controller** (service
   `Payum\Bundle\PayumBundle\Controller\NotifyController`, route `payum_notify_do` → `/payment/notify/{payum_token}`;
   args `.inner`, `payum`, `PaymentReconcilerInterface`, `sylius.repository.gateway_config`): the per-payment
@@ -201,8 +219,10 @@ link PUT to surface the missing-permission 403. Non-zero exit on any failed chec
 `quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()` (see
 *Reconciling payments* above). Each payment is persisted by its own reconcile (no end-of-loop flush); a changed one
 prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a skipped one is reported, and the summary is
-`N checked, N transitioned, N unchanged, N skipped, N errored`. It catches any `\Exception` per payment (Quickpay,
-Payum, a failing state-machine callback), counts it as errored and goes on; any error → non-zero exit.
+`N checked, N transitioned, N unchanged, N skipped, N errored` (unchanged = no state change; its refreshed details
+are still saved). It catches any `\Exception` per payment (Quickpay, Payum, a failing state-machine callback, a failed
+flush), counts it as errored and goes on with the next payment: the module saved nothing of the errored one and left
+the entity manager usable, and the next run retries it; any error → non-zero exit.
 `--dry-run` uses the status check (`checkStatus()`) instead and writes nothing, printing the transition that would
 be applied. The command has no status → transition mapping of its own. Doctrine access in `PaymentReconciler` and
 `PendingPaymentProvider` goes through `setono/doctrine-orm-trait`'s `ORMTrait` (inject `ManagerRegistry`, call

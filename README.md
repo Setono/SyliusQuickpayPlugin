@@ -149,10 +149,10 @@ Quickpay — the check fails open on anything but an explicit rejection.
 * A refund targets Quickpay's **balance** (what is still captured) rather than the original amount — so a payment
   that was partially refunded directly in the Quickpay manager refunds only the remainder instead of failing. The
   balance is also persisted into the payment details whenever a callback or the
-  [reconciliation command](#reconciling-missed-callbacks) reconciles the payment. An explicit
-  `refund_amount` / `capture_amount` in the payment details is passed through to Quickpay untouched for
-  programmatic partial operations; note that Sylius' payment state machine still treats the payment as a whole —
-  the `refund` transition can only be applied once.
+  [reconciliation command](#reconciling-missed-callbacks) reconciles the payment, also when its state doesn't
+  change. An explicit `refund_amount` / `capture_amount` in the payment details is passed through to Quickpay
+  untouched for programmatic partial operations; note that Sylius' payment state machine still treats the payment
+  as a whole — the `refund` transition can only be applied once.
 
 ## Payment method logos on the checkout
 
@@ -255,7 +255,11 @@ original is still being handled. Both callback urls reconcile the payment under 
 state change is applied and saved. A callback arriving while the lock is held is answered with a 2xx and runs
 nothing, so nothing is applied twice and Quickpay stops retrying; one arriving after the lock was released sees the
 saved state and changes nothing. Nothing is lost either: handling a callback re-fetches the payment from Quickpay,
-so the callback holding the lock sees the state the duplicate carried. The
+so the callback holding the lock sees the state the duplicate carried. The lock is taken before the callback's
+signature is checked, so a forged callback arriving while the payment's lock is held is answered with a 2xx as well;
+like any duplicate it runs nothing and changes nothing. A callback whose handling fails (Quickpay unreachable, a
+state-machine callback throwing) saves nothing, not even a state change that was halfway applied, and is answered
+with an error, so Quickpay's retry finds the payment as it was. The
 [reconciliation command](#reconciling-missed-callbacks) takes the same lock, so a callback and the command never
 reconcile a payment at the same time. The lock is a regular [Symfony lock](https://symfony.com/doc/current/lock.html):
 the plugin registers a named `framework.lock` resource, `setono_sylius_quickpay`, defaulting to the `flock` store,
@@ -296,8 +300,11 @@ Payment 43: skipped, it is locked by a callback being handled or another run
 ```
 
 The command takes the same per-payment lock as the [callbacks](#callbacks): a payment whose callback is being
-handled at that moment is skipped and reported as such, and the next run picks it up. A payment that fails (Quickpay
-unreachable, a state-machine callback throwing) is reported and counted, and the run goes on with the next one.
+handled at that moment is skipped and reported as such, and the next run picks it up. A payment counted as
+*unchanged* kept its state; the payment details refreshed from Quickpay, such as its balance, are still saved. A
+payment that fails (Quickpay unreachable, a state-machine callback throwing, say Sylius failing to sell the order's
+inventory) is reported and counted, and nothing of it is saved, not even a state change that was halfway applied, so
+the next run retries it; the run goes on with the next payment.
 
 `--dry-run` only reads: it reports each payment's state, the transition that would be applied (or `no transition`)
 and the state the Quickpay payment's status maps to, and changes nothing — no state, no state-machine callbacks, no
