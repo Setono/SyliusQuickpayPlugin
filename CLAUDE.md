@@ -78,7 +78,9 @@ adapter, take `$transitions = $this->recordPaymentTransitions()` before acting a
 `$transitions->getArrayCopy()`. `self::quickpayCallback($quickpayPaymentId)` builds Quickpay's signed callback for
 the shared endpoint (pass `privateKey:` to forge one): `self::$kernel->handle()` it to POST it, or
 `$this->receiveCallback()` it to make it the request being handled when calling the module directly (Payum reads
-the callback from the request stack). To run a test under both state machine adapters, use
+the callback from the request stack). For a gateway other than Quickpay, the `test` env gives Payum's offline
+gateway a notify action that marks the payment captured (`tests/Payum/OfflineNotifyAction`, registered in
+`config/packages/test/payum.yaml`). To run a test under both state machine adapters, use
 `@dataProvider stateMachineAdapters` and `self::bootKernelWithStateMachineAdapter($adapter)`: `symfony_workflow`
 runs in the `test_workflow` env (`config/packages/test_workflow/`, which imports the `test` config), sharing the
 test database through `.env.test`'s fixed `DATABASE_URL`. In both test envs the `setono_sylius_quickpay` lock
@@ -106,7 +108,19 @@ defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolv
 `LanguageGuesserInterface`) — inject the interface, alias resolution does the rest.
 
 ### The notify flow
-- `src/Controller/NotifyAction.php` is the **HTTP entry point** (route `setono_sylius_quickpay_notify` →
+Callbacks arrive on two endpoints, which behave identically for the same callback
+(`tests/Functional/Controller/CallbackEndpointsTest` runs every scenario against both):
+- `src/Controller/PayumNotifyController.php` **decorates Payum's notify controller** (service
+  `Payum\Bundle\PayumBundle\Controller\NotifyController`, route `payum_notify_do` → `/payment/notify/{payum_token}`):
+  the per-payment `callback_url` the library mints on payment link creation, which Quickpay normally calls. It
+  verifies the token as Payum does (Payum's `HttpRequestVerifier`), and when the token's gateway is a Quickpay
+  gateway (its stored gateway config, looked up by the token's gateway name like Payum's dynamic registry does,
+  has factory `quickpay`) it resolves the Sylius payment from the token's details and reconciles it from the
+  callback, answering 204 like the shared endpoint. A Quickpay token must **never** fall through to Payum's
+  controller: that runs `Notify` on the Sylius payment without the lock, and a forged callback would be applied
+  and persisted before its 400 (see below). Every other token, and Payum's token-less `doUnsafeAction`, is
+  delegated to Payum's controller untouched.
+- `src/Controller/NotifyAction.php` is the plugin's **shared endpoint** (route `setono_sylius_quickpay_notify` →
   `POST /payment/quickpay/notify`, in `src/Resources/config/routes.yaml`). It only handles callbacks whose
   `QuickPay-Resource-Type` header is `Payment`, recovers the Sylius order number by stripping the
   `order_prefix` of **each configured Quickpay gateway** from the incoming `order_id` (read from the stored
@@ -130,9 +144,6 @@ defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolv
   `lock.setono_sylius_quickpay.factory`; the README shows the multi-server override — apps redefine the resource,
   since framework.lock resources replace rather than merge). A broken lock store fails open (the callback is
   handled unguarded).
-- Payum's per-payment token notify endpoint (`payum_notify_do`, the `callback_url` the library mints on payment
-  link creation, which Quickpay normally calls) still runs Payum's own `Notify` on the Sylius payment, without
-  the lock.
 
 The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
