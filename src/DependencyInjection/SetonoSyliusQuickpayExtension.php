@@ -72,9 +72,10 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
         }
 
         if ($container->hasExtension('framework')) {
-            // A named lock resource for serializing concurrent Quickpay callback handling. The
-            // application overrides the store by redefining the resource (framework.lock resources
-            // replace, not merge), e.g. `framework: { lock: { setono_sylius_quickpay: '%env(LOCK_DSN)%' } }`
+            // A named lock resource for the per-payment lock reconciling a Sylius payment takes, so callbacks
+            // and the reconcile command never reconcile the same payment at once. The application overrides
+            // the store by redefining the resource (framework.lock resources replace, not merge), e.g.
+            // `framework: { lock: { setono_sylius_quickpay: '%env(LOCK_DSN)%' } }`
             $container->prependExtensionConfig('framework', [
                 'lock' => [
                     'resources' => [

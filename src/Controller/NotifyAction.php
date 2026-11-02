@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Controller;
 
-use Payum\Core\Payum;
-use Payum\Core\Request\Notify;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
+use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -20,7 +19,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 /**
- * Handles callbacks from Quickpay @see https://learn.quickpay.net/tech-talk/api/callback/
+ * The shared callback endpoint: finds the Sylius payment a Quickpay callback is about and reconciles it
+ * from the callback (see GLOSSARY.md) @see https://learn.quickpay.net/tech-talk/api/callback/
  */
 final class NotifyAction
 {
@@ -29,7 +29,7 @@ final class NotifyAction
      * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
      */
     public function __construct(
-        private readonly Payum $payum,
+        private readonly PaymentReconcilerInterface $reconciler,
         private readonly OrderRepositoryInterface $orderRepository,
         private readonly PaymentProviderInterface $paymentProvider,
         private readonly RepositoryInterface $gatewayConfigRepository,
@@ -64,20 +64,14 @@ final class NotifyAction
 
         $payment = $this->paymentProvider->findByQuickpayPaymentId($order, $quickpayPaymentId);
 
-        if (null === $payment) {
+        if (!$payment instanceof PaymentInterface) {
             throw new BadRequestHttpException();
         }
 
-        /** @var PaymentMethodInterface $method */
-        $method = $payment->getMethod();
-
-        /** @var GatewayConfigInterface $gatewayConfig */
-        $gatewayConfig = $method->getGatewayConfig();
-
-        $gateway = $this->payum->getGateway($gatewayConfig->getGatewayName());
-
-        // validates request checksum and set the request data
-        $gateway->execute(new Notify($payment));
+        // A payment skipped because its lock is held is answered like a reconciled one: the lock's holder,
+        // e.g. the original of this duplicate, reconciles it, so Quickpay can stop retrying. Errors
+        // (a forged callback, Quickpay unreachable) propagate to an error response, so Quickpay retries.
+        $this->reconciler->reconcileFromCallback($payment);
 
         return new Response('', 204);
     }
