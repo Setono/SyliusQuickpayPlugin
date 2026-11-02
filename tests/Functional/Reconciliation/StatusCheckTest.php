@@ -36,13 +36,13 @@ final class StatusCheckTest extends FunctionalTestCase
         // Nothing changed in memory: had Sylius applied `complete`, its callbacks would have marked the order paid
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
 
         // ...and nothing reached the database, not even the balance the status read refreshes
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
     }
 
     /**

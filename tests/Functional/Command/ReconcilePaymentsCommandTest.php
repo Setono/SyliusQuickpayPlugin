@@ -165,7 +165,7 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
     }
 
     /**

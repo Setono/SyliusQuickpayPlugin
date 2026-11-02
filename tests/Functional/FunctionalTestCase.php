@@ -303,6 +303,21 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
+     * Asserts the payment's stored details hold exactly the expected keys and values. Key order is ignored:
+     * MySQL's JSON column reorders keys on save, while MariaDB keeps them as written
+     *
+     * @param array<array-key, mixed> $expected
+     */
+    protected static function assertDetailsUnchanged(array $expected, PaymentInterface $payment): void
+    {
+        $actual = $payment->getDetails();
+        ksort($expected);
+        ksort($actual);
+
+        self::assertSame($expected, $actual);
+    }
+
+    /**
      * A Quickpay payment as `GET /payments/{id}` returns it
      *
      * @param list<string> $approvedOperations operation types, in the order they happened

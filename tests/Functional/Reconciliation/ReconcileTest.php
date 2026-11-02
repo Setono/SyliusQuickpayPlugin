@@ -165,7 +165,7 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
 
         // Once whoever held the lock is done, the payment reconciles as usual
         $lock->release();
@@ -252,7 +252,7 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
         self::assertSame(['onHand' => 5, 'onHold' => 0], $this->inventoryOf($variant));
 
         // Once the unit is back on hold, the next attempt applies the transition, with all its callbacks, once

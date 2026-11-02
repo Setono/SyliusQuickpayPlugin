@@ -118,7 +118,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
     }
 
     /**
@@ -183,7 +183,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
         self::assertSame(['onHand' => 5, 'onHold' => 0], $this->inventoryOf($variant));
 
         // Quickpay's retry, once the unit is back on hold
@@ -222,7 +222,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
-        self::assertSame($details, $payment->getDetails());
+        self::assertDetailsUnchanged($details, $payment);
         self::assertSame([], $this->quickpay()->sentRequests());
 
         // The genuine callback is not locked out
