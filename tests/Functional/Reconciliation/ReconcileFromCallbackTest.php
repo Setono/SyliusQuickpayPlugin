@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 use Payum\Core\Reply\HttpResponse;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use Sylius\Component\Core\Inventory\Exception\NotEnoughUnitsOnHoldException;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Sylius\Component\Payment\PaymentTransitions;
@@ -111,6 +112,48 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
 
         // Completed, the order paid and the unit sold, once
         self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());
+        self::assertSame(['onHand' => 4, 'onHold' => 0], $this->inventoryOf($variant));
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider stateMachineAdapters
+     */
+    public function a_state_machine_callback_failing_mid_transition_leaves_nothing_of_it_persisted(string $stateMachineAdapter): void
+    {
+        self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
+
+        // The ordered unit is no longer on hold, so Sylius fails to sell it when `complete` pays the order
+        $variant = $this->createTrackedVariant('t_shirt', onHand: 5, onHold: 0);
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501, orderedVariants: [$variant]);
+        $details = $payment->getDetails();
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $this->receiveCallback(self::quickpayCallback(501));
+
+        try {
+            $this->reconciler()->reconcileFromCallback($payment);
+            self::fail('The state-machine callback\'s error was swallowed');
+        } catch (NotEnoughUnitsOnHoldException) {
+            // Answered with an error, so Quickpay retries the callback
+        }
+
+        // A retry must find the payment as it was, or it would take it for reconciled and the unit would
+        // never be sold
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+        self::assertSame($details, $payment->getDetails());
+        self::assertSame(['onHand' => 5, 'onHold' => 0], $this->inventoryOf($variant));
+
+        // Quickpay's retry, once the unit is back on hold
+        $this->entityManager()->getConnection()->executeStatement('UPDATE sylius_product_variant SET on_hold = 1 WHERE id = ?', [$variant->getId()]);
+        $this->receiveCallback(self::quickpayCallback(501));
+
+        self::assertSame(ReconcileOutcome::Transitioned, $this->reconciler()->reconcileFromCallback($this->reload($payment))->outcome);
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());

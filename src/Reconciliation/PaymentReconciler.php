@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Reconciliation;
 
+use Doctrine\DBAL\Exception as DBALException;
+use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\InvalidArgumentException;
@@ -106,18 +108,20 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
 
     /**
      * The reconcile sequence, whatever request triggers Sylius' payment-state extension: take the payment's
-     * lock, reload the payment, run the request, release the lock, compare the states before and after.
+     * lock, reload the payment, run the request in a database transaction, release the lock, compare the
+     * states before and after.
      *
      * @param \Closure(GatewayInterface, PaymentInterface): string $runRequest runs the request through the
      *        payment's gateway as a top-level request on the Sylius payment itself and returns the Quickpay
      *        status. After a top-level status request or Notify on a Sylius payment, the extension applies
-     *        the transition and Payum's storage flushes the entity manager, both while the lock is held.
+     *        the transition and Payum's storage flushes the entity manager, both inside the transaction and
+     *        while the lock is held.
      */
     private function reconcileWith(PaymentInterface $payment, \Closure $runRequest): ReconcileResult
     {
         $quickpayPaymentId = Details::paymentId(new ArrayObject($payment->getDetails()));
 
-        // Not auto-released: the lock must span the transition and the flush and be released right after,
+        // Not auto-released: the lock must span the transition and the commit and be released right after,
         // in the finally below, never left to whenever the lock object happens to be collected
         $lock = $this->lockFactory->createLock(self::LOCK_KEY_PREFIX . $quickpayPaymentId, self::LOCK_TTL, false);
 
@@ -137,24 +141,94 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         }
 
         try {
-            // Whatever was committed before the lock was taken (say, by a callback that held it a moment
-            // ago) must be seen, or its transition would be applied a second time. The order goes too: the
-            // transition's callbacks read and change it.
             $manager = $this->getManager($payment);
-            $manager->refresh($payment);
-            $order = $payment->getOrder();
-            if (null !== $order) {
-                $manager->refresh($order);
-            }
-
+            $payment = self::reload($manager, $payment);
             $stateBefore = self::stateOf($payment);
-            $quickpayStatus = $runRequest($this->gatewayOf($payment), $payment);
+
+            // Payum's storage flushes after the request even when the request fails (a state-machine
+            // callback throwing halfway through the transition, say), so the flush runs in a transaction
+            // that commits only when the request succeeded. A failed reconcile saves nothing: no half-applied
+            // transition that a retry would take for a reconciled payment.
+            $manager->getConnection()->beginTransaction();
+
+            try {
+                $quickpayStatus = $runRequest($this->gatewayOf($payment), $payment);
+                $manager->getConnection()->commit();
+            } catch (\Throwable $e) {
+                $this->rollBack($manager, $payment, $quickpayPaymentId);
+
+                throw $e;
+            }
 
             return ReconcileResult::reconciled($stateBefore, self::stateOf($payment), $quickpayStatus);
         } finally {
             if (null !== $lock) {
                 self::release($lock, $quickpayPaymentId, $this->logger);
             }
+        }
+    }
+
+    /**
+     * Whatever was committed before the lock was taken (say, by a callback that held it a moment ago) must be
+     * seen, or its transition would be applied a second time. The order goes too: the transition's callbacks
+     * read and change it. A payment the entity manager no longer manages, e.g. the reconcile command's next
+     * payment after a failed reconcile cleared it, is loaded afresh.
+     */
+    private static function reload(EntityManagerInterface $manager, PaymentInterface $payment): PaymentInterface
+    {
+        if ($manager->contains($payment)) {
+            $manager->refresh($payment);
+        } else {
+            $reloaded = $manager->find($payment::class, $payment->getId());
+            Assert::isInstanceOf($reloaded, PaymentInterface::class, 'The payment to reconcile no longer exists');
+            $payment = $reloaded;
+        }
+
+        $order = $payment->getOrder();
+        if (null !== $order) {
+            $manager->refresh($order);
+        }
+
+        return $payment;
+    }
+
+    /**
+     * Rolls back what the failed request flushed and leaves the entity manager usable for what comes next
+     * (the reconcile command goes on with its next payment), holding the payment as committed.
+     */
+    private function rollBack(EntityManagerInterface $manager, PaymentInterface $payment, int $quickpayPaymentId): void
+    {
+        try {
+            $manager->getConnection()->rollBack();
+        } catch (DBALException $e) {
+            // The request's own error is the one to report
+            $this->logger?->error(sprintf('Could not roll back the failed reconcile: %s', $e->getMessage()), [
+                'quickpayPaymentId' => $quickpayPaymentId,
+            ]);
+        }
+
+        // The entity manager still holds the half-applied changes in memory. A flush that failed closed it.
+        if ($manager->isOpen()) {
+            $manager->clear();
+        } else {
+            $name = array_search($manager, $this->managerRegistry->getManagers(), true);
+            $this->managerRegistry->resetManager(is_string($name) ? $name : null);
+
+            $this->managers = [];
+            $manager = $this->getManager($payment);
+        }
+
+        // When saving the payment failed, Payum's storage extension keeps it and saves it again after the next
+        // Payum request in this process, in whatever entity manager is current. Detached, it would be taken
+        // for a new payment and fail that request too, so it is managed again, as committed: saving it again
+        // then changes nothing. This is the payment instance Payum holds, so it can only be attached, not loaded.
+        try {
+            $manager->getUnitOfWork()->registerManaged($payment, $manager->getClassMetadata($payment::class)->getIdentifierValues($payment), []);
+            $manager->refresh($payment);
+        } catch (\Throwable $e) {
+            $this->logger?->error(sprintf('Could not reload the payment after the failed reconcile: %s', $e->getMessage()), [
+                'quickpayPaymentId' => $quickpayPaymentId,
+            ]);
         }
     }
 

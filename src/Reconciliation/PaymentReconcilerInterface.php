@@ -30,10 +30,16 @@ interface PaymentReconcilerInterface
     /**
      * Reconcile on demand: brings the Sylius payment's state in line with its Quickpay payment by
      * running a status request on it, so Sylius' payment-state extension applies at most one
-     * transition (with all its callbacks), and persists the result.
+     * transition (with all its callbacks), and persists the result in one database transaction.
+     *
+     * The payment is reloaded first, so what is reconciled is its committed state; one the entity manager no
+     * longer manages is loaded afresh. Read what happened from the result, not from the payment passed in.
      *
      * Errors propagate: the SDK's {@see QuickpayException} (e.g. Quickpay unreachable), Payum's
      * {@see ExceptionInterface} (e.g. a payment without a gateway) or whatever a state-machine callback throws.
+     * A reconcile that fails saves nothing, not even a transition that was halfway applied when a
+     * state-machine callback threw: its transaction is rolled back and the entity manager cleared (or reset,
+     * when the failure closed it), so it is usable for the next payment.
      *
      * @throws QuickpayException
      */
@@ -51,7 +57,8 @@ interface PaymentReconcilerInterface
      * Errors propagate, so the callback is answered with an error and Quickpay retries it: the SDK's
      * {@see QuickpayException} (e.g. Quickpay unreachable), Payum's {@see ExceptionInterface}, Payum's
      * HttpResponse reply rejecting a callback whose HMAC doesn't match (a 400) or whatever a state-machine
-     * callback throws.
+     * callback throws. As on demand, a reconcile that fails saves nothing, so the retry finds the payment
+     * as it was.
      *
      * @throws QuickpayException
      */
