@@ -205,12 +205,12 @@ mapping applies.
 - **`Reconciliation\PaymentReconcilerInterface`**, service `Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler`
   (constructor `(Payum $payum, StateMachineInterface $stateMachine, LockFactory $lockFactory, ManagerRegistry $managerRegistry)`,
   logger-aware), aliased by the interface:
-  - `checkStatus(PaymentInterface): StatusCheck`, the status check: the Quickpay status and the transition
-    Sylius would apply, changing nothing;
+  - `checkStatus(PaymentInterface): StatusCheck`, the status check: the target state (the Sylius payment state
+    Sylius maps the Quickpay payment's status to) and the transition Sylius would apply, changing nothing;
   - `reconcile(PaymentInterface): ReconcileResult`, reconcile on demand;
   - `reconcileFromCallback(PaymentInterface): ReconcileResult`, reconcile from the callback being handled.
 
-  `ReconcileResult` carries the state before and after, the Quickpay status and a `ReconcileOutcome`
+  `ReconcileResult` carries the state before and after, the target state and a `ReconcileOutcome`
   (`Transitioned`, `Unchanged` or `Skipped`, the last when the payment's lock was held).
 - **`Controller\PayumNotifyController`** decorates Payum's `Payum\Bundle\PayumBundle\Controller\NotifyController`
   (route `payum_notify_do`, the per-payment callback url Quickpay normally calls). A callback on a Quickpay
@@ -235,11 +235,12 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **`reconcile-payments --dry-run` writes nothing.** It runs a status check per payment: no state change, no
   state-machine callbacks (the order isn't marked paid, inventory isn't sold) and nothing persisted, not even
   refreshed payment details. Before, Sylius applied the transitions during the dry run and they were saved. Each
-  payment prints its state, the transition that would be applied (or `no transition`) and the Quickpay status.
+  payment prints its state, the transition that would be applied (or `no transition`) and the state its Quickpay
+  payment's status maps to: `Payment N: "<state>", would apply "<transition>" (Quickpay → "<target state>")`.
 - **A real reconcile run follows Sylius' mapping and reports truthfully.** Sylius' payment-state extension applies
   the transition, so reconciling makes exactly the change a callback would have made: a pending Quickpay payment
   now moves a `new` payment to `processing`. Each payment is saved as soon as it is reconciled. A changed payment
-  prints `Payment N: "<before>" -> "<after>" (Quickpay status "<status>")`, a payment whose lock is held is skipped
+  prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a payment whose lock is held is skipped
   and reported, and the summary reads `N checked, N transitioned, N unchanged, N skipped, N errored`. Before, a
   payment Sylius had just moved was counted as unchanged. The run continues after any error, including a failing
   state-machine callback, and exits non-zero when a payment errored.

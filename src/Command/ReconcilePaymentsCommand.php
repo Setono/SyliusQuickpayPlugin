@@ -99,10 +99,10 @@ final class ReconcilePaymentsCommand extends Command
                     }
 
                     $io->writeln(self::describe($payment, sprintf(
-                        '"%s", %s (Quickpay status "%s")',
+                        '"%s", %s (Quickpay → "%s")',
                         $payment->getState(),
                         $outcome,
-                        $statusCheck->quickpayStatus,
+                        $statusCheck->targetState,
                     )));
 
                     continue;
@@ -115,10 +115,10 @@ final class ReconcilePaymentsCommand extends Command
                     case ReconcileOutcome::Transitioned:
                         ++$transitioned;
                         $io->writeln(self::describe($payment, sprintf(
-                            '"%s" -> "%s" (Quickpay status "%s")',
+                            '"%s" -> "%s" (Quickpay → "%s")',
                             $result->stateBefore,
                             $result->stateAfter,
-                            (string) $result->quickpayStatus,
+                            (string) $result->targetState,
                         )));
 
                         break;

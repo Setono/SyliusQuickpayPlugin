@@ -61,7 +61,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
 
                 // Guards against capturing a payment that was already captured — at checkout by a
                 // payment method in the immediate capture mode, or in the Quickpay manager
-                if ($this->quickpayStatusIs($payment, PaymentInterface::STATE_COMPLETED)) {
+                if ($this->targetStateIs($payment, PaymentInterface::STATE_COMPLETED)) {
                     return;
                 }
 
@@ -85,7 +85,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                     return;
                 }
 
-                if ($this->quickpayStatusIs($payment, PaymentInterface::STATE_REFUNDED)) {
+                if ($this->targetStateIs($payment, PaymentInterface::STATE_REFUNDED)) {
                     return;
                 }
 
@@ -101,7 +101,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                 }
 
                 try {
-                    if ($this->quickpayStatusIs($payment, PaymentInterface::STATE_CANCELLED)) {
+                    if ($this->targetStateIs($payment, PaymentInterface::STATE_CANCELLED)) {
                         return;
                     }
 
@@ -127,8 +127,8 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
      *
      * @throws QuickpayException
      */
-    private function quickpayStatusIs(PaymentInterface $payment, string $state): bool
+    private function targetStateIs(PaymentInterface $payment, string $state): bool
     {
-        return $state === $this->reconciler->checkStatus($payment)->quickpayStatus;
+        return $state === $this->reconciler->checkStatus($payment)->targetState;
     }
 }

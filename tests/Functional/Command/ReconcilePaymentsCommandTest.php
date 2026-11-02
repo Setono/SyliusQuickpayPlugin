@@ -41,7 +41,7 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         $display = $tester->getDisplay();
         self::assertStringContainsString(sprintf('Payment %s:', (string) $erroring->getId()), $display);
         self::assertStringContainsString(
-            sprintf('Payment %s: "authorized" -> "completed" (Quickpay status "completed")', (string) $transitioning->getId()),
+            sprintf('Payment %s: "authorized" -> "completed" (Quickpay → "completed")', (string) $transitioning->getId()),
             $display,
         );
         self::assertStringNotContainsString(sprintf('Payment %s:', (string) $unchanged->getId()), $display);
@@ -157,7 +157,7 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
 
         $tester->assertCommandIsSuccessful();
         self::assertStringContainsString(
-            sprintf('Payment %s: "authorized", would apply "complete" (Quickpay status "completed")', (string) $payment->getId()),
+            sprintf('Payment %s: "authorized", would apply "complete" (Quickpay → "completed")', (string) $payment->getId()),
             $tester->getDisplay(),
         );
         self::assertStringContainsString('1 checked, 1 transitioned (dry run), 0 unchanged, 0 skipped, 0 errored', $tester->getDisplay());

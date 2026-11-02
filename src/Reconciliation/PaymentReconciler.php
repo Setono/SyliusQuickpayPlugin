@@ -55,23 +55,24 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         // extension maps it. It runs on a copy of the stored details instead of the Sylius payment: the
         // extension only applies a transition after a request on a Sylius payment, and Payum's storage only
         // persists one, so neither a transition nor the details the status read refreshes reach the payment
-        $quickpayStatus = self::readStatus($this->gatewayOf($payment), new ArrayObject($payment->getDetails()));
+        $targetState = self::readTargetState($this->gatewayOf($payment), new ArrayObject($payment->getDetails()));
 
         // The extension's own condition for applying a transition
-        if ($quickpayStatus === $payment->getState() || PaymentInterface::STATE_UNKNOWN === $quickpayStatus) {
-            return new StatusCheck($quickpayStatus, null);
+        if ($targetState === $payment->getState() || PaymentInterface::STATE_UNKNOWN === $targetState) {
+            return new StatusCheck($targetState, null);
         }
 
         return new StatusCheck(
-            $quickpayStatus,
-            $this->stateMachine->getTransitionToState($payment, PaymentTransitions::GRAPH, $quickpayStatus),
+            $targetState,
+            $this->stateMachine->getTransitionToState($payment, PaymentTransitions::GRAPH, $targetState),
         );
     }
 
     public function reconcile(PaymentInterface $payment): ReconcileResult
     {
-        // A status request on the Sylius payment itself, so the status it reads is the one the extension applies
-        return $this->reconcileWith($payment, static fn (GatewayInterface $gateway, PaymentInterface $payment): string => self::readStatus($gateway, $payment));
+        // A status request on the Sylius payment itself, so the target state it reads is the one the extension
+        // transitions the payment to
+        return $this->reconcileWith($payment, static fn (GatewayInterface $gateway, PaymentInterface $payment): string => self::readTargetState($gateway, $payment));
     }
 
     public function reconcileFromCallback(PaymentInterface $payment): ReconcileResult
@@ -86,24 +87,24 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
             $payment->setDetails($details->getArrayCopy());
 
             // The callback is genuine: reconcile as on demand, persisting the confirmed details with the state
-            return self::readStatus($gateway, $payment);
+            return self::readTargetState($gateway, $payment);
         });
     }
 
     /**
-     * Runs Sylius' own status request, so the Quickpay status maps to a payment state exactly as Sylius'
-     * payment-state extension maps it
+     * Runs Sylius' own status request, so the Quickpay payment's status maps to the Sylius payment state
+     * exactly as Sylius' payment-state extension maps it
      */
-    private static function readStatus(GatewayInterface $gateway, PaymentInterface|ArrayObject $model): string
+    private static function readTargetState(GatewayInterface $gateway, PaymentInterface|ArrayObject $model): string
     {
         $status = new GetStatus($model);
         $gateway->execute($status);
 
         // Sylius marks every status as a payment state string
-        $quickpayStatus = $status->getValue();
-        Assert::string($quickpayStatus);
+        $targetState = $status->getValue();
+        Assert::string($targetState);
 
-        return $quickpayStatus;
+        return $targetState;
     }
 
     /**
@@ -112,8 +113,8 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
      * states before and after.
      *
      * @param \Closure(GatewayInterface, PaymentInterface): string $runRequest runs the request through the
-     *        payment's gateway as a top-level request on the Sylius payment itself and returns the Quickpay
-     *        status. After a top-level status request or Notify on a Sylius payment, the extension applies
+     *        payment's gateway as a top-level request on the Sylius payment itself and returns the target
+     *        state. After a top-level status request or Notify on a Sylius payment, the extension applies
      *        the transition and Payum's storage flushes the entity manager, both inside the transaction and
      *        while the lock is held.
      */
@@ -152,7 +153,7 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
             $manager->getConnection()->beginTransaction();
 
             try {
-                $quickpayStatus = $runRequest($this->gatewayOf($payment), $payment);
+                $targetState = $runRequest($this->gatewayOf($payment), $payment);
                 $manager->getConnection()->commit();
             } catch (\Throwable $e) {
                 $this->rollBack($manager, $payment, $quickpayPaymentId);
@@ -160,7 +161,7 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
                 throw $e;
             }
 
-            return ReconcileResult::reconciled($stateBefore, self::stateOf($payment), $quickpayStatus);
+            return ReconcileResult::reconciled($stateBefore, self::stateOf($payment), $targetState);
         } finally {
             if (null !== $lock) {
                 self::release($lock, $quickpayPaymentId, $this->logger);

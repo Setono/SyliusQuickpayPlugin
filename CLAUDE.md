@@ -122,14 +122,15 @@ outside this module (a guard doing so inside a transition applied the transition
 
 `PaymentReconcilerInterface` (service `PaymentReconciler`, args `payum`, `sylius_abstraction.state_machine`,
 `lock.setono_sylius_quickpay.factory`, `doctrine`; `LoggerAwareInterface` via `setLogger()`) has three operations:
-- **`checkStatus()`, the status check** → `StatusCheck` (`quickpayStatus`: the Sylius payment state Sylius' `GetStatus`
-  maps Quickpay's status to, e.g. `completed`, `processing`, `unknown`; `transition`: what the extension would apply,
+- **`checkStatus()`, the status check** → `StatusCheck` (`targetState`: the Sylius payment state Sylius' `GetStatus`
+  maps the Quickpay payment's status to, e.g. `completed`, `processing`, `unknown` — a Sylius state, never call it
+  a Quickpay status; `transition`: what the extension would apply,
   via the state machine abstraction's `getTransitionToState()`, null when the state matches or the status is
   unknown). It runs `GetStatus` on a **copy of the payment's details** (`new ArrayObject($payment->getDetails())`),
   so the extension never fires and nothing is persisted, not even refreshed details. One `GET /payments/{id}`.
 - **`reconcile()`, reconcile on demand** and **`reconcileFromCallback()`, reconcile from a callback** →
   `ReconcileResult` (`outcome`: `ReconcileOutcome` `Transitioned`/`Unchanged`/`Skipped`, `stateBefore`,
-  `stateAfter`, `quickpayStatus`, null only when skipped). Both run the same private sequence, `reconcileWith()`:
+  `stateAfter`, `targetState`, null only when skipped). Both run the same private sequence, `reconcileWith()`:
   take the payment's lock (key `setono_sylius_quickpay_payment_<quickpayPaymentId>`, TTL 60s, not auto-released,
   non-blocking: held → `Skipped`, nothing read or written; a lock store error is logged and the payment is reconciled
   unguarded) → `refresh()` the payment and its order, so state committed before the lock was taken is seen → run one
@@ -199,7 +200,7 @@ link PUT to surface the missing-permission 403. Non-zero exit on any failed chec
 `Provider/PendingPaymentProvider` queries Quickpay payments in state new/processing/authorized with a
 `quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()` (see
 *Reconciling payments* above). Each payment is persisted by its own reconcile (no end-of-loop flush); a changed one
-prints `Payment N: "<before>" -> "<after>" (Quickpay status "<s>")`, a skipped one is reported, and the summary is
+prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a skipped one is reported, and the summary is
 `N checked, N transitioned, N unchanged, N skipped, N errored`. It catches any `\Exception` per payment (Quickpay,
 Payum, a failing state-machine callback), counts it as errored and goes on; any error → non-zero exit.
 `--dry-run` uses the status check (`checkStatus()`) instead and writes nothing, printing the transition that would

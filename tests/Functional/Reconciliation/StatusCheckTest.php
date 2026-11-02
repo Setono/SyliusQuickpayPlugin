@@ -29,7 +29,7 @@ final class StatusCheckTest extends FunctionalTestCase
 
         $statusCheck = $this->reconciler()->checkStatus($payment);
 
-        self::assertSame(PaymentInterface::STATE_COMPLETED, $statusCheck->quickpayStatus);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $statusCheck->targetState);
         self::assertSame('complete', $statusCheck->transition);
         self::assertSame(['GET /payments/501'], $this->quickpay()->sentRequests());
 
@@ -58,7 +58,7 @@ final class StatusCheckTest extends FunctionalTestCase
         string $quickpayState,
         array $approvedOperations,
         ?int $balance,
-        string $expectedQuickpayStatus,
+        string $expectedTargetState,
         ?string $expectedTransition,
     ): void {
         self::bootKernel();
@@ -68,7 +68,7 @@ final class StatusCheckTest extends FunctionalTestCase
 
         $statusCheck = $this->reconciler()->checkStatus($payment);
 
-        self::assertSame($expectedQuickpayStatus, $statusCheck->quickpayStatus);
+        self::assertSame($expectedTargetState, $statusCheck->targetState);
         self::assertSame($expectedTransition, $statusCheck->transition);
         self::assertSame($state, $this->reload($payment)->getState());
     }

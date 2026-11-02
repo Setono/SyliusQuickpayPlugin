@@ -37,7 +37,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
-        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->quickpayStatus);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->targetState);
         self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
 
         // Only reads at Quickpay
@@ -79,7 +79,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame($state, $result->stateBefore);
         self::assertSame($expectedState, $result->stateAfter);
-        self::assertSame($expectedState, $result->quickpayStatus);
+        self::assertSame($expectedState, $result->targetState);
         self::assertCount(1, $transitions);
 
         $payment = $this->reload($payment);
@@ -111,7 +111,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Skipped, $result->outcome);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateAfter);
-        self::assertNull($result->quickpayStatus);
+        self::assertNull($result->targetState);
         self::assertSame([], $transitions->getArrayCopy());
         self::assertSame([], $this->quickpay()->sentRequests());
 
@@ -145,7 +145,7 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Unchanged, $result->outcome);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
-        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->quickpayStatus);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->targetState);
 
         // Completed, the order paid and the unit sold, once
         self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());

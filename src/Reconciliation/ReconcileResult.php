@@ -23,10 +23,10 @@ final class ReconcileResult
         public readonly string $stateAfter,
 
         /**
-         * The Quickpay payment's status, as the Sylius payment state Sylius maps it to (see
-         * {@see StatusCheck::$quickpayStatus}), or null when the payment was skipped and nothing was read
+         * The Sylius payment state Sylius maps the Quickpay payment's status to (see
+         * {@see StatusCheck::$targetState}), or null when the payment was skipped and nothing was read
          */
-        public readonly ?string $quickpayStatus,
+        public readonly ?string $targetState,
     ) {
     }
 
@@ -35,13 +35,13 @@ final class ReconcileResult
         return new self(ReconcileOutcome::Skipped, $state, $state, null);
     }
 
-    public static function reconciled(string $stateBefore, string $stateAfter, string $quickpayStatus): self
+    public static function reconciled(string $stateBefore, string $stateAfter, string $targetState): self
     {
         return new self(
             $stateBefore === $stateAfter ? ReconcileOutcome::Unchanged : ReconcileOutcome::Transitioned,
             $stateBefore,
             $stateAfter,
-            $quickpayStatus,
+            $targetState,
         );
     }
 }

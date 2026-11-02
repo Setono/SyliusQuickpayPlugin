@@ -43,7 +43,7 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
-        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->quickpayStatus);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $result->targetState);
         self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
 
         // Only reads at Quickpay: reconciling never captures, refunds or cancels anything
@@ -81,7 +81,7 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame($state, $result->stateBefore);
         self::assertSame($expectedState, $result->stateAfter);
-        self::assertSame($expectedState, $result->quickpayStatus);
+        self::assertSame($expectedState, $result->targetState);
 
         $payment = $this->reload($payment);
         self::assertSame($expectedState, $payment->getState());
@@ -100,7 +100,7 @@ final class ReconcileTest extends FunctionalTestCase
         string $orderPaymentState,
         string $quickpayState,
         array $approvedOperations,
-        string $expectedQuickpayStatus,
+        string $expectedTargetState,
     ): void {
         self::bootKernel();
 
@@ -114,7 +114,7 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Unchanged, $result->outcome);
         self::assertSame($state, $result->stateBefore);
         self::assertSame($state, $result->stateAfter);
-        self::assertSame($expectedQuickpayStatus, $result->quickpayStatus);
+        self::assertSame($expectedTargetState, $result->targetState);
 
         // Unchanged means no state change: no transition, so none of its callbacks, and neither the payment's
         // nor the order's state moved
@@ -158,7 +158,7 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(ReconcileOutcome::Skipped, $result->outcome);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateAfter);
-        self::assertNull($result->quickpayStatus);
+        self::assertNull($result->targetState);
         self::assertSame([], $this->quickpay()->sentRequests());
 
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());

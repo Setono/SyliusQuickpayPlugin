@@ -285,10 +285,10 @@ bin/console setono:sylius-quickpay:reconcile-payments --dry-run                 
 Each stuck payment is reconciled: the command fetches its status from Quickpay and Sylius applies the state change
 its own mapping gives, exactly the change the callback would have made (a pending Quickpay payment, for example,
 moves a new payment to *processing*). Each payment is saved as soon as it is reconciled, and every payment that
-changed is listed with its state before and after and the Quickpay status:
+changed is listed with its state before and after and the state Sylius maps its Quickpay payment's status to:
 
 ```
-Payment 42: "new" -> "authorized" (Quickpay status "authorized")
+Payment 42: "new" -> "authorized" (Quickpay → "authorized")
 Payment 43: skipped, it is locked by a callback being handled or another run
 
  [OK] 3 checked, 1 transitioned, 1 unchanged, 1 skipped, 0 errored
@@ -299,8 +299,12 @@ handled at that moment is skipped and reported as such, and the next run picks i
 unreachable, a state-machine callback throwing) is reported and counted, and the run goes on with the next one.
 
 `--dry-run` only reads: it reports each payment's state, the transition that would be applied (or `no transition`)
-and the Quickpay status, and changes nothing — no state, no state-machine callbacks, no database writes. It is safe
-against a production shop.
+and the state the Quickpay payment's status maps to, and changes nothing — no state, no state-machine callbacks, no
+database writes. It is safe against a production shop:
+
+```
+Payment 42: "new", would apply "authorize" (Quickpay → "authorized")
+```
 
 Scheduling is your application's choice; a cron entry along these lines is plenty:
 
