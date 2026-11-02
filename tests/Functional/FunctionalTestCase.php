@@ -10,6 +10,8 @@ use Payum\Core\GatewayInterface;
 use Payum\Core\Payum;
 use Psr\Http\Message\ResponseInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient;
+use SM\Event\SMEvents;
+use SM\Event\TransitionEvent;
 use Sylius\Component\Core\Factory\PaymentMethodFactoryInterface;
 use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\Component\Core\Model\OrderInterface;
@@ -21,9 +23,12 @@ use Sylius\Component\Currency\Model\CurrencyInterface;
 use Sylius\Component\Locale\Model\LocaleInterface;
 use Sylius\Component\Order\Model\OrderInterface as BaseOrderInterface;
 use Sylius\Component\Payment\Factory\PaymentFactoryInterface;
+use Sylius\Component\Payment\PaymentTransitions;
 use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Workflow\Event\CompletedEvent;
 
 /**
  * Base for kernel-booting tests against the test application's database. dama/doctrine-test-bundle
@@ -79,6 +84,33 @@ abstract class FunctionalTestCase extends KernelTestCase
         self::assertInstanceOf(ScriptedHttpClient::class, $client);
 
         return $client;
+    }
+
+    /**
+     * Records each payment transition Sylius applies from now on, by name, under either state machine
+     * adapter. A transition is recorded once it has run with all its callbacks, so a transition applied
+     * twice, e.g. from inside itself, shows up twice
+     *
+     * @return \ArrayObject<int, string>
+     */
+    protected function recordPaymentTransitions(): \ArrayObject
+    {
+        /** @var \ArrayObject<int, string> $transitions */
+        $transitions = new \ArrayObject();
+
+        $eventDispatcher = self::getContainer()->get('event_dispatcher');
+        self::assertInstanceOf(EventDispatcherInterface::class, $eventDispatcher);
+
+        $eventDispatcher->addListener(SMEvents::POST_TRANSITION, static function (TransitionEvent $event) use ($transitions): void {
+            if (PaymentTransitions::GRAPH === $event->getStateMachine()->getGraph()) {
+                $transitions[] = $event->getTransition();
+            }
+        });
+        $eventDispatcher->addListener(sprintf('workflow.%s.completed', PaymentTransitions::GRAPH), static function (CompletedEvent $event) use ($transitions): void {
+            $transitions[] = (string) $event->getTransition()?->getName();
+        });
+
+        return $transitions;
     }
 
     protected function gatewayOf(PaymentInterface $payment): GatewayInterface
@@ -142,8 +174,9 @@ abstract class FunctionalTestCase extends KernelTestCase
      * A Quickpay payment as `GET /payments/{id}` returns it
      *
      * @param list<string> $approvedOperations operation types, in the order they happened
+     * @param bool $fraudSuspected whether Quickpay's fraud filter flagged the payment
      */
-    protected static function quickpayPayment(int $id, string $state, array $approvedOperations, ?int $balance = null): ResponseInterface
+    protected static function quickpayPayment(int $id, string $state, array $approvedOperations, ?int $balance = null, bool $fraudSuspected = false): ResponseInterface
     {
         $operations = [];
         foreach ($approvedOperations as $i => $type) {
@@ -167,6 +200,7 @@ abstract class FunctionalTestCase extends KernelTestCase
             'test_mode' => true,
             'balance' => $balance,
             'operations' => $operations,
+            'metadata' => ['fraud_suspected' => $fraudSuspected],
         ], \JSON_THROW_ON_ERROR));
     }
 

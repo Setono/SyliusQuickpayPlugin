@@ -163,6 +163,7 @@
         <!-- State machine -->
         <service id="Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor" public="true">
             <argument type="service" id="payum"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface"/>
             <argument>%setono_sylius_quickpay.operations.capture%</argument>
             <argument>%setono_sylius_quickpay.operations.refund%</argument>
