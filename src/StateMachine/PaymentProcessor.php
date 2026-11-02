@@ -8,12 +8,12 @@ use Payum\Core\Exception\ExceptionInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\Cancel;
 use Payum\Core\Request\Capture;
-use Payum\Core\Request\GetHumanStatus;
 use Payum\Core\Request\Refund;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
@@ -24,6 +24,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
 
     public function __construct(
         private readonly Payum $payum,
+        private readonly PaymentReconcilerInterface $reconciler,
         private readonly FraudCheckerInterface $fraudChecker,
         private readonly bool $captureEnabled,
         private readonly bool $refundEnabled,
@@ -58,11 +59,9 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                     return;
                 }
 
-                // The status is resolved through the gateway so the payment is re-fetched from
-                // Quickpay, guarding against capturing a payment that was already captured — at
-                // checkout by a payment method in the immediate capture mode, or in the Quickpay manager
-                $gateway->execute($status = new GetHumanStatus($payment));
-                if ($status->isCaptured()) {
+                // Guards against capturing a payment that was already captured — at checkout by a
+                // payment method in the immediate capture mode, or in the Quickpay manager
+                if ($this->quickpayStatusIs($payment, PaymentInterface::STATE_COMPLETED)) {
                     return;
                 }
 
@@ -86,8 +85,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                     return;
                 }
 
-                $gateway->execute($status = new GetHumanStatus($payment));
-                if ($status->isRefunded()) {
+                if ($this->quickpayStatusIs($payment, PaymentInterface::STATE_REFUNDED)) {
                     return;
                 }
 
@@ -103,8 +101,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
                 }
 
                 try {
-                    $gateway->execute($status = new GetHumanStatus($payment));
-                    if ($status->isCanceled()) {
+                    if ($this->quickpayStatusIs($payment, PaymentInterface::STATE_CANCELLED)) {
                         return;
                     }
 
@@ -121,5 +118,17 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
 
                 break;
         }
+    }
+
+    /**
+     * Whether the Quickpay payment's status maps to the given Sylius payment state, i.e. the operation
+     * already happened at Quickpay. A status check, never a status request on the Sylius payment: that
+     * would make Sylius apply the transition again from inside the one being applied
+     *
+     * @throws QuickpayException
+     */
+    private function quickpayStatusIs(PaymentInterface $payment, string $state): bool
+    {
+        return $state === $this->reconciler->checkStatus($payment)->quickpayStatus;
     }
 }
