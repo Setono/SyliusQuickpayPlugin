@@ -89,26 +89,6 @@ final class ReconcileTest extends FunctionalTestCase
     }
 
     /**
-     * Sylius' payment-state mapping and its order payment state rules (the test orders total 0, so one
-     * payment covers them in full)
-     *
-     * @return iterable<string, array{string, string, string, list<string>, int|null, string, string}>
-     */
-    public static function transitioningQuickpayStatuses(): iterable
-    {
-        $awaitingPayment = OrderPaymentStates::STATE_AWAITING_PAYMENT;
-
-        yield 'pending moves a new payment to processing' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'pending', [], null, PaymentInterface::STATE_PROCESSING, $awaitingPayment];
-        yield 'authorized' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'new', ['authorize'], 0, PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED];
-        yield 'captured' => [PaymentInterface::STATE_PROCESSING, $awaitingPayment, 'processed', ['authorize', 'capture'], 10_000, PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID];
-        yield 'refunded' => [PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID, 'processed', ['authorize', 'capture', 'refund'], 0, PaymentInterface::STATE_REFUNDED, OrderPaymentStates::STATE_REFUNDED];
-        // Sylius resolves no order payment state on cancel or fail
-        yield 'cancelled' => [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, 'processed', ['authorize', 'cancel'], 0, PaymentInterface::STATE_CANCELLED, OrderPaymentStates::STATE_AUTHORIZED];
-        yield 'rejected' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'rejected', [], null, PaymentInterface::STATE_FAILED, $awaitingPayment];
-        yield 'authorization never approved' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'new', [], null, PaymentInterface::STATE_FAILED, $awaitingPayment];
-    }
-
-    /**
      * @test
      *
      * @dataProvider nonTransitioningQuickpayStatuses

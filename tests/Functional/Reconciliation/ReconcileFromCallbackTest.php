@@ -54,6 +54,43 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
     /**
      * @test
      *
+     * @dataProvider transitioningQuickpayStatuses
+     *
+     * @param list<string> $approvedOperations
+     */
+    public function it_makes_the_state_change_sylius_maps_the_quickpay_status_to(
+        string $state,
+        string $orderPaymentState,
+        string $quickpayState,
+        array $approvedOperations,
+        ?int $balance,
+        string $expectedState,
+        string $expectedOrderPaymentState,
+    ): void {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment($state, $orderPaymentState, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, $quickpayState, $approvedOperations, $balance));
+        $transitions = $this->recordPaymentTransitions();
+        $this->receiveCallback(self::quickpayCallback(501));
+
+        $result = $this->reconciler()->reconcileFromCallback($payment);
+
+        self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
+        self::assertSame($state, $result->stateBefore);
+        self::assertSame($expectedState, $result->stateAfter);
+        self::assertSame($expectedState, $result->quickpayStatus);
+        self::assertCount(1, $transitions);
+
+        $payment = $this->reload($payment);
+        self::assertSame($expectedState, $payment->getState());
+        self::assertSame($expectedOrderPaymentState, $payment->getOrder()?->getPaymentState());
+        self::assertSame($quickpayState, $payment->getDetails()['state'] ?? null);
+    }
+
+    /**
+     * @test
+     *
      * @dataProvider stateMachineAdapters
      */
     public function a_duplicate_arriving_while_the_callback_is_handled_is_skipped_and_changes_nothing(string $stateMachineAdapter): void
