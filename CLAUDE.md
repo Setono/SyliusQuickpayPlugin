@@ -18,8 +18,10 @@ base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0@RC`; 
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
-`UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x — keep it
-updated when further 2.x breaks land.
+`UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x, and (its last
+section) from an earlier 2.0 alpha: removed/changed classes, services, constructor signatures and behaviour —
+keep it updated when further 2.x breaks land. Domain terms are defined in `GLOSSARY.md`, settled decisions in
+`docs/adr/`.
 
 All dev tooling (PHPStan, PHPUnit, Rector, Infection, ECS, composer-dependency-analyser, composer-normalize) is
 delegated to the **`setono/sylius-plugin-pack`** meta-package — it is not listed package-by-package in
@@ -73,7 +75,8 @@ Only Quickpay's HTTP is substituted: in the `test` env, `tests/Quickpay/Scripted
 plugin's gateway factory builder and gives every Quickpay gateway an SDK client (library option `quickpay.client`)
 on `tests/Quickpay/ScriptedHttpClient`; script it with `$this->quickpay()->respond('GET', '/payments/1', ...)` and
 assert on `$this->quickpay()->sentRequests()`. The gateway, Sylius' payment-state extension, the state machine, the
-lock and the database are real. To count how often a payment transition (and so its callbacks) ran, under either
+lock and the database are real. `$this->holdLockOf($quickpayPaymentId)` holds a payment's lock (as a callback
+being handled would) until you release it. To count how often a payment transition (and so its callbacks) ran, under either
 adapter, take `$transitions = $this->recordPaymentTransitions()` before acting and assert on
 `$transitions->getArrayCopy()`. `self::quickpayCallback($quickpayPaymentId)` builds Quickpay's signed callback for
 the shared endpoint (pass `privateKey:` to forge one): `self::$kernel->handle()` it to POST it, or
@@ -103,47 +106,75 @@ minting), capture, refund, cancel, status (balance-aware), notify (HMAC validati
   through `$this->payum->getStorage(...)`. Per-item and shipping VAT rates come from
   `Taxation/VatRateResolver` (reads the tax adjustments, falling back to deriving the rate from the totals).
 
-Services use **FQCN ids** in `services.xml`, with interface → class aliases for every `*Interface` the plugin
-defines (`PaymentProcessorInterface`, `PaymentProviderInterface`, `VatRateResolverInterface`,
-`LanguageGuesserInterface`) — inject the interface, alias resolution does the rest.
+Services use **FQCN ids** in `services.xml`, with an interface → class alias for every `*Interface` the plugin
+defines (`PaymentReconcilerInterface`, `PaymentProcessorInterface`, `PaymentProviderInterface`,
+`ClientFactoryInterface`, ...) — inject the interface, alias resolution does the rest.
 
-### The notify flow
-Callbacks arrive on two endpoints, which behave identically for the same callback
-(`tests/Functional/Controller/CallbackEndpointsTest` runs every scenario against both):
-- `src/Controller/PayumNotifyController.php` **decorates Payum's notify controller** (service
-  `Payum\Bundle\PayumBundle\Controller\NotifyController`, route `payum_notify_do` → `/payment/notify/{payum_token}`):
-  the per-payment `callback_url` the library mints on payment link creation, which Quickpay normally calls. It
-  verifies the token as Payum does (Payum's `HttpRequestVerifier`), and when the token's gateway is a Quickpay
-  gateway (its stored gateway config, looked up by the token's gateway name like Payum's dynamic registry does,
-  has factory `quickpay`) it resolves the Sylius payment from the token's details and reconciles it from the
-  callback, answering 204 like the shared endpoint. A Quickpay token must **never** fall through to Payum's
-  controller: that runs `Notify` on the Sylius payment without the lock, and a forged callback would be applied
-  and persisted before its 400 (see below). Every other token, and Payum's token-less `doUnsafeAction`, is
-  delegated to Payum's controller untouched.
-- `src/Controller/NotifyAction.php` is the plugin's **shared endpoint** (route `setono_sylius_quickpay_notify` →
-  `POST /payment/quickpay/notify`, in `src/Resources/config/routes.yaml`). It only handles callbacks whose
-  `QuickPay-Resource-Type` header is `Payment`, recovers the Sylius order number by stripping the
-  `order_prefix` of **each configured Quickpay gateway** from the incoming `order_id` (read from the stored
-  gateway configs — with the raw `order_id` as fallback candidate), finds the matching payment via
-  `Provider/PaymentProvider::findByQuickpayPaymentId()`, then reconciles it from the callback through
-  `PaymentReconcilerInterface::reconcileFromCallback()` (see GLOSSARY.md and docs/adr/0001-*.md). It answers 204
-  whether the payment was reconciled or skipped because its lock is held (a duplicate of a callback being
-  handled: the lock's holder reconciles it, and Quickpay stops retrying); errors propagate to an error response,
-  so Quickpay retries.
-- `reconcileFromCallback()` runs reconcile's sequence (the payment's lock, reload, one top-level request,
-  release; see the reconcile command below), with the callback's request being: Payum's `Notify` on a **copy of the
-  payment's details**, which the **library's** `NotifyAction` handles (validates the `QuickPay-Checksum-Sha256`
-  HMAC of the request being handled against the gateway `private_key`, then `ConfirmPayment` refreshes the details
-  from Quickpay), then the confirmed details are set on the Sylius payment and Sylius' `GetStatus` runs on it as
-  the top-level request, so Sylius' payment-state extension applies the transition and Payum's storage flushes.
-  Never run `Notify` on the Sylius payment itself: the library rejects a forged callback with an `HttpResponse`
-  reply, and Payum still runs the extension's post-execute for a reply (only an exception stops it), so a forged
-  callback would reconcile the payment and persist it.
-- The lock is the named `framework.lock` resource `setono_sylius_quickpay` that
+### Reconciling payments (`src/Reconciliation/`)
+Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
+docs and output, not "sync" or "notify") and `docs/adr/0001-sylius-applies-payment-transitions.md` first. The rule
+from the ADR: **Sylius' `UpdatePaymentStateExtension` is the only thing that applies a payment transition.** It is
+registered on every Payum gateway and, after a top-level `GetStatusInterface` or `Notify` request whose first model
+is a Sylius payment, runs Sylius' `GetStatus` and applies the transition to the state Sylius maps the status to;
+Payum's `StorageExtension` then flushes the entity manager. The plugin never calls `apply` on the payment graph: it
+triggers the extension and reports what changed. So never run a status request or `Notify` on a Sylius payment
+outside this module (a guard doing so inside a transition applied the transition again from within itself).
+
+`PaymentReconcilerInterface` (service `PaymentReconciler`, args `payum`, `sylius_abstraction.state_machine`,
+`lock.setono_sylius_quickpay.factory`, `doctrine`; `LoggerAwareInterface` via `setLogger()`) has three operations:
+- **`checkStatus()`, the status check** → `StatusCheck` (`quickpayStatus`: the Sylius payment state Sylius' `GetStatus`
+  maps Quickpay's status to, e.g. `completed`, `processing`, `unknown`; `transition`: what the extension would apply,
+  via the state machine abstraction's `getTransitionToState()`, null when the state matches or the status is
+  unknown). It runs `GetStatus` on a **copy of the payment's details** (`new ArrayObject($payment->getDetails())`),
+  so the extension never fires and nothing is persisted, not even refreshed details. One `GET /payments/{id}`.
+- **`reconcile()`, reconcile on demand** and **`reconcileFromCallback()`, reconcile from a callback** →
+  `ReconcileResult` (`outcome`: `ReconcileOutcome` `Transitioned`/`Unchanged`/`Skipped`, `stateBefore`,
+  `stateAfter`, `quickpayStatus`, null only when skipped). Both run the same private sequence, `reconcileWith()`:
+  take the payment's lock (key `setono_sylius_quickpay_payment_<quickpayPaymentId>`, TTL 60s, not auto-released,
+  non-blocking: held → `Skipped`, nothing read or written; a lock store error is logged and the payment is reconciled
+  unguarded) → `refresh()` the payment and its order, so state committed before the lock was taken is seen → run one
+  top-level request on the Sylius payment (the extension applies at most one transition, storage flushes) → release
+  the lock in a `finally` (release errors are logged, never thrown) → compare the states. The module has no flush of
+  its own. Errors propagate to the caller.
+  - On demand, the request is Sylius' `GetStatus` on the Sylius payment.
+  - From a callback, it is Payum's `Notify` on a **copy of the details** first: the **library's** `NotifyAction`
+    validates the `QuickPay-Checksum-Sha256` HMAC of the request being handled (the request stack's main request,
+    read through Payum's `GetHttpRequest`, so call it while handling the callback) against the gateway
+    `private_key`, then `ConfirmPayment` refreshes the details from Quickpay. The confirmed details are set on the
+    Sylius payment and `GetStatus` runs on it as the top-level request. Never run `Notify` on the Sylius payment
+    itself: the library rejects a forged callback with an `HttpResponse` reply, and Payum still runs the extension's
+    post-execute for a reply (only an exception stops it), so a forged callback would reconcile the payment and
+    persist it before its 400.
+- The lock comes from the named `framework.lock` resource `setono_sylius_quickpay` that
   `SetonoSyliusQuickpayExtension::prepend()` registers (default `flock`; service
   `lock.setono_sylius_quickpay.factory`; the README shows the multi-server override — apps redefine the resource,
-  since framework.lock resources replace rather than merge). A broken lock store fails open (the callback is
-  handled unguarded).
+  since framework.lock resources replace rather than merge). Callbacks and the reconcile command take the same
+  per-payment lock, so they never reconcile a payment at the same time.
+
+### Callbacks
+Callbacks arrive on two endpoints, which behave identically for the same callback
+(`tests/Functional/Controller/CallbackEndpointsTest` runs its callback scenarios against both). Both call
+`reconcileFromCallback()` and answer 204 whether the payment was reconciled or skipped because its lock is held (a
+duplicate of a callback being handled: the lock's holder reconciles it, and Quickpay stops retrying); errors
+propagate to an error response (a forged callback → Payum's reply listener turns the `HttpResponse` into a 400,
+anything else a 500), so Quickpay retries.
+- `src/Controller/PayumNotifyController.php` **decorates Payum's notify controller** (service
+  `Payum\Bundle\PayumBundle\Controller\NotifyController`, route `payum_notify_do` → `/payment/notify/{payum_token}`;
+  args `.inner`, `payum`, `PaymentReconcilerInterface`, `sylius.repository.gateway_config`): the per-payment
+  `callback_url` the library mints on payment link creation, which Quickpay normally calls. It verifies the token
+  as Payum does (Payum's `HttpRequestVerifier`), and when the token's gateway is a Quickpay gateway (its stored
+  gateway config, looked up by the token's gateway name like Payum's dynamic registry does, has factory
+  `quickpay`) it resolves the Sylius payment from the token's details through Payum's storage (404 if gone) and
+  reconciles it from the callback. A Quickpay token must **never** fall through to Payum's controller: that runs
+  `Notify` on the Sylius payment without the lock, and a forged callback would be applied and persisted before its
+  400. Every other token, and Payum's token-less `doUnsafeAction`, is delegated to Payum's controller untouched.
+- `src/Controller/NotifyAction.php` is the plugin's **shared endpoint** (route `setono_sylius_quickpay_notify` →
+  `POST /payment/quickpay/notify`, in `src/Resources/config/routes/global.yaml`), the account-wide callback url for
+  operations made outside the store. It only handles callbacks whose `QuickPay-Resource-Type` header is `Payment`,
+  recovers the Sylius order number by stripping the `order_prefix` of **each configured Quickpay gateway** from the
+  incoming `order_id` (read from the stored gateway configs — with the raw `order_id` as fallback candidate), finds
+  the matching payment via `Provider/PaymentProvider::findByQuickpayPaymentId()`, then reconciles it from the
+  callback.
 
 The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
 
@@ -162,19 +193,19 @@ existence (`GET agreements/{id}`, failing open on permission errors), order pref
 uniqueness, and notify-route registration; `--live` creates a money-less test payment and attempts the
 link PUT to surface the missing-permission 403. Non-zero exit on any failed check; warnings don't fail.
 
-`Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`) is the backstop for
-callbacks that never arrive: `Provider/PendingPaymentProvider` queries non-final Quickpay payments with
-a `quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()`
-(see GLOSSARY.md and docs/adr/0001-*.md): under the payment's lock (non-blocking, keyed on the Quickpay
-payment id, from the `setono_sylius_quickpay` lock resource; a held lock returns skipped, a broken store
-fails open) it reloads the payment and its order, runs Sylius' `GetStatus` as a top-level request on the
-Sylius payment so Sylius' payment-state extension applies at most one transition and Payum's storage
-flushes, then releases the lock and returns a `ReconcileResult` (state before/after, Quickpay status,
-outcome transitioned/unchanged/skipped). The plugin never applies the transition itself. The command
-counts the outcomes plus errors, keeps going after any error, and `--dry-run` uses the status check
-(`checkStatus()`) instead, writing nothing. Doctrine access in these classes goes through
-`setono/doctrine-orm-trait`'s `ORMTrait` (inject `ManagerRegistry`, call `$this->getManager(...)`) rather
-than injecting an entity manager.
+`Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args
+`PendingPaymentProviderInterface`, `PaymentReconcilerInterface`, `ClientFactoryInterface`,
+`sylius.repository.gateway_config`) is the backstop for callbacks that never arrive:
+`Provider/PendingPaymentProvider` queries Quickpay payments in state new/processing/authorized with a
+`quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()` (see
+*Reconciling payments* above). Each payment is persisted by its own reconcile (no end-of-loop flush); a changed one
+prints `Payment N: "<before>" -> "<after>" (Quickpay status "<s>")`, a skipped one is reported, and the summary is
+`N checked, N transitioned, N unchanged, N skipped, N errored`. It catches any `\Exception` per payment (Quickpay,
+Payum, a failing state-machine callback), counts it as errored and goes on; any error → non-zero exit.
+`--dry-run` uses the status check (`checkStatus()`) instead and writes nothing, printing the transition that would
+be applied. The command has no status → transition mapping of its own. Doctrine access in `PaymentReconciler` and
+`PendingPaymentProvider` goes through `setono/doctrine-orm-trait`'s `ORMTrait` (inject `ManagerRegistry`, call
+`$this->getManager(...)`) rather than injecting an entity manager.
 
 ### State machine integration
 Both Sylius 1.14 state machine adapters forward the `complete`, `refund`, and `cancel` transitions to
@@ -187,13 +218,14 @@ transition dispatches its events, so the dual registration never double-processe
 implements `PaymentProcessorInterface` and is `LoggerAwareInterface` (wired via a `setLogger()` call with
 `on-invalid="ignore"`). It translates each transition into the corresponding Payum request
 (`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
-and it guards each operation with the reconciliation module's status check (`PaymentReconcilerInterface::checkStatus()`,
-never a status request on the Sylius payment, which would make Sylius apply the transition again from inside
-itself), skipping operations that already happened. A failed cancel
+and it guards each operation with the status check (`PaymentReconcilerInterface::checkStatus()`, the processor's 2nd
+constructor argument; never a status request on the Sylius payment, which would make Sylius' extension apply the
+transition again from inside the one being applied), skipping operations that already happened at Quickpay. A failed cancel
 (`Payum\Core\Exception\ExceptionInterface` or the SDK's `Setono\Quickpay\Exception\QuickpayException`) is logged
 but does not block the transition. Operations execute with the Sylius payment through Sylius' Payum bridge, so
-gateway-updated details persist; an unqualified `Refund` refunds Quickpay's remaining `balance` and the balance is
-persisted into the details by the library's Status/Confirm/Sync actions. Each operation can be turned off via the plugin config
+gateway-updated details persist (`Capture`/`Refund`/`Cancel` aren't status requests, so the extension leaves them
+alone); an unqualified `Refund` refunds the remaining `balance` the library's `RefundAction` fetches from Quickpay
+itself (every library action that fetches the payment also writes `balance` into the details). Each operation can be turned off via the plugin config
 `operations.capture` / `operations.refund` / `operations.cancel` (defined in `DependencyInjection/Configuration.php`,
 passed to the processor as container parameters). An opt-in `fraud.block_capture` flag makes the processor consult
 `Fraud/FraudChecker` (fetches the payment via `Quickpay/ClientFactory`, reads `metadata.fraud_suspected`, fails
@@ -264,6 +296,9 @@ in that folder) and need `assets:install` in the host app.
   `QUICKPAY_*` env vars only feed the test application's fixtures. The order prefix must be unique per
   project/environment — re-used prefixes cause the Quickpay "order_id already exists" / length errors
   documented in the README.
+- The plugin never applies a payment transition (ADR 0001). To bring a Sylius payment in line with Quickpay,
+  reconcile it (`PaymentReconcilerInterface`); to read Quickpay's status without side effects, use the status check.
+  Don't execute a status request or `Notify` on a Sylius payment anywhere else.
 - New Payum behavior = a new class in `src/Action/` tagged `payum.action factory="quickpay"` in `services.xml`.
   Services are wired explicitly in `services.xml` (no autowiring/autoconfiguration in this bundle).
 - `composer.lock` is gitignored — this is a plugin, so no lockfile is committed.
