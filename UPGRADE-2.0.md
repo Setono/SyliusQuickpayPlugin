@@ -218,8 +218,9 @@ mapping applies.
   token-less notify url, is passed on untouched. If your application decorates or replaces Payum's notify
   controller, Quickpay callbacks no longer reach it (nor a decorator of yours stacked inside the plugin's), and a
   replacement must still extend `NotifyController`, which the plugin's decorator receives as its inner service.
-- **`payum/payum-bundle` (`^2.5`) and `doctrine/orm` (`^2.13`) are direct dependencies.** Sylius already
-  requires them, so nothing new is installed.
+- **`payum/payum-bundle` (`^2.5 !=2.7.0`) and `doctrine/orm` (`^2.13`) are direct dependencies.** Sylius already
+  requires them, so nothing new is installed. PayumBundle 2.7.0 is excluded: it shipped its routing as YAML only,
+  without the XML files Sylius 1.14's shop routing imports (2.7.1 restored them).
 
 ### Changed constructors
 

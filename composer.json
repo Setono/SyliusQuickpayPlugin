@@ -19,7 +19,7 @@
     "doctrine/orm": "^2.13",
     "doctrine/persistence": "^2.0 || ^3.0",
     "payum/payum": "^1.6",
-    "payum/payum-bundle": "^2.5",
+    "payum/payum-bundle": "^2.5 !=2.7.0",
     "psr/log": "^1.1 || ^2.0 || ^3.0",
     "setono/doctrine-orm-trait": "^1.4",
     "setono/payum-quickpay": "^2.0@RC",
