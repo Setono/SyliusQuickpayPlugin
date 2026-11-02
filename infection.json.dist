@@ -11,6 +11,7 @@
             "badge": "1.x"
         }
     },
+    "testFrameworkOptions": "--testsuite=unit",
     "minMsi": 0,
     "minCoveredMsi": 0
 }
