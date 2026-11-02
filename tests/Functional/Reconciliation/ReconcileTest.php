@@ -95,7 +95,7 @@ final class ReconcileTest extends FunctionalTestCase
      *
      * @param list<string> $approvedOperations
      */
-    public function it_reports_unchanged_when_sylius_applies_no_transition(
+    public function it_reports_unchanged_and_changes_no_state_when_sylius_applies_no_transition(
         string $state,
         string $orderPaymentState,
         string $quickpayState,
@@ -105,7 +105,9 @@ final class ReconcileTest extends FunctionalTestCase
         self::bootKernel();
 
         $payment = $this->createSyliusPayment($state, $orderPaymentState, quickpayPaymentId: 501);
+        self::assertArrayNotHasKey('balance', $payment->getDetails());
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, $quickpayState, $approvedOperations, 0));
+        $transitions = $this->recordPaymentTransitions();
 
         $result = $this->reconciler()->reconcile($payment);
 
@@ -114,9 +116,15 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame($state, $result->stateAfter);
         self::assertSame($expectedQuickpayStatus, $result->quickpayStatus);
 
+        // Unchanged means no state change: no transition, so none of its callbacks, and neither the payment's
+        // nor the order's state moved
+        self::assertSame([], $transitions->getArrayCopy());
         $payment = $this->reload($payment);
         self::assertSame($state, $payment->getState());
         self::assertSame($orderPaymentState, $payment->getOrder()?->getPaymentState());
+
+        // ...while the details the status read refreshed, such as Quickpay's balance, are still saved
+        self::assertSame(0, $payment->getDetails()['balance'] ?? null);
     }
 
     /**
