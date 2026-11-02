@@ -9,8 +9,7 @@
     </coverage>
     <testsuites>
         <testsuite name="unit">
-            <directory>tests</directory>
-            <exclude>tests/Functional</exclude>
+            <directory>tests/Unit</directory>
         </testsuite>
         <testsuite name="functional">
             <directory>tests/Functional</directory>

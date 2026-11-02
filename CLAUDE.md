@@ -31,7 +31,7 @@ delegated to the **`setono/sylius-plugin-pack`** meta-package — it is not list
 
 ```bash
 composer phpunit          # run both PHPUnit suites (the functional one needs the test database)
-vendor/bin/phpunit --testsuite unit                      # unit suite: tests/ minus tests/Functional, no database
+vendor/bin/phpunit --testsuite unit                      # unit suite: tests/Unit, no database
 vendor/bin/phpunit --testsuite functional                # functional suite: kernel tests against the test database
 composer analyse          # PHPStan (level max) — boots the test app via tests/PHPStan/*.php loaders
 composer check-style      # ECS dry-run (sylius-labs coding standard)
@@ -65,6 +65,12 @@ and `config/routes/setono_sylius_quickpay.yaml`.
 Run any Symfony console command for the plugin from inside that directory, e.g.
 `(cd tests/Application && bin/console debug:container setono_sylius_quickpay)`. For a manual run:
 `(cd tests/Application && yarn install && yarn build && bin/console doctrine:database:create && bin/console doctrine:schema:create && bin/console sylius:fixtures:load -n)`.
+
+### Test layout
+Each PHPUnit suite is one directory: `tests/Unit/` (no kernel, no database; paths mirror `src/`, namespace
+`Setono\SyliusQuickpayPlugin\Tests\Unit\…`) and `tests/Functional/` (below). Test support stays outside both, where
+either suite and the test application can reach it: the Quickpay HTTP client doubles and `ScriptedGatewayFactoryBuilder`
+in `tests/Quickpay/`, `tests/Payum/OfflineNotifyAction`, `tests/Application/` and `tests/PHPStan/`.
 
 ### Functional suite
 `tests/Functional/` holds kernel tests against the test application's database (create it once with
@@ -272,7 +278,7 @@ Sylius' `FlashBagProvider`, sends through `Mailer/PaymentLinkEmailManager` (the 
 email-manager pattern; code `Mailer\Emails::PAYMENT_LINK`, prepended into `sylius_mailer` with
 `email/payment_link.html.twig`) in the order's locale and flashes in the `flashes` translation domain
 (`Resources/translations/flashes.*.yaml`). Both Twig functions are covered by the `Twig\Test\IntegrationTestCase`
-subclass `tests/Twig/PaymentExtensionTest` with `.test` fixtures in `tests/Twig/Fixtures/` (implement both `getFixturesDir()` for Twig < 3.13 and
+subclass `tests/Unit/Twig/PaymentExtensionTest` with `.test` fixtures in `tests/Unit/Twig/Fixtures/` (implement both `getFixturesDir()` for Twig < 3.13 and
 `getFixturesDirectory()`).
 
 ### Checkout presentation
