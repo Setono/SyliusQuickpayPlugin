@@ -92,7 +92,9 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
     {
         self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
 
-        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        // Checkout put the ordered unit on hold
+        $variant = $this->createTrackedVariant('t_shirt', onHand: 5, onHold: 1);
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501, orderedVariants: [$variant]);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
         $transitions = $this->recordPaymentTransitions();
         $this->receiveCallback(self::quickpayCallback(501));
@@ -107,11 +109,12 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->quickpayStatus);
 
-        // Completed, and the order paid, once
+        // Completed, the order paid and the unit sold, once
         self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());
+        self::assertSame(['onHand' => 4, 'onHold' => 0], $this->inventoryOf($variant));
     }
 
     /**

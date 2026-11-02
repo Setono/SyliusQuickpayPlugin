@@ -16,13 +16,17 @@ use SM\Event\TransitionEvent;
 use Sylius\Component\Core\Factory\PaymentMethodFactoryInterface;
 use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\Component\Core\Model\OrderInterface;
+use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
+use Sylius\Component\Core\Model\ProductInterface;
+use Sylius\Component\Core\Model\ProductVariantInterface;
 use Sylius\Component\Core\OrderCheckoutStates;
 use Sylius\Component\Core\OrderShippingStates;
 use Sylius\Component\Currency\Model\CurrencyInterface;
 use Sylius\Component\Locale\Model\LocaleInterface;
 use Sylius\Component\Order\Model\OrderInterface as BaseOrderInterface;
+use Sylius\Component\Order\Modifier\OrderItemQuantityModifierInterface;
 use Sylius\Component\Payment\Factory\PaymentFactoryInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Sylius\Component\Resource\Factory\FactoryInterface;
@@ -175,6 +179,12 @@ abstract class FunctionalTestCase extends KernelTestCase
     /**
      * A Sylius payment of an order, paid with a Quickpay payment method and linked to a Quickpay
      * payment, all persisted. For several payments in one test, give each its own order number.
+     *
+     * Without ordered variants the order totals 0, so any payment pays it in full. With them, the order
+     * holds one unit of each, priced so the order totals the payment's amount, and paying the order sells
+     * those units.
+     *
+     * @param list<ProductVariantInterface> $orderedVariants
      */
     protected function createSyliusPayment(
         string $state,
@@ -182,8 +192,13 @@ abstract class FunctionalTestCase extends KernelTestCase
         int $quickpayPaymentId,
         int $amount = 10_000,
         string $orderNumber = '000000001',
+        array $orderedVariants = [],
     ): PaymentInterface {
         $order = $this->createOrder($this->channel(), $orderPaymentState, $orderNumber);
+        foreach ($orderedVariants as $variant) {
+            $order->addItem($this->createOrderItem($variant, intdiv($amount, \count($orderedVariants))));
+        }
+        self::assertSame([] === $orderedVariants ? 0 : $amount, $order->getTotal(), 'The payment must pay the order in full');
 
         $paymentFactory = self::getContainer()->get('sylius.factory.payment');
         self::assertInstanceOf(PaymentFactoryInterface::class, $paymentFactory);
@@ -204,6 +219,50 @@ abstract class FunctionalTestCase extends KernelTestCase
         $this->entityManager()->flush();
 
         return $payment;
+    }
+
+    /**
+     * A product variant whose inventory Sylius tracks, persisted. Paying an order sells the units it holds,
+     * taking them off both counts; Sylius fails the order's `pay` when the variant has fewer units on hold
+     * or on hand than the order sells.
+     */
+    protected function createTrackedVariant(string $code, int $onHand, int $onHold): ProductVariantInterface
+    {
+        $product = $this->createResource('sylius.factory.product');
+        self::assertInstanceOf(ProductInterface::class, $product);
+        $product->setCode($code);
+        $product->setName($code);
+        $product->setSlug($code);
+
+        $variant = $this->createResource('sylius.factory.product_variant');
+        self::assertInstanceOf(ProductVariantInterface::class, $variant);
+        $variant->setCode($code);
+        $variant->setName($code);
+        $variant->setTracked(true);
+        $variant->setOnHand($onHand);
+        $variant->setOnHold($onHold);
+        $product->addVariant($variant);
+
+        $this->entityManager()->persist($product);
+        $this->entityManager()->flush();
+
+        return $variant;
+    }
+
+    /**
+     * The variant's inventory as committed to the database, read after clearing the entity manager
+     *
+     * @return array{onHand: int|null, onHold: int|null}
+     */
+    protected function inventoryOf(ProductVariantInterface $variant): array
+    {
+        $id = $variant->getId();
+        $this->entityManager()->clear();
+
+        $reloaded = $this->findOneBy('sylius.repository.product_variant', ['id' => $id]);
+        self::assertInstanceOf(ProductVariantInterface::class, $reloaded);
+
+        return ['onHand' => $reloaded->getOnHand(), 'onHold' => $reloaded->getOnHold()];
     }
 
     /**
@@ -352,6 +411,23 @@ abstract class FunctionalTestCase extends KernelTestCase
         $this->entityManager()->persist($order);
 
         return $order;
+    }
+
+    /**
+     * One unit of the variant at the given price
+     */
+    private function createOrderItem(ProductVariantInterface $variant, int $unitPrice): OrderItemInterface
+    {
+        $item = $this->createResource('sylius.factory.order_item');
+        self::assertInstanceOf(OrderItemInterface::class, $item);
+        $item->setVariant($variant);
+        $item->setUnitPrice($unitPrice);
+
+        $quantityModifier = self::getContainer()->get('sylius.order_item_quantity_modifier');
+        self::assertInstanceOf(OrderItemQuantityModifierInterface::class, $quantityModifier);
+        $quantityModifier->modify($item, 1);
+
+        return $item;
     }
 
     private function quickpayPaymentMethod(): PaymentMethodInterface
