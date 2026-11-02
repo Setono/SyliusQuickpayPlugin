@@ -245,7 +245,7 @@ final class PaymentProcessorTest extends FunctionalTestCase
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0, fraudSuspected: true));
         $this->quickpay()->respond('POST', '/payments/501/capture', self::quickpayPayment(501, 'new', ['authorize'], balance: 0, fraudSuspected: true));
 
-        $this->applyTransition($payment, PaymentTransitions::TRANSITION_COMPLETE);
+        ($this->processor(blockCaptureOnSuspectedFraud: false))($payment, PaymentTransitions::TRANSITION_COMPLETE);
 
         self::assertSame(['POST /payments/501/capture'], $this->operationsSentToQuickpay());
     }
