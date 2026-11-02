@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 
-use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -90,13 +89,5 @@ final class StatusCheckTest extends FunctionalTestCase
         yield 'already matching' => [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, 'new', ['authorize'], 0, 'authorized', null];
         yield 'unknown' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'processed', [], null, 'unknown', null];
         yield 'no transition leads there' => [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, 'pending', [], null, 'processing', null];
-    }
-
-    private function reconciler(): PaymentReconcilerInterface
-    {
-        $reconciler = self::getContainer()->get(PaymentReconcilerInterface::class);
-        self::assertInstanceOf(PaymentReconcilerInterface::class, $reconciler);
-
-        return $reconciler;
     }
 }

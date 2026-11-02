@@ -9,6 +9,7 @@ use Nyholm\Psr7\Response;
 use Payum\Core\GatewayInterface;
 use Payum\Core\Payum;
 use Psr\Http\Message\ResponseInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient;
 use SM\Event\SMEvents;
 use SM\Event\TransitionEvent;
@@ -133,7 +134,34 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $transitions;
     }
 
+    /**
+     * The reconciliation module, as the booted container wires it
+     */
+    protected function reconciler(): PaymentReconcilerInterface
+    {
+        $reconciler = self::getContainer()->get(PaymentReconcilerInterface::class);
+        self::assertInstanceOf(PaymentReconcilerInterface::class, $reconciler);
+
+        return $reconciler;
+    }
+
+    protected function payum(): Payum
+    {
+        $payum = self::getContainer()->get('payum');
+        self::assertInstanceOf(Payum::class, $payum);
+
+        return $payum;
+    }
+
     protected function gatewayOf(PaymentInterface $payment): GatewayInterface
+    {
+        return $this->payum()->getGateway(self::gatewayNameOf($payment));
+    }
+
+    /**
+     * The name of the Payum gateway the payment is paid through, its payment method's gateway config's
+     */
+    protected static function gatewayNameOf(PaymentInterface $payment): string
     {
         $method = $payment->getMethod();
         self::assertInstanceOf(PaymentMethodInterface::class, $method);
@@ -141,10 +169,7 @@ abstract class FunctionalTestCase extends KernelTestCase
         $gatewayName = $method->getGatewayConfig()?->getGatewayName();
         self::assertIsString($gatewayName);
 
-        $payum = self::getContainer()->get('payum');
-        self::assertInstanceOf(Payum::class, $payum);
-
-        return $payum->getGateway($gatewayName);
+        return $gatewayName;
     }
 
     /**

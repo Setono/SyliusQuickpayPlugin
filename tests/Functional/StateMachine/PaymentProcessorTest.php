@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\StateMachine;
 
 use Nyholm\Psr7\Response;
-use Payum\Core\Payum;
 use Psr\Http\Message\ResponseInterface;
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudChecker;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
-use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
@@ -317,12 +315,6 @@ final class PaymentProcessorTest extends FunctionalTestCase
         bool $cancel = true,
         bool $blockCaptureOnSuspectedFraud = false,
     ): PaymentProcessorInterface {
-        $payum = self::getContainer()->get('payum');
-        self::assertInstanceOf(Payum::class, $payum);
-
-        $reconciler = self::getContainer()->get(PaymentReconcilerInterface::class);
-        self::assertInstanceOf(PaymentReconcilerInterface::class, $reconciler);
-
         $quickpay = $this->quickpay();
         $clientFactory = new class($quickpay) implements ClientFactoryInterface {
             public function __construct(private readonly ScriptedHttpClient $httpClient)
@@ -335,7 +327,7 @@ final class PaymentProcessorTest extends FunctionalTestCase
             }
         };
 
-        return new PaymentProcessor($payum, $reconciler, new FraudChecker($clientFactory), $capture, $refund, $cancel, $blockCaptureOnSuspectedFraud);
+        return new PaymentProcessor($this->payum(), $this->reconciler(), new FraudChecker($clientFactory), $capture, $refund, $cancel, $blockCaptureOnSuspectedFraud);
     }
 
     /**

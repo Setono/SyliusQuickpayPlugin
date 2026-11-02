@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 
 use Payum\Core\Reply\HttpResponse;
-use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -146,13 +145,5 @@ final class ReconcileFromCallbackTest extends FunctionalTestCase
         // The genuine callback is not locked out
         $this->receiveCallback(self::quickpayCallback(501));
         self::assertSame(ReconcileOutcome::Transitioned, $this->reconciler()->reconcileFromCallback($payment)->outcome);
-    }
-
-    private function reconciler(): PaymentReconcilerInterface
-    {
-        $reconciler = self::getContainer()->get(PaymentReconcilerInterface::class);
-        self::assertInstanceOf(PaymentReconcilerInterface::class, $reconciler);
-
-        return $reconciler;
     }
 }

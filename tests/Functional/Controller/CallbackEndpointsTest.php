@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Controller;
 
-use Payum\Core\Payum;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Factory\PaymentMethodFactoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Request;
@@ -141,15 +139,7 @@ final class CallbackEndpointsTest extends FunctionalTestCase
      */
     private function callbackUrlOf(PaymentInterface $payment): string
     {
-        $payum = self::getContainer()->get('payum');
-        self::assertInstanceOf(Payum::class, $payum);
-
-        $method = $payment->getMethod();
-        self::assertInstanceOf(PaymentMethodInterface::class, $method);
-        $gatewayName = $method->getGatewayConfig()?->getGatewayName();
-        self::assertIsString($gatewayName);
-
-        return $payum->getTokenFactory()->createNotifyToken($gatewayName, $payment)->getTargetUrl();
+        return $this->payum()->getTokenFactory()->createNotifyToken(self::gatewayNameOf($payment), $payment)->getTargetUrl();
     }
 
     /**

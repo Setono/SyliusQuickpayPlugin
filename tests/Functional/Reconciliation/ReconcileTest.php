@@ -6,10 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 
 use Doctrine\Persistence\ManagerRegistry;
 use Nyholm\Psr7\Response;
-use Payum\Core\Payum;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler;
-use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
@@ -248,8 +246,6 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
 
-        $payum = self::getContainer()->get('payum');
-        self::assertInstanceOf(Payum::class, $payum);
         $stateMachine = self::getContainer()->get('sylius_abstraction.state_machine');
         self::assertInstanceOf(StateMachineInterface::class, $stateMachine);
         $managerRegistry = self::getContainer()->get('doctrine');
@@ -278,19 +274,11 @@ final class ReconcileTest extends FunctionalTestCase
             }
         };
 
-        $reconciler = new PaymentReconciler($payum, $stateMachine, new LockFactory($unavailableStore), $managerRegistry);
+        $reconciler = new PaymentReconciler($this->payum(), $stateMachine, new LockFactory($unavailableStore), $managerRegistry);
 
         $result = $reconciler->reconcile($payment);
 
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
-    }
-
-    private function reconciler(): PaymentReconcilerInterface
-    {
-        $reconciler = self::getContainer()->get(PaymentReconcilerInterface::class);
-        self::assertInstanceOf(PaymentReconcilerInterface::class, $reconciler);
-
-        return $reconciler;
     }
 }
