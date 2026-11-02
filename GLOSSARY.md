@@ -23,3 +23,15 @@ _Avoid_: sync (Payum's Sync only refreshes the stored payment details), poll
 **Status check**:
 Reading a Quickpay payment's status without changing the Sylius payment in any way.
 _Avoid_: peek, sync
+
+**Gateway configuration**:
+The settings a Quickpay gateway is built from (api key, private key, order prefix, ...), stored with a payment method and edited in the admin.
+_Avoid_: gateway config, payment method settings, credentials
+
+**Gateway option**:
+One named setting of a gateway configuration, such as the order prefix.
+_Avoid_: config key, parameter
+
+**Capture mode**:
+Whether a payment is authorized at checkout and captured when the Sylius payment completes, or captured by Quickpay at authorization.
+_Avoid_: auto capture, use_authorize
