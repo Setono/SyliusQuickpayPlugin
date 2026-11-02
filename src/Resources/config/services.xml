@@ -13,6 +13,15 @@
             <argument type="service" id="sylius.repository.gateway_config"/>
         </service>
 
+        <!-- Payum's per-payment notify url, the callback url Quickpay normally calls -->
+        <service id="Setono\SyliusQuickpayPlugin\Controller\PayumNotifyController"
+                 decorates="Payum\Bundle\PayumBundle\Controller\NotifyController">
+            <argument type="service" id=".inner"/>
+            <argument type="service" id="payum"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
+            <argument type="service" id="sylius.repository.gateway_config"/>
+        </service>
+
         <!-- Provider -->
         <service id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
 
