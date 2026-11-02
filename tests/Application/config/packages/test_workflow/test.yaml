@@ -1,0 +1,4 @@
+# The test environment, running Sylius' state machines on the symfony_workflow adapter instead of
+# winzou (see sylius_state_machine_abstraction.yaml), so functional tests can run under both
+imports:
+    - { resource: '../test/*.yaml' }
