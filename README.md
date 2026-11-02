@@ -140,16 +140,19 @@ Quickpay — the check fails open on anything but an explicit rejection.
   the payment window's outcome *and* for every capture, refund and cancel the store issues (the gateway names that
   url on each operation). Only operations made outside the store need the account-wide callback url (see
   [Callbacks](#callbacks)). Every callback's `Quickpay-Checksum-SHA256` header is validated against your private key
-  before the payment details are updated.
+  before anything about the payment changes. A genuine callback then **reconciles** the payment: Sylius applies the
+  state change its own mapping gives for the Quickpay payment's status (authorized, completed, refunded, ...), at
+  most once.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
   completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order.
 * A refund targets Quickpay's **balance** (what is still captured) rather than the original amount — so a payment
   that was partially refunded directly in the Quickpay manager refunds only the remainder instead of failing. The
-  balance is also persisted into the payment details on every status check and callback. An explicit
-  `refund_amount` / `capture_amount` in the payment details is passed through to Quickpay untouched for
-  programmatic partial operations; note that Sylius' payment state machine still treats the payment as a whole —
-  the `refund` transition can only be applied once.
+  balance is also persisted into the payment details whenever a callback or the
+  [reconciliation command](#reconciling-missed-callbacks) reconciles the payment, also when its state doesn't
+  change. An explicit `refund_amount` / `capture_amount` in the payment details is passed through to Quickpay
+  untouched for programmatic partial operations; note that Sylius' payment state machine still treats the payment
+  as a whole — the `refund` transition can only be applied once.
 
 ## Payment method logos on the checkout
 
@@ -229,8 +232,8 @@ bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since=
 
 All callbacks for what your store does arrive on a **per-payment url** the gateway mints and registers itself —
 the payment window's outcome on the payment link's callback url, and capture/refund/cancel confirmations via the
-`QuickPay-Callback-Url` header the gateway sends on every operation it issues. They are verified and routed by
-Payum, and none of it needs configuration.
+`QuickPay-Callback-Url` header the gateway sends on every operation it issues. Payum checks the url's token and
+the plugin handles the callback; none of it needs configuration.
 
 The **account-wide** callback url of your Quickpay account (*Settings* → *Integration* → *Callback url*) is only
 consulted for operations made *outside* the store — a refund clicked in the Quickpay manager, a capture issued by
@@ -248,13 +251,20 @@ the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries un
 backoff.
 
 Deliveries can race: Quickpay retries a callback it considers undelivered, and a retry can arrive while the
-original is still being handled. The plugin serializes callback handling per payment — a callback arriving while
-another one for the same payment is being processed is acknowledged with a 2xx and not processed, so nothing is
-applied twice and Quickpay stops retrying. Nothing is lost either: handling a callback re-fetches the payment from
-Quickpay, so the processing that holds the lock sees the state the duplicate carried. This guards both callback
-urls. The lock is a regular [Symfony lock](https://symfony.com/doc/current/lock.html): the plugin registers a
-named `framework.lock` resource, `setono_sylius_quickpay`, defaulting to the `flock` store — which serializes per
-server. If your shop runs on several servers, redefine the resource with a shared store:
+original is still being handled. Both callback urls reconcile the payment under a per-payment lock, held until the
+state change is applied and saved. A callback arriving while the lock is held is answered with a 2xx and runs
+nothing, so nothing is applied twice and Quickpay stops retrying; one arriving after the lock was released sees the
+saved state and changes nothing. Nothing is lost either: handling a callback re-fetches the payment from Quickpay,
+so the callback holding the lock sees the state the duplicate carried. The lock is taken before the callback's
+signature is checked, so a forged callback arriving while the payment's lock is held is answered with a 2xx as well;
+like any duplicate it runs nothing and changes nothing. A callback whose handling fails (Quickpay unreachable, a
+state-machine callback throwing) saves nothing, not even a state change that was halfway applied, and is answered
+with an error, so Quickpay's retry finds the payment as it was. The
+[reconciliation command](#reconciling-missed-callbacks) takes the same lock, so a callback and the command never
+reconcile a payment at the same time. The lock is a regular [Symfony lock](https://symfony.com/doc/current/lock.html):
+the plugin registers a named `framework.lock` resource, `setono_sylius_quickpay`, defaulting to the `flock` store,
+which locks per server. If your shop runs on several servers, redefine the resource with a shared store, or two
+servers can each handle one of a pair of duplicate callbacks:
 
 ```yaml
 # config/packages/lock.yaml
@@ -268,7 +278,8 @@ framework:
 Callbacks are normally how your store learns about a payment state change. If one never arrives — the store was
 unreachable until Quickpay gave up retrying, or the change was made outside the store and the account-wide callback
 url points elsewhere (see [Callbacks](#callbacks)) — the payment stays stuck in a non-final state and the order
-never completes. The plugin ships a reconciliation command that closes this gap by polling Quickpay directly:
+never completes. The plugin ships a reconciliation command that closes this gap by reconciling each stuck payment with
+its Quickpay payment:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments                             # last 7 days, max 100 payments
@@ -276,9 +287,34 @@ bin/console setono:sylius-quickpay:reconcile-payments --since="12 hours" --limit
 bin/console setono:sylius-quickpay:reconcile-payments --dry-run                   # report only, change nothing
 ```
 
-For each stuck payment it fetches the current status from Quickpay and applies the matching payment
-transition — the same one the callback would have triggered. A callback racing the command is harmless:
-transitions are guarded and the resulting Quickpay operations re-check the remote status first.
+Each stuck payment is reconciled: the command fetches its status from Quickpay and Sylius applies the state change
+its own mapping gives, exactly the change the callback would have made (a pending Quickpay payment, for example,
+moves a new payment to *processing*). Each payment is saved as soon as it is reconciled, and every payment that
+changed is listed with its state before and after and the state Sylius maps its Quickpay payment's status to:
+
+```
+Payment 42: "new" -> "authorized" (Quickpay → "authorized")
+Payment 43: skipped, it is locked by a callback being handled or another run
+
+ [OK] 3 checked, 1 transitioned, 1 unchanged, 1 skipped, 0 errored
+```
+
+The command takes the same per-payment lock as the [callbacks](#callbacks): a payment whose callback is being
+handled at that moment is skipped and reported as such, and the next run picks it up. A payment counted as
+*unchanged* kept its state; the payment details refreshed from Quickpay, such as its balance, are still saved. A
+payment that fails (Quickpay unreachable, a state-machine callback throwing, say Sylius failing to sell the order's
+inventory) is reported and counted, and nothing of it is saved, not even a state change that was halfway applied, so
+the next run retries it; the run goes on with the next payment. When the database fails to save a payment, Doctrine
+closes its entity manager and the rest of that run is reported as errored too; nothing of those payments is saved
+either, and the next run reconciles them.
+
+`--dry-run` only reads: it reports each payment's state, the transition that would be applied (or `no transition`)
+and the state the Quickpay payment's status maps to, and changes nothing — no state, no state-machine callbacks, no
+database writes. It is safe against a production shop:
+
+```
+Payment 42: "new", would apply "authorize" (Quickpay → "authorized")
+```
 
 Scheduling is your application's choice; a cron entry along these lines is plenty:
 
@@ -292,7 +328,7 @@ will surface persistent problems.
 ## Testing
 
 ```bash
-composer phpunit       # unit tests
+composer phpunit       # unit and functional tests (the functional suite needs the test application's database)
 composer analyse       # static analysis (PHPStan)
 composer check-style   # coding standards
 ```
@@ -322,7 +358,8 @@ exits non-zero when any check fails, so it can run in CI or cron.
 
 See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the full list of changes an upgrading store has to make —
 gateway configuration keys, removed imports, renamed routes and classes, the Klarna removal, and the
-behavioral changes around refunds and callbacks.
+behavioral changes around refunds and callbacks. Coming from an earlier 2.0 alpha, read its
+*Upgrading from an earlier 2.0 alpha* section.
 
 ## Troubleshooting
 
@@ -349,6 +386,13 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
 - `Validation error: order_id must have length between 4 and 20`
 
   Shorten the *Order prefix* of your Quickpay payment method to 11 characters or less.
+
+- `Payment 42: skipped, it is locked by a callback being handled or another run`
+
+  The reconciliation command found the payment's lock held: a callback for it was being handled at that moment,
+  or another run of the command was reconciling it. Nothing was changed, and the next run picks the payment up.
+  A lock is never left behind for long: a `flock` lock is released with the process holding it, and a lock in a
+  shared store expires after 60 seconds.
 
 [ico-version]: https://poser.pugx.org/setono/sylius-quickpay-plugin/v/stable
 [ico-license]: https://poser.pugx.org/setono/sylius-quickpay-plugin/license

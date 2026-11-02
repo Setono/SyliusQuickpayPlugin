@@ -4,22 +4,16 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Command;
 
-use Doctrine\Persistence\ManagerRegistry;
-use Payum\Core\Exception\ExceptionInterface;
-use Payum\Core\Payum;
-use Payum\Core\Request\GetHumanStatus;
-use Setono\Doctrine\ORMTrait;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
-use Sylius\Abstraction\StateMachine\StateMachineInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
-use Sylius\Component\Payment\PaymentTransitions;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -31,30 +25,25 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 /**
  * The Quickpay callback is normally the only path by which a payment learns about a state
  * change at Quickpay. This command closes the gap left by callbacks that never arrive: it
- * polls Quickpay for payments stuck in a non-final state and applies the matching transition.
+ * reconciles each payment stuck in a non-final state, making the state change the callback
+ * would have made.
  */
 #[AsCommand(
     name: 'setono:sylius-quickpay:reconcile-payments',
-    description: 'Polls Quickpay for payments stuck in a non-final state and applies the matching payment transition',
+    description: 'Reconciles payments stuck in a non-final state with their Quickpay payments',
 )]
 final class ReconcilePaymentsCommand extends Command
 {
-    use ORMTrait;
-
     /**
      * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
      */
     public function __construct(
         private readonly PendingPaymentProviderInterface $pendingPaymentProvider,
-        private readonly Payum $payum,
-        private readonly StateMachineInterface $stateMachine,
+        private readonly PaymentReconcilerInterface $reconciler,
         private readonly ClientFactoryInterface $clientFactory,
         private readonly RepositoryInterface $gatewayConfigRepository,
-        ManagerRegistry $managerRegistry,
     ) {
         parent::__construct();
-
-        $this->managerRegistry = $managerRegistry;
     }
 
     protected function configure(): void
@@ -62,7 +51,7 @@ final class ReconcilePaymentsCommand extends Command
         $this
             ->addOption('since', null, InputOption::VALUE_REQUIRED, 'Only reconcile payments created within this period', '7 days')
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Maximum number of payments to check', '100')
-            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report what would happen without applying any transition')
+            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report the transition each payment would get, changing nothing')
             ->addOption('fraud-suspected', null, InputOption::VALUE_NONE, 'Report the payments Quickpay flags as fraud suspected instead of reconciling; no transition is applied')
         ;
     }
@@ -89,45 +78,73 @@ final class ReconcilePaymentsCommand extends Command
             return $this->reportFraudSuspected($io, $createdSince, $limit);
         }
 
-        $checked = $transitioned = $unchanged = $errored = 0;
+        $checked = $transitioned = $unchanged = $skipped = $errored = 0;
 
         foreach ($this->pendingPaymentProvider->findPending($createdSince, $limit) as $payment) {
             ++$checked;
 
+            // Besides Quickpay and Payum, a transition's state-machine callbacks can fail (say, on stock):
+            // whatever one payment throws, it's reported and the run goes on with the next
             try {
-                $gateway = $this->payum->getGateway(self::resolveGatewayName($payment));
-                $gateway->execute($status = new GetHumanStatus($payment));
+                if ($dryRun) {
+                    // A status check, so nothing about the payment changes and nothing is written
+                    $statusCheck = $this->reconciler->checkStatus($payment);
 
-                $transition = self::resolveTransition($status);
-                if (null === $transition || !$this->stateMachine->can($payment, PaymentTransitions::GRAPH, $transition)) {
-                    ++$unchanged;
-                } elseif ($dryRun) {
-                    ++$transitioned;
-                    $io->writeln(self::describe($payment, sprintf('would apply "%s" (Quickpay status "%s")', $transition, self::statusValue($status))));
-                } else {
-                    $this->stateMachine->apply($payment, PaymentTransitions::GRAPH, $transition);
+                    if (null === $statusCheck->transition) {
+                        ++$unchanged;
+                        $outcome = 'no transition';
+                    } else {
+                        ++$transitioned;
+                        $outcome = sprintf('would apply "%s"', $statusCheck->transition);
+                    }
 
-                    ++$transitioned;
-                    $io->writeln(self::describe($payment, sprintf('applied "%s" (Quickpay status "%s")', $transition, self::statusValue($status))));
+                    $io->writeln(self::describe($payment, sprintf(
+                        '"%s", %s (Quickpay → "%s")',
+                        $payment->getState(),
+                        $outcome,
+                        $statusCheck->targetState,
+                    )));
+
+                    continue;
                 }
-            } catch (ExceptionInterface|QuickpayException $e) {
+
+                // Persists the payment itself, so each one is saved as soon as it is reconciled
+                $result = $this->reconciler->reconcile($payment);
+
+                switch ($result->outcome) {
+                    case ReconcileOutcome::Transitioned:
+                        ++$transitioned;
+                        $io->writeln(self::describe($payment, sprintf(
+                            '"%s" -> "%s" (Quickpay → "%s")',
+                            $result->stateBefore,
+                            $result->stateAfter,
+                            (string) $result->targetState,
+                        )));
+
+                        break;
+                    case ReconcileOutcome::Unchanged:
+                        ++$unchanged;
+
+                        break;
+                    case ReconcileOutcome::Skipped:
+                        ++$skipped;
+                        $io->writeln(self::describe($payment, 'skipped, it is locked by a callback being handled or another run'));
+
+                        break;
+                }
+            } catch (\Exception $e) {
                 ++$errored;
                 $io->warning(self::describe($payment, $e->getMessage()));
-            }
-
-            // The status poll writes re-fetched details (e.g. the Quickpay balance) back onto the
-            // payment even when no transition applies, so every checked payment is persisted
-            if (!$dryRun) {
-                $this->getManager($payment)->flush();
             }
         }
 
         $io->success(sprintf(
-            '%d checked, %d transitioned%s, %d unchanged, %d errored',
+            '%d checked, %d transitioned%s, %d unchanged, %d skipped, %d errored',
             $checked,
             $transitioned,
             $dryRun ? ' (dry run)' : '',
             $unchanged,
+            $skipped,
             $errored,
         ));
 
@@ -189,44 +206,10 @@ final class ReconcilePaymentsCommand extends Command
         return $errored ? Command::FAILURE : Command::SUCCESS;
     }
 
-    private static function resolveGatewayName(PaymentInterface $payment): string
-    {
-        /** @var PaymentMethodInterface $method */
-        $method = $payment->getMethod();
-
-        /** @var GatewayConfigInterface $gatewayConfig */
-        $gatewayConfig = $method->getGatewayConfig();
-
-        return $gatewayConfig->getGatewayName();
-    }
-
-    /**
-     * The transitions it maps to are exactly the ones the notify flow would have applied had
-     * the callback arrived; anything Quickpay reports as pending or unknown is left untouched.
-     */
-    private static function resolveTransition(GetHumanStatus $status): ?string
-    {
-        return match (true) {
-            $status->isCaptured() => PaymentTransitions::TRANSITION_COMPLETE,
-            $status->isAuthorized() => PaymentTransitions::TRANSITION_AUTHORIZE,
-            $status->isRefunded() => PaymentTransitions::TRANSITION_REFUND,
-            $status->isCanceled() => PaymentTransitions::TRANSITION_CANCEL,
-            $status->isFailed(), $status->isExpired() => PaymentTransitions::TRANSITION_FAIL,
-            default => null,
-        };
-    }
-
     private static function describe(PaymentInterface $payment, string $message): string
     {
         $id = $payment->getId();
 
         return sprintf('Payment %s: %s', is_scalar($id) ? (string) $id : '?', $message);
-    }
-
-    private static function statusValue(GetHumanStatus $status): string
-    {
-        $value = $status->getValue();
-
-        return is_scalar($value) ? (string) $value : 'unknown';
     }
 }

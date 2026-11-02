@@ -10,5 +10,8 @@ doctrine:
         driver: 'pdo_mysql'
         server_version: '5.7'
         charset: UTF8
+        # dama/doctrine-test-bundle wraps each functional test in a transaction it rolls back, so
+        # every flush inside a test is a nested transaction
+        use_savepoints: true
 
         url: '%env(resolve:DATABASE_URL)%'

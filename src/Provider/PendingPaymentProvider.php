@@ -46,7 +46,7 @@ final class PendingPaymentProvider implements PendingPaymentProviderInterface
             ->getQuery()
             ->getResult();
 
-        // A payment without a quickpayPaymentId never got a payment link — there is nothing to poll
+        // A payment without a quickpayPaymentId never got a payment link — there is no Quickpay payment to reconcile it with
         return array_values(array_filter(
             $payments,
             static fn (PaymentInterface $payment): bool => isset($payment->getDetails()['quickpayPaymentId']),

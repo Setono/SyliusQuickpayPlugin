@@ -10,7 +10,7 @@ interface PendingPaymentProviderInterface
 {
     /**
      * Returns Quickpay payments in a non-final state, created on or after the given boundary,
-     * that carry a quickpayPaymentId to poll.
+     * that carry a quickpayPaymentId, so they can be reconciled with their Quickpay payments.
      *
      * @return list<PaymentInterface>
      */

@@ -1,0 +1,17 @@
+# Quickpay's HTTP is the one thing the functional tests substitute: every Quickpay gateway sends its
+# requests to the scripted client, which a test scripts and asserts on
+services:
+    Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient:
+        public: true
+
+    Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedGatewayFactoryBuilder:
+        decorates: Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder
+        arguments:
+            - '@.inner'
+            - '@Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient'
+
+    # The functional tests reach the reconciliation module through its interface, whether or not anything
+    # else in the container consumes it
+    Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface:
+        alias: Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler
+        public: true

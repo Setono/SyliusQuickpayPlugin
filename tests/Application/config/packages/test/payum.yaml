@@ -1,0 +1,8 @@
+# A gateway other than Quickpay that handles Payum's notify, for the tests showing its callbacks are left to
+# Payum: Payum's offline gateway, given a notify action that marks the payment captured
+services:
+    Setono\SyliusQuickpayPlugin\Tests\Payum\OfflineNotifyAction:
+        # Payum gets its actions from the container
+        public: true
+        tags:
+            - { name: payum.action, factory: offline, alias: setono_sylius_quickpay_test.offline_notify }
