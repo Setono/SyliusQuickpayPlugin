@@ -26,4 +26,16 @@ interface PaymentReconcilerInterface
      * @throws QuickpayException
      */
     public function checkStatus(PaymentInterface $payment): StatusCheck;
+
+    /**
+     * Reconcile on demand: brings the Sylius payment's state in line with its Quickpay payment by
+     * running a status request on it, so Sylius' payment-state extension applies at most one
+     * transition (with all its callbacks), and persists the result.
+     *
+     * Errors propagate: the SDK's {@see QuickpayException} (e.g. Quickpay unreachable), Payum's
+     * {@see ExceptionInterface} (e.g. a payment without a gateway) or whatever a state-machine callback throws.
+     *
+     * @throws QuickpayException
+     */
+    public function reconcile(PaymentInterface $payment): ReconcileResult;
 }

@@ -24,6 +24,8 @@ use Sylius\Component\Payment\Factory\PaymentFactoryInterface;
 use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\LockInterface;
 
 /**
  * Base for kernel-booting tests against the test application's database. dama/doctrine-test-bundle
@@ -81,6 +83,22 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $client;
     }
 
+    /**
+     * Takes the lock reconciling a Sylius payment takes, as a concurrent callback or reconcile run holding
+     * it would. It stays held until released, even when the returned lock isn't kept. The test env's lock
+     * store is in-memory, so the lock is shared with the booted container only.
+     */
+    protected function holdLockOf(int $quickpayPaymentId): LockInterface
+    {
+        $lockFactory = self::getContainer()->get('lock.setono_sylius_quickpay.factory');
+        self::assertInstanceOf(LockFactory::class, $lockFactory);
+
+        $lock = $lockFactory->createLock('setono_sylius_quickpay_payment_' . $quickpayPaymentId, autoRelease: false);
+        self::assertTrue($lock->acquire(), 'The payment\'s lock is already held');
+
+        return $lock;
+    }
+
     protected function gatewayOf(PaymentInterface $payment): GatewayInterface
     {
         $method = $payment->getMethod();
@@ -97,18 +115,23 @@ abstract class FunctionalTestCase extends KernelTestCase
 
     /**
      * A Sylius payment of an order, paid with a Quickpay payment method and linked to a Quickpay
-     * payment, all persisted
+     * payment, all persisted. For several payments in one test, give each its own order number.
      */
-    protected function createSyliusPayment(string $state, string $orderPaymentState, int $quickpayPaymentId, int $amount = 10_000): PaymentInterface
-    {
-        $order = $this->createOrder($this->createChannel(), $orderPaymentState);
+    protected function createSyliusPayment(
+        string $state,
+        string $orderPaymentState,
+        int $quickpayPaymentId,
+        int $amount = 10_000,
+        string $orderNumber = '000000001',
+    ): PaymentInterface {
+        $order = $this->createOrder($this->channel(), $orderPaymentState, $orderNumber);
 
         $paymentFactory = self::getContainer()->get('sylius.factory.payment');
         self::assertInstanceOf(PaymentFactoryInterface::class, $paymentFactory);
 
         $payment = $paymentFactory->createWithAmountAndCurrencyCode($amount, self::CURRENCY);
         self::assertInstanceOf(PaymentInterface::class, $payment);
-        $payment->setMethod($this->createQuickpayPaymentMethod());
+        $payment->setMethod($this->quickpayPaymentMethod());
         $payment->setState($state);
         $payment->setDetails([
             'quickpayPaymentId' => $quickpayPaymentId,
@@ -178,8 +201,15 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $entityManager;
     }
 
-    private function createChannel(): ChannelInterface
+    private function channel(): ChannelInterface
     {
+        $channel = $this->findOneBy('sylius.repository.channel', ['code' => 'web']);
+        if (null !== $channel) {
+            self::assertInstanceOf(ChannelInterface::class, $channel);
+
+            return $channel;
+        }
+
         $currency = $this->findOneBy('sylius.repository.currency', ['code' => self::CURRENCY]);
         if (null === $currency) {
             $currency = $this->createResource('sylius.factory.currency');
@@ -211,12 +241,12 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $channel;
     }
 
-    private function createOrder(ChannelInterface $channel, string $paymentState): OrderInterface
+    private function createOrder(ChannelInterface $channel, string $paymentState, string $number): OrderInterface
     {
         $order = $this->createResource('sylius.factory.order');
         self::assertInstanceOf(OrderInterface::class, $order);
         $order->setChannel($channel);
-        $order->setNumber('000000001');
+        $order->setNumber($number);
         $order->setCurrencyCode(self::CURRENCY);
         $order->setLocaleCode(self::LOCALE);
         $order->setState(BaseOrderInterface::STATE_NEW);
@@ -229,8 +259,15 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $order;
     }
 
-    private function createQuickpayPaymentMethod(): PaymentMethodInterface
+    private function quickpayPaymentMethod(): PaymentMethodInterface
     {
+        $paymentMethod = $this->findOneBy('sylius.repository.payment_method', ['code' => 'quickpay']);
+        if (null !== $paymentMethod) {
+            self::assertInstanceOf(PaymentMethodInterface::class, $paymentMethod);
+
+            return $paymentMethod;
+        }
+
         $paymentMethodFactory = self::getContainer()->get('sylius.factory.payment_method');
         self::assertInstanceOf(PaymentMethodFactoryInterface::class, $paymentMethodFactory);
 
