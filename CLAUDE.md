@@ -28,7 +28,9 @@ delegated to the **`setono/sylius-plugin-pack`** meta-package — it is not list
 ## Commands
 
 ```bash
-composer phpunit          # run the PHPUnit test suite (tests/)
+composer phpunit          # run both PHPUnit suites (the functional one needs the test database)
+vendor/bin/phpunit --testsuite unit                      # unit suite: tests/ minus tests/Functional, no database
+vendor/bin/phpunit --testsuite functional                # functional suite: kernel tests against the test database
 composer analyse          # PHPStan (level max) — boots the test app via tests/PHPStan/*.php loaders
 composer check-style      # ECS dry-run (sylius-labs coding standard)
 composer fix-style        # ECS auto-fix
@@ -40,9 +42,10 @@ vendor/bin/composer-dependency-analyser                  # unused/undeclared dep
 CI (`.github/workflows/build.yaml`) is the bar a change must pass — jobs: coding-standards
 (`composer validate --strict`, `composer normalize --dry-run`, `composer check-style`,
 `vendor/bin/rector process --dry-run`, `lint:yaml`, `lint:twig`), dependency-analysis (composer-dependency-analyser),
-static-code-analysis (`composer analyse`), unit-tests (`composer phpunit`), integration-tests
-(`lint:container`, `doctrine:schema:create`, `doctrine:schema:validate -vvv`), mutation-tests (Infection) and
-code-coverage (Codecov). Matrix: PHP 8.1–8.3 × Symfony `~6.4.0` × deps lowest/highest. A separate
+static-code-analysis (`composer analyse`), unit-tests (the unit suite), integration-tests
+(`lint:container`, `doctrine:schema:create`, `doctrine:schema:validate -vvv`, the functional suite), mutation-tests
+(Infection, unit suite only via `testFrameworkOptions` in `infection.json.dist`) and code-coverage (MySQL, both
+suites, Codecov). Matrix: PHP 8.1–8.3 × Symfony `~6.4.0` × deps lowest/highest. A separate
 `backwards-compatibility-check.yaml` runs Roave BC-check on PRs.
 
 PHPStan runs at `level: max` with **no baseline** — the error count is zero and must stay there; fix new
@@ -60,6 +63,21 @@ and `config/routes/setono_sylius_quickpay.yaml`.
 Run any Symfony console command for the plugin from inside that directory, e.g.
 `(cd tests/Application && bin/console debug:container setono_sylius_quickpay)`. For a manual run:
 `(cd tests/Application && yarn install && yarn build && bin/console doctrine:database:create && bin/console doctrine:schema:create && bin/console sylius:fixtures:load -n)`.
+
+### Functional suite
+`tests/Functional/` holds kernel tests against the test application's database (create it once with
+`(cd tests/Application && bin/console doctrine:database:create --env=test && bin/console doctrine:schema:create --env=test)`).
+Extend `tests/Functional/FunctionalTestCase`. dama/doctrine-test-bundle (registered in `phpunit.xml.dist`) rolls
+each test back, so a test builds its own entities from Sylius' factories (`createSyliusPayment()`); no fixtures.
+Only Quickpay's HTTP is substituted: in the `test` env, `tests/Quickpay/ScriptedGatewayFactoryBuilder` decorates the
+plugin's gateway factory builder and gives every Quickpay gateway an SDK client (library option `quickpay.client`)
+on `tests/Quickpay/ScriptedHttpClient`; script it with `$this->quickpay()->respond('GET', '/payments/1', ...)` and
+assert on `$this->quickpay()->sentRequests()`. The gateway, Sylius' payment-state extension, the state machine, the
+lock and the database are real. To run a test under both state machine adapters, use
+`@dataProvider stateMachineAdapters` and `self::bootKernelWithStateMachineAdapter($adapter)`: `symfony_workflow`
+runs in the `test_workflow` env (`config/packages/test_workflow/`, which imports the `test` config), sharing the
+test database through `.env.test`'s fixed `DATABASE_URL`. In both test envs the `setono_sylius_quickpay` lock
+resource is an in-memory store, shared within the test process only.
 
 ## Architecture
 
