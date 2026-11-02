@@ -73,7 +73,9 @@ Only Quickpay's HTTP is substituted: in the `test` env, `tests/Quickpay/Scripted
 plugin's gateway factory builder and gives every Quickpay gateway an SDK client (library option `quickpay.client`)
 on `tests/Quickpay/ScriptedHttpClient`; script it with `$this->quickpay()->respond('GET', '/payments/1', ...)` and
 assert on `$this->quickpay()->sentRequests()`. The gateway, Sylius' payment-state extension, the state machine, the
-lock and the database are real. To run a test under both state machine adapters, use
+lock and the database are real. To count how often a payment transition (and so its callbacks) ran, under either
+adapter, take `$transitions = $this->recordPaymentTransitions()` before acting and assert on
+`$transitions->getArrayCopy()`. To run a test under both state machine adapters, use
 `@dataProvider stateMachineAdapters` and `self::bootKernelWithStateMachineAdapter($adapter)`: `symfony_workflow`
 runs in the `test_workflow` env (`config/packages/test_workflow/`, which imports the `test` config), sharing the
 test database through `.env.test`'s fixed `DATABASE_URL`. In both test envs the `setono_sylius_quickpay` lock
@@ -159,8 +161,9 @@ transition dispatches its events, so the dual registration never double-processe
 implements `PaymentProcessorInterface` and is `LoggerAwareInterface` (wired via a `setLogger()` call with
 `on-invalid="ignore"`). It translates each transition into the corresponding Payum request
 (`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
-and it guards each operation by first executing `GetHumanStatus` (the library's status action re-fetches the
-payment from Quickpay), skipping operations that already happened. A failed cancel
+and it guards each operation with the reconciliation module's status check (`PaymentReconcilerInterface::checkStatus()`,
+never a status request on the Sylius payment, which would make Sylius apply the transition again from inside
+itself), skipping operations that already happened. A failed cancel
 (`Payum\Core\Exception\ExceptionInterface` or the SDK's `Setono\Quickpay\Exception\QuickpayException`) is logged
 but does not block the transition. Operations execute with the Sylius payment through Sylius' Payum bridge, so
 gateway-updated details persist; an unqualified `Refund` refunds Quickpay's remaining `balance` and the balance is
