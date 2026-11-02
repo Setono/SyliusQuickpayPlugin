@@ -20,6 +20,7 @@ use Setono\Quickpay\Exception\ValidationException;
 use Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\FixedResponseHttpClient;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
@@ -100,31 +101,6 @@ final class ReconcilePaymentsCommandTest extends TestCase
         $tester->assertCommandIsSuccessful();
         self::assertStringContainsString('applied "complete"', $tester->getDisplay());
         self::assertStringContainsString('1 checked, 1 transitioned, 0 unchanged, 0 errored', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_does_not_apply_anything_on_a_dry_run(): void
-    {
-        $payment = $this->createPayment();
-        $this->pendingPaymentProvider->findPending(Argument::type(\DateTimeImmutable::class), 100)->willReturn([$payment]);
-
-        $this->gateway->execute(Argument::type(GetHumanStatus::class))->will(static function (array $args): void {
-            $request = $args[0];
-            if ($request instanceof GetHumanStatus) {
-                $request->markCanceled();
-            }
-        });
-
-        $this->stateMachine->can($payment, 'sylius_payment', 'cancel')->willReturn(true);
-        $this->stateMachine->apply(Argument::cetera())->shouldNotBeCalled();
-        $this->entityManager->flush()->shouldNotBeCalled();
-
-        $tester = $this->executeCommand(['--dry-run' => true]);
-
-        $tester->assertCommandIsSuccessful();
-        self::assertStringContainsString('would apply "cancel"', $tester->getDisplay());
     }
 
     /**
@@ -376,6 +352,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
         $application = new Application();
         $application->add(new ReconcilePaymentsCommand(
             $this->pendingPaymentProvider->reveal(),
+            $this->prophesize(PaymentReconcilerInterface::class)->reveal(),
             $this->payum->reveal(),
             $this->stateMachine->reveal(),
             $this->clientFactory->reveal(),

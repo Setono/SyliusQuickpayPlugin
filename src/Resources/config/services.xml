@@ -104,6 +104,7 @@
 
         <service id="Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
             <argument type="service" id="payum"/>
             <argument type="service" id="sylius_abstraction.state_machine"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>

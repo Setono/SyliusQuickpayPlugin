@@ -15,6 +15,7 @@ use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -46,6 +47,7 @@ final class ReconcilePaymentsCommand extends Command
      */
     public function __construct(
         private readonly PendingPaymentProviderInterface $pendingPaymentProvider,
+        private readonly PaymentReconcilerInterface $reconciler,
         private readonly Payum $payum,
         private readonly StateMachineInterface $stateMachine,
         private readonly ClientFactoryInterface $clientFactory,
@@ -62,7 +64,7 @@ final class ReconcilePaymentsCommand extends Command
         $this
             ->addOption('since', null, InputOption::VALUE_REQUIRED, 'Only reconcile payments created within this period', '7 days')
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Maximum number of payments to check', '100')
-            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report what would happen without applying any transition')
+            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report the transition each payment would get, changing nothing')
             ->addOption('fraud-suspected', null, InputOption::VALUE_NONE, 'Report the payments Quickpay flags as fraud suspected instead of reconciling; no transition is applied')
         ;
     }
@@ -95,15 +97,34 @@ final class ReconcilePaymentsCommand extends Command
             ++$checked;
 
             try {
+                if ($dryRun) {
+                    // A status check, so nothing about the payment changes and nothing is written
+                    $statusCheck = $this->reconciler->checkStatus($payment);
+
+                    if (null === $statusCheck->transition) {
+                        ++$unchanged;
+                        $outcome = 'no transition';
+                    } else {
+                        ++$transitioned;
+                        $outcome = sprintf('would apply "%s"', $statusCheck->transition);
+                    }
+
+                    $io->writeln(self::describe($payment, sprintf(
+                        '"%s", %s (Quickpay status "%s")',
+                        $payment->getState(),
+                        $outcome,
+                        $statusCheck->quickpayStatus,
+                    )));
+
+                    continue;
+                }
+
                 $gateway = $this->payum->getGateway(self::resolveGatewayName($payment));
                 $gateway->execute($status = new GetHumanStatus($payment));
 
                 $transition = self::resolveTransition($status);
                 if (null === $transition || !$this->stateMachine->can($payment, PaymentTransitions::GRAPH, $transition)) {
                     ++$unchanged;
-                } elseif ($dryRun) {
-                    ++$transitioned;
-                    $io->writeln(self::describe($payment, sprintf('would apply "%s" (Quickpay status "%s")', $transition, self::statusValue($status))));
                 } else {
                     $this->stateMachine->apply($payment, PaymentTransitions::GRAPH, $transition);
 
