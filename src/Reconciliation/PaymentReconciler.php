@@ -261,12 +261,8 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         $method = $payment->getMethod();
         $gatewayName = $method instanceof PaymentMethodInterface ? $method->getGatewayConfig()?->getGatewayName() : null;
         if (null === $gatewayName) {
-            $id = $payment->getId();
-
-            throw new InvalidArgumentException(sprintf(
-                'Payment %s has no payment method with a gateway',
-                is_scalar($id) ? (string) $id : '?',
-            ));
+            // The caller knows which payment it passed: the reconcile command prefixes its id to the message
+            throw new InvalidArgumentException('The payment has no payment method with a gateway');
         }
 
         return $this->payum->getGateway($gatewayName);
