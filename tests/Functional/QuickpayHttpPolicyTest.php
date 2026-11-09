@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional;
 
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Nyholm\Psr7\Response;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 
@@ -43,21 +45,21 @@ final class QuickpayHttpPolicyTest extends FunctionalTestCase
     {
         self::bootKernel();
 
-        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0, fraudSuspected: true));
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
 
-        $this->clientFactory()->create('the-api-key')->payments()->getById(501);
+        $this->gatewayChecks()->apiKey(GatewayConfigurations::of());
 
-        self::assertSame(['GET /payments/501'], $this->quickpay()->sentRequests());
+        self::assertSame(['GET /ping'], $this->quickpay()->sentRequests());
         $options = $this->quickpay()->sentRequestOptions()[0];
         self::assertSame(10.0, $options['timeout'] ?? null);
         self::assertSame(10.0, $options['max_duration'] ?? null);
     }
 
-    private function clientFactory(): ClientFactoryInterface
+    private function gatewayChecks(): GatewayChecksInterface
     {
-        $clientFactory = self::getContainer()->get(ClientFactoryInterface::class);
-        self::assertInstanceOf(ClientFactoryInterface::class, $clientFactory);
+        $gatewayChecks = self::getContainer()->get(GatewayChecksInterface::class);
+        self::assertInstanceOf(GatewayChecksInterface::class, $gatewayChecks);
 
-        return $clientFactory;
+        return $gatewayChecks;
     }
 }

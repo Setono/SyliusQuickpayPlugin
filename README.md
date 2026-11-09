@@ -128,8 +128,8 @@ id of 0, ...), with an error on each field to fix. Once the configuration is val
 Quickpay's API and refuses the key if Quickpay rejects it — a typo'd key is caught immediately instead of by the first
 customer whose checkout fails. A valid key whose API user lacks the `/ping` permission is verified through a
 `/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
-Quickpay — the check fails open on anything but an explicit rejection. Fixtures, the console and writes straight to
-the database skip this validation.
+Quickpay — the check fails open on anything but an explicit rejection, and logs at info level why the key couldn't be
+verified. Fixtures, the console and writes straight to the database skip this validation.
 
 **Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway
 configurations (`payum.dynamic_gateways.encryption.defuse_secret_key`) in a store that uses this plugin. Only Payum's
@@ -432,6 +432,10 @@ is registered at all. With `--live` it also creates a money-less test payment an
 link `PUT` the checkout depends on, catching a missing *Create or update payment link* permission before
 a customer does (the test payment remains visible on the account; it never carries money). The command
 exits non-zero when any check fails, so it can run in CI or cron.
+
+A check against Quickpay prints as passed (✔), failed (✖, failing the run) or, when Quickpay's answer proves neither
+(it didn't answer, answered with an error, or the API user may not ask), as a warning (!) saying why. The agreement
+and payment link checks run only once Quickpay accepts the api key.
 
 First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
 means the gateway can be built:

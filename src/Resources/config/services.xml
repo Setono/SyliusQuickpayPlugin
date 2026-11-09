@@ -112,16 +112,17 @@
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"
                  alias="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
 
-        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>
+        <!-- Gateway checks -->
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
         </service>
 
-        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface"
-                 alias="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier"/>
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks"/>
 
         <!-- Validator -->
         <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
 
             <call method="setLogger">
                 <argument type="service" id="logger" on-invalid="ignore"/>
@@ -132,8 +133,8 @@
 
         <!-- Command -->
         <service id="Setono\SyliusQuickpayPlugin\Command\DoctorCommand">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"/>
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
             <argument type="service" id="router"/>
 

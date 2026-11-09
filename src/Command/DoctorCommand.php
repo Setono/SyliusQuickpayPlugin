@@ -15,9 +15,10 @@ use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -48,8 +49,8 @@ final class DoctorCommand extends Command
     private int $failures = 0;
 
     public function __construct(
-        private readonly ClientFactoryInterface $clientFactory,
-        private readonly ApiKeyVerifierInterface $apiKeyVerifier,
+        private readonly QuickpayClientProviderInterface $clientProvider,
+        private readonly GatewayChecksInterface $gatewayChecks,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly RouterInterface $router,
     ) {
@@ -96,14 +97,20 @@ final class DoctorCommand extends Command
 
             $this->checkStoredOptions($io, $gatewayConfiguration);
 
-            $client = $this->checkApiKey($io, $options->apiKey);
+            // The checks below that ask Quickpay need an api key it accepts, or their answers would prove nothing
+            $apiKeyAccepted = $this->report(
+                $io,
+                $this->gatewayChecks->apiKey($gatewayConfiguration),
+                'The api key is accepted by Quickpay',
+                'Could not verify the api key',
+            );
             $this->checkPrivateKey($io, $options->privateKey);
-            $this->checkAgreement($io, $options->agreementId, $client);
+            $this->checkAgreement($io, $gatewayConfiguration, $options->agreementId, $apiKeyAccepted);
             $this->checkOrderPrefix($io, $options->orderPrefix);
 
-            if (null !== $client) {
+            if ($apiKeyAccepted) {
                 if ($live) {
-                    $this->checkPaymentLinkPermission($io, $options->orderPrefix, $client);
+                    $this->checkPaymentLinkPermission($io, $options->orderPrefix, $this->clientProvider->forGatewayConfiguration($gatewayConfiguration));
                 } else {
                     $this->warn($io, 'Run with --live to probe the payment link permission (creates a harmless test payment)');
                 }
@@ -234,28 +241,6 @@ final class DoctorCommand extends Command
         }
     }
 
-    private function checkApiKey(SymfonyStyle $io, string $apiKey): ?ClientInterface
-    {
-        try {
-            $verification = $this->apiKeyVerifier->verify($apiKey);
-        } catch (UnauthorizedException|ForbiddenException) {
-            $this->fail($io, 'Quickpay rejects the api key — use the API user\'s key (Settings → Users in the Quickpay manager), not a Payment Window agreement\'s');
-
-            return null;
-        } catch (\Throwable $e) {
-            $this->warn($io, sprintf('Could not verify the api key, Quickpay did not answer: %s', $e->getMessage()));
-
-            return null;
-        }
-
-        $this->ok($io, match ($verification) {
-            ApiKeyVerification::ViaPing => 'The api key is accepted by Quickpay',
-            ApiKeyVerification::ViaPayments => 'The api key is accepted by Quickpay (verified via /payments — the api user lacks the /ping permission, which is harmless)',
-        });
-
-        return $this->clientFactory->create($apiKey);
-    }
-
     private function checkPrivateKey(SymfonyStyle $io, string $privateKey): void
     {
         // Exercise the sign/verify path the callbacks depend on; a sign-then-verify roundtrip with
@@ -270,7 +255,7 @@ final class DoctorCommand extends Command
     /**
      * @param int|null $agreementId the agreement id the gateway sends, null for none
      */
-    private function checkAgreement(SymfonyStyle $io, ?int $agreementId, ?ClientInterface $client): void
+    private function checkAgreement(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, ?int $agreementId, bool $apiKeyAccepted): void
     {
         if (null === $agreementId) {
             $this->ok($io, 'No agreement id configured — Quickpay uses the account\'s default Payment Window agreement');
@@ -278,14 +263,14 @@ final class DoctorCommand extends Command
             return;
         }
 
-        if (null === $client) {
+        if (!$apiKeyAccepted) {
             $this->warn($io, sprintf('Skipped verifying agreement %d — no usable api key', $agreementId));
 
             return;
         }
 
         try {
-            $client->get(sprintf('agreements/%d', $agreementId));
+            $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->get(sprintf('agreements/%d', $agreementId));
         } catch (NotFoundException) {
             $this->fail($io, sprintf('Agreement %d does not exist on this Quickpay account', $agreementId));
 
@@ -358,6 +343,36 @@ final class DoctorCommand extends Command
         }
 
         $this->warn($io, sprintf('Test payment %d (order id "%s") remains on the account — it never carries money', $payment->id, $orderId));
+    }
+
+    /**
+     * Prints a gateway check's verdict: passed as ✔, failed as ✖ (failing the run) with its reason, undetermined as
+     * a warning with its reason, each with the verdict's note
+     *
+     * @param string $passed what a pass means
+     * @param string $undetermined what couldn't be found out, followed by the reason Quickpay's answer proves nothing
+     *
+     * @return bool whether the check passed
+     */
+    private function report(SymfonyStyle $io, Verdict $verdict, string $passed, string $undetermined): bool
+    {
+        $note = null === $verdict->note ? '' : sprintf(' (%s)', $verdict->note);
+
+        if (VerdictOutcome::Failed === $verdict->outcome) {
+            $this->fail($io, (string) $verdict->reason . $note);
+
+            return false;
+        }
+
+        if (VerdictOutcome::Undetermined === $verdict->outcome) {
+            $this->warn($io, sprintf('%s: %s%s', $undetermined, (string) $verdict->reason, $note));
+
+            return false;
+        }
+
+        $this->ok($io, $passed . $note);
+
+        return true;
     }
 
     private function ok(SymfonyStyle $io, string $message): void

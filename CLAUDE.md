@@ -223,9 +223,31 @@ Quickpay goes through one scoped HTTP client with one policy**, the gateway's an
   gateway option to a closure Payum resolves with the gateway's own config (builder defaults come before
   `payum.api`, and Payum resolves closures in order). payum-quickpay's check that the client agrees with
   `synchronized` still runs on that client (`QuickpayGatewayFactoryBuilderTest`).
-- `Quickpay/ClientFactory` (the plugin's own calls, until they move onto the provider) builds its clients on the
-  same scoped client, so the whole plugin follows the one policy. `tests/Functional/QuickpayHttpPolicyTest` asserts
-  `timeout` and `max_duration` on a gateway operation's request and on a client factory request.
+- `Quickpay/ClientFactory` is still defined, on the same scoped client, but nothing uses it any more: every plugin call
+  goes through the provider. `tests/Functional/QuickpayHttpPolicyTest` asserts `timeout` and `max_duration` on a
+  gateway operation's request and on a plugin call's request (the api key gateway check), and
+  `tests/Functional/QuickpayClientProviderTest` proves the provider's clients reach the scripted Quickpay.
+
+### Gateway checks (`src/Quickpay/GatewayCheck/`)
+Read `GLOSSARY.md` (Gateway check, Verdict) first. A gateway check tests against Quickpay what a usable gateway
+configuration's credentials allow and returns a **verdict**; callers branch on its outcome and never catch SDK
+exceptions or interpret Quickpay's status codes themselves.
+- **`GatewayChecksInterface`** (service `GatewayChecks`, arg `QuickpayClientProviderInterface`, so every check follows
+  the HTTP policy): `apiKey(GatewayConfiguration): Verdict`. Each check takes a usable configuration: the provider
+  throws `UnusableGatewayConfiguration` for an unusable one, before any request. New checks (the agreement, the
+  payment link permission) are methods here, each returning a `Verdict`.
+- **`Verdict`**: `outcome` (`VerdictOutcome`: `Passed`, `Failed`, `Undetermined` when Quickpay's answer proves
+  neither), `reason` (why it failed or proves nothing; null on a pass) and `note` (a caveat, on any outcome, e.g. how a
+  pass was proven or what a check left on the account). Built with `Verdict::passed(?note)`, `failed(reason, ?note)`
+  and `undetermined(reason, ?note)`. The reason and note are English, for the console and logs; a caller showing a
+  verdict to an admin words it in their language itself (save validation's translated violations).
+- Classification lives here once: a refusal (401/403) is evidence; any other SDK error (`QuickpayException`, transport
+  errors included) is undetermined, with the error's message as the reason. Anything else propagates.
+- **Api key**: `/ping` accepted → passed. `/ping` refused with 401/403 → a one-item `/payments` read decides, because
+  Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
+  permission (verified live): accepted → passed with the note that the api user lacks `/ping`; 401/403 → failed.
+- Tested at the HTTP seam in `tests/Unit/Quickpay/GatewayCheck/GatewayChecksTest` (the real provider over Symfony's
+  `MockHttpClient`). Callers' unit tests double `GatewayChecksInterface` and return verdicts.
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
@@ -323,16 +345,17 @@ payment's method's gateway) and the error under `exception`. `tests/Functional/C
 requests the route as a logged-in administrator (a `TestBrowserToken` stored in a session, as Symfony's test browser
 does; browser-kit isn't installed).
 
-`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `ClientFactoryInterface`, `ApiKeyVerifierInterface`,
-`GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
+`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `QuickpayClientProviderInterface`,
+`GatewayChecksInterface`, `GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
 section per Quickpay gateway configuration from the module's `all()`. It checks what the gateway checks: each
 violation payum-quickpay finds is a failed check, an unreadable (encrypted) configuration is one failed check
 printing `UnusableGatewayConfiguration`'s message, and an unusable configuration's checks against Quickpay are skipped.
 The order prefix checks need no gateway, so they run on every readable configuration, on the order prefix
 `optionsWithRejectedAsStored()` gives (none when the library rejects the order prefix itself): length per gateway, and
 cross-gateway uniqueness among every readable configuration, usable or not. On a usable one it also runs, on the typed options:
-api key (via the shared `Quickpay/ApiKeyVerifier` ping-then-payments
-probe), private key HMAC self-test (`CallbackValidator`), agreement
+api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
+reason, counted as a failure, undetermined a warning with its reason; the agreement and `--live` checks run only when
+it passed, on a client from the provider), private key HMAC self-test (`CallbackValidator`), agreement
 existence (`GET agreements/{id}` for the agreement id the gateway sends, none = the default agreement; failing open on
 permission errors), and notify-route registration; `--live` creates a money-less test payment and attempts the
 link PUT to surface the missing-permission 403. It warns, without failing, about a stored deprecated gateway option
@@ -470,11 +493,9 @@ in that folder) and need `assets:install` in the host app.
   (`isUnreadable()`) gets the plugin's `unreadable` message on `config`. Every message is a `validators` key shipped in
   all 16 locales (the functional test checks each locale). The doctor still prints the library's text: console output is
   English. Only on a usable configuration
-  does it then verify the api key through `Quickpay/ApiKeyVerifier` (shared with the doctor command; backed by
-  `Quickpay/ClientFactory`, on the scoped HTTP client): ping first, falling back to a one-item `/payments` read
-  because Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
-  permission (verified live) — an explicit 401/403 is a violation at `config[api_key]` (translated
-  `validators` message), anything else fails open. Tested functionally in `tests/Functional/Validator/` (the
+  does it then run the api key gateway check (`GatewayChecksInterface::apiKey()`, shared with the doctor command; see
+  *Gateway checks*): failed → a violation at `config[api_key]` (translated `validators` message); undetermined → the
+  save goes through, logged at info level with the reason; passed → nothing. Tested functionally in `tests/Functional/Validator/` (the
   container's validator with the generator's groups) and `tests/Functional/Form/PaymentMethodFormTest` (the real
   payment method form type).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
