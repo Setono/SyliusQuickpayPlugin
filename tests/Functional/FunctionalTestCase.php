@@ -108,8 +108,10 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
-     * The scripted client every Quickpay gateway, and every Quickpay client the plugin's client factory creates,
-     * in the booted kernel sends its requests to
+     * Quickpay's API in the booted kernel: every request to Quickpay, the gateways' and the plugin's own, reaches it
+     * below the plugin's scoped HTTP client. Script a response with `respond()`, and read what was sent with
+     * `sentRequests()` ("METHOD /path") and `sentRequestOptions()` (each request's options as the HTTP client
+     * resolved them, e.g. `timeout`). An unscripted request throws.
      */
     protected function quickpay(): ScriptedHttpClient
     {

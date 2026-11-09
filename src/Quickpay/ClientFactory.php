@@ -6,17 +6,24 @@ namespace Setono\SyliusQuickpayPlugin\Quickpay;
 
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Client\ClientInterface;
-use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class ClientFactory implements ClientFactoryInterface
 {
+    private readonly Psr18Client $httpClient;
+
+    /**
+     * @param HttpClientInterface $httpClient the scoped HTTP client every request to Quickpay goes through, so the
+     *        clients created here follow the same HTTP policy as the gateways' (ADR 0003)
+     */
+    public function __construct(HttpClientInterface $httpClient)
+    {
+        $this->httpClient = new Psr18Client($httpClient);
+    }
+
     public function create(string $apiKey): ClientInterface
     {
-        // An unresponsive Quickpay must not hang the admin
-        return new Client($apiKey, new Psr18Client(HttpClient::create([
-            'timeout' => 5,
-            'max_duration' => 5,
-        ])));
+        return new Client($apiKey, $this->httpClient);
     }
 }

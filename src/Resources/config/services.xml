@@ -92,7 +92,18 @@
         </service>
 
         <!-- Quickpay client -->
-        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider">
+            <!-- the scoped HTTP client the plugin prepends onto framework.http_client: the HTTP policy of every request to Quickpay -->
+            <argument type="service" id="setono_sylius_quickpay.http_client"/>
+            <argument>%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider"/>
+
+        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory">
+            <argument type="service" id="setono_sylius_quickpay.http_client"/>
+        </service>
 
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"
                  alias="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
@@ -209,6 +220,7 @@
         <service id="Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder">
             <argument>Setono\Payum\Quickpay\QuickpayGatewayFactory</argument>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Guesser\LanguageGuesser"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
 
             <tag name="payum.gateway_factory_builder"
                  factory="quickpay"/>
