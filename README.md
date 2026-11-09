@@ -430,7 +430,8 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
   correct the field named in the message: an agreement or branding id is the number from the Quickpay manager, not
   its name.
 
-- `The gateway configuration reads as empty, as an encrypted one does` from the doctor
+- `The gateway configuration of the Quickpay gateway "<gateway>" reads as empty, as an encrypted one does` from the
+  doctor
 
   PayumBundle's encryption of gateway configurations is switched on, which this plugin doesn't support. Switch it off
   (see [Configuration](#configuration)).

@@ -46,8 +46,18 @@ final class UnusableGatewayConfiguration extends \RuntimeException
     }
 
     /**
+     * Whether the configuration could not be read at all, as an encrypted one can't. Nothing can be said about
+     * its gateway options then, and the message says why.
+     */
+    public function isUnreadable(): bool
+    {
+        // payum-quickpay reports at least one violation for a configuration it rejects
+        return [] === $this->violations;
+    }
+
+    /**
      * The violations payum-quickpay found, a message per gateway option keyed by its current name. Empty when
-     * the configuration could not be read at all.
+     * the configuration is unreadable.
      *
      * @return array<string, string>
      */

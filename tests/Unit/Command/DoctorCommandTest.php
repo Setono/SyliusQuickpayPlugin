@@ -142,7 +142,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('encrypting gateway configurations is not supported', $tester->getDisplay());
+        self::assertStringContainsString('reads as empty, as an encrypted one does before Payum decrypts it. Encrypting gateway configurations is not supported.', $tester->getDisplay());
         self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
         // Its stored options can't be read, so nothing is said about them
         self::assertStringNotContainsString('capture mode', $tester->getDisplay());

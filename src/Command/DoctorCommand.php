@@ -29,8 +29,9 @@ use Symfony\Component\Routing\RouterInterface;
 /**
  * Runs the checks that otherwise surface as support cases (see the README's Troubleshooting
  * section) against every configured Quickpay gateway: its gateway options, read through the
- * gateway configuration module by the rules the gateway is built from, then credentials,
- * permissions, agreement, order prefix, and the notify route. Read-only unless --live is passed.
+ * gateway configuration module by the rules the gateway is built from, then the api key and
+ * private key, the api user's permissions, the agreement, the order prefix, and the notify route.
+ * Read-only unless --live is passed.
  */
 #[AsCommand(
     name: 'setono:sylius-quickpay:doctor',
@@ -75,7 +76,7 @@ final class DoctorCommand extends Command
 
         $gateways = [];
         foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
-            $gateways[] = [$gatewayConfiguration, self::read($gatewayConfiguration)];
+            $gateways[] = [$gatewayConfiguration, self::optionsOrWhyUnusable($gatewayConfiguration)];
         }
 
         if ([] === $gateways) {
@@ -136,7 +137,7 @@ final class DoctorCommand extends Command
     /**
      * The gateway options by the rules the gateway is built from, or why the gateway can't be built
      */
-    private static function read(GatewayConfiguration $gatewayConfiguration): GatewayOptions|UnusableGatewayConfiguration
+    private static function optionsOrWhyUnusable(GatewayConfiguration $gatewayConfiguration): GatewayOptions|UnusableGatewayConfiguration
     {
         try {
             return $gatewayConfiguration->options();
@@ -154,14 +155,11 @@ final class DoctorCommand extends Command
         GatewayConfiguration $gatewayConfiguration,
         UnusableGatewayConfiguration $unusable,
     ): void {
-        $violations = $unusable->getViolations();
-
-        // Only an unreadable configuration has no violations, and an encrypted one is what reads as none.
-        // Nothing can be said about its stored options then.
-        if ([] === $violations) {
-            $this->fail($io, 'The gateway configuration reads as empty, as an encrypted one does — encrypting gateway configurations is not supported (see the README\'s Configuration section)');
+        // Nothing can be said about the stored options of an unreadable configuration
+        if ($unusable->isUnreadable()) {
+            $this->fail($io, sprintf('%s See the README\'s Configuration section.', $unusable->getMessage()));
         } else {
-            foreach ($violations as $violation) {
+            foreach ($unusable->getViolations() as $violation) {
                 $this->fail($io, $violation);
             }
 
