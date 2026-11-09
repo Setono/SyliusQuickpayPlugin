@@ -8,8 +8,9 @@ use Symfony\Component\Validator\Constraint;
 
 /**
  * A Quickpay gateway configuration the gateway can be built from: valid by payum-quickpay's rules, with an api key
- * Quickpay doesn't reject and an agreement the Quickpay account has. Declared on Sylius' gateway config entity in the `sylius_quickpay` validation group, which
- * Sylius picks for a Quickpay payment method in the admin form and the Admin API alike.
+ * Quickpay doesn't reject and an agreement the Quickpay account has. Declared on Sylius' gateway config entity in the
+ * `sylius_quickpay` validation group, which Sylius picks for a Quickpay payment method in the admin form and the Admin
+ * API alike.
  */
 #[\Attribute(\Attribute::TARGET_CLASS)]
 final class UsableGatewayConfiguration extends Constraint

@@ -88,20 +88,20 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             return;
         }
 
-        $verdict = $this->gatewayChecks->agreement($gatewayConfiguration);
+        $agreementVerdict = $this->gatewayChecks->agreement($gatewayConfiguration);
 
-        if (VerdictOutcome::Failed === $verdict->outcome) {
+        if (VerdictOutcome::Failed === $agreementVerdict->outcome) {
             $this->context->buildViolation($constraint->agreementNotFoundMessage)
                 ->atPath('config[agreement_id]')
                 ->addViolation()
             ;
-        } elseif (VerdictOutcome::Undetermined === $verdict->outcome) {
+        } elseif (VerdictOutcome::Undetermined === $agreementVerdict->outcome) {
             // Fail open, as for the api key: an api user that may not read agreements must not block saving
             $this->logger?->info(sprintf(
                 'Could not verify agreement %d of the Quickpay gateway "%s", so it was accepted unverified: %s',
                 $options->agreementId,
                 $gatewayConfiguration->gatewayName,
-                (string) $verdict->reason,
+                (string) $agreementVerdict->reason,
             ), ['gateway' => $gatewayConfiguration->gatewayName]);
         }
     }
