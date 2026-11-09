@@ -104,7 +104,7 @@
                  alias="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier"/>
 
         <!-- Validator -->
-        <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator">
+        <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface"/>
 
             <tag name="validator.constraint_validator"/>
