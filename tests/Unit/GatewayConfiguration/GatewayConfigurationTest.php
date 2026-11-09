@@ -359,4 +359,17 @@ final class GatewayConfigurationTest extends TestCase
     {
         self::assertSame('', GatewayConfiguration::fromConfig(GatewayConfigurations::USABLE)->gatewayName);
     }
+
+    /**
+     * As a Payum gateway reads its own config: Payum passes no gateway name with it
+     *
+     * @test
+     */
+    public function an_invalid_stored_config_array_is_unusable_without_naming_a_gateway(): void
+    {
+        $this->expectException(UnusableGatewayConfiguration::class);
+        $this->expectExceptionMessage('The gateway configuration of a Quickpay gateway is invalid: The "private_key" option is required');
+
+        GatewayConfiguration::fromConfig(['api_key' => 'the-api-key'])->options();
+    }
 }
