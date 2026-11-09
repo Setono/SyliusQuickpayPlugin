@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck;
 
 use Setono\Quickpay\Exception\ForbiddenException;
+use Setono\Quickpay\Exception\NotFoundException;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
@@ -46,5 +47,25 @@ final class GatewayChecks implements GatewayChecksInterface
         }
 
         return Verdict::passed('verified through /payments: the api user lacks the /ping permission, which is harmless');
+    }
+
+    public function agreement(GatewayConfiguration $gatewayConfiguration): Verdict
+    {
+        $agreementId = $gatewayConfiguration->options()->agreementId;
+        if (null === $agreementId) {
+            return Verdict::passed('Quickpay uses the account\'s default Payment Window agreement');
+        }
+
+        try {
+            $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->get(sprintf('agreements/%d', $agreementId));
+        } catch (NotFoundException) {
+            return Verdict::failed(sprintf('Agreement %d does not exist on this Quickpay account', $agreementId));
+        } catch (UnauthorizedException|ForbiddenException) {
+            return Verdict::undetermined('the api user may lack the /agreements permission');
+        } catch (QuickpayException $e) {
+            return Verdict::undetermined($e->getMessage());
+        }
+
+        return Verdict::passed();
     }
 }

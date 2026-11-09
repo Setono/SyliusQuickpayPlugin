@@ -8,7 +8,6 @@ use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\Quickpay\Callback\CallbackValidator;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\ForbiddenException;
-use Setono\Quickpay\Exception\NotFoundException;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Request\Payment\CreateLinkRequest;
 use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
@@ -257,35 +256,20 @@ final class DoctorCommand extends Command
      */
     private function checkAgreement(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, ?int $agreementId, bool $apiKeyAccepted): void
     {
-        if (null === $agreementId) {
-            $this->ok($io, 'No agreement id configured — Quickpay uses the account\'s default Payment Window agreement');
-
-            return;
-        }
+        $agreement = null === $agreementId ? 'the agreement' : sprintf('agreement %d', $agreementId);
 
         if (!$apiKeyAccepted) {
-            $this->warn($io, sprintf('Skipped verifying agreement %d — no usable api key', $agreementId));
+            $this->warn($io, sprintf('Skipped verifying %s — no usable api key', $agreement));
 
             return;
         }
 
-        try {
-            $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->get(sprintf('agreements/%d', $agreementId));
-        } catch (NotFoundException) {
-            $this->fail($io, sprintf('Agreement %d does not exist on this Quickpay account', $agreementId));
-
-            return;
-        } catch (UnauthorizedException|ForbiddenException) {
-            $this->warn($io, sprintf('Could not verify agreement %d — the api user may not have the /agreements permission', $agreementId));
-
-            return;
-        } catch (\Throwable $e) {
-            $this->warn($io, sprintf('Could not verify agreement %d: %s', $agreementId, $e->getMessage()));
-
-            return;
-        }
-
-        $this->ok($io, sprintf('Agreement %d exists on the account', $agreementId));
+        $this->report(
+            $io,
+            $this->gatewayChecks->agreement($gatewayConfiguration),
+            null === $agreementId ? 'No agreement id configured' : sprintf('Agreement %d exists on the account', $agreementId),
+            sprintf('Could not verify %s', $agreement),
+        );
     }
 
     private function checkOrderPrefix(SymfonyStyle $io, string $prefix): void

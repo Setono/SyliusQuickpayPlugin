@@ -19,4 +19,12 @@ interface GatewayChecksInterface
      * @throws UnusableGatewayConfiguration
      */
     public function apiKey(GatewayConfiguration $gatewayConfiguration): Verdict;
+
+    /**
+     * Whether the agreement the gateway sends exists on the Quickpay account. Without an agreement id Quickpay uses the
+     * account's default agreement, so it passes without asking.
+     *
+     * @throws UnusableGatewayConfiguration
+     */
+    public function agreement(GatewayConfiguration $gatewayConfiguration): Verdict;
 }

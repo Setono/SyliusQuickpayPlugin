@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Quickpay\GatewayCheck;
 
 use PHPUnit\Framework\TestCase;
 use Prophecy\PhpUnit\ProphecyTrait;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks;
@@ -200,6 +201,142 @@ final class GatewayChecksTest extends TestCase
         }
 
         self::assertSame([], $this->requests);
+    }
+
+    /**
+     * The gateway then sends no agreement id, and Quickpay uses the account's default agreement
+     *
+     * @test
+     *
+     * @dataProvider withoutAgreementId
+     */
+    public function it_passes_the_agreement_without_asking_quickpay_when_no_agreement_id_is_set(GatewayConfiguration $gatewayConfiguration): void
+    {
+        $verdict = $this->checks()->agreement($gatewayConfiguration);
+
+        self::assertSame(VerdictOutcome::Passed, $verdict->outcome);
+        self::assertNull($verdict->reason);
+        self::assertSame('Quickpay uses the account\'s default Payment Window agreement', $verdict->note);
+        self::assertSame([], $this->requests);
+    }
+
+    /**
+     * @return iterable<string, array{GatewayConfiguration}>
+     */
+    public static function withoutAgreementId(): iterable
+    {
+        yield 'none stored' => [GatewayConfigurations::of()];
+        yield 'a blank one' => [self::withAgreement('   ')];
+    }
+
+    /**
+     * The one the gateway sends, as payum-quickpay reads it
+     *
+     * @test
+     *
+     * @dataProvider storedAgreementIds
+     */
+    public function it_asks_quickpay_for_the_agreement_the_gateway_sends(GatewayConfiguration $gatewayConfiguration): void
+    {
+        $this->respond('GET', '/agreements/7', self::json(200, ['id' => 7, 'merchant_id' => 1]));
+
+        $this->checks()->agreement($gatewayConfiguration);
+
+        self::assertSame(['GET /agreements/7'], $this->requests);
+    }
+
+    /**
+     * @return iterable<string, array{GatewayConfiguration}>
+     */
+    public static function storedAgreementIds(): iterable
+    {
+        yield 'an integer string' => [self::withAgreement('7')];
+        yield 'under its 1.x name' => [GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'agreement' => '7'])];
+    }
+
+    /**
+     * @test
+     */
+    public function it_passes_an_agreement_quickpay_reads(): void
+    {
+        $this->respond('GET', '/agreements/12345', self::json(200, ['id' => 12345, 'merchant_id' => 1]));
+
+        $verdict = $this->checks()->agreement(self::withAgreement(12345));
+
+        self::assertSame(VerdictOutcome::Passed, $verdict->outcome);
+        self::assertNull($verdict->reason);
+        self::assertNull($verdict->note);
+        self::assertSame(['GET /agreements/12345'], $this->requests);
+    }
+
+    /**
+     * @test
+     */
+    public function it_fails_an_agreement_quickpay_does_not_find(): void
+    {
+        $this->respond('GET', '/agreements/12345', self::json(404, ['message' => 'Not found']));
+
+        $verdict = $this->checks()->agreement(self::withAgreement(12345));
+
+        self::assertSame(VerdictOutcome::Failed, $verdict->outcome);
+        self::assertSame('Agreement 12345 does not exist on this Quickpay account', $verdict->reason);
+        self::assertNull($verdict->note);
+        self::assertSame(['GET /agreements/12345'], $this->requests);
+    }
+
+    /**
+     * A refusal proves nothing about the agreement: the api user may lack the /agreements permission
+     *
+     * @test
+     *
+     * @dataProvider refusals
+     */
+    public function it_leaves_an_agreement_undetermined_when_quickpay_refuses_to_read_it(int $status): void
+    {
+        $this->respond('GET', '/agreements/12345', self::json($status, ['message' => 'Not authorized']));
+
+        $verdict = $this->checks()->agreement(self::withAgreement(12345));
+
+        self::assertSame(VerdictOutcome::Undetermined, $verdict->outcome);
+        self::assertSame('the api user may lack the /agreements permission', $verdict->reason);
+        self::assertNull($verdict->note);
+        self::assertSame(['GET /agreements/12345'], $this->requests);
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider errors
+     */
+    public function it_leaves_an_agreement_undetermined_when_quickpay_answers_with_another_error(MockResponse $error, string $quickpaysError): void
+    {
+        $this->respond('GET', '/agreements/12345', $error);
+
+        $verdict = $this->checks()->agreement(self::withAgreement(12345));
+
+        self::assertSame(VerdictOutcome::Undetermined, $verdict->outcome);
+        self::assertSame(str_replace('/ping', '/agreements/12345', $quickpaysError), $verdict->reason);
+        self::assertNull($verdict->note);
+        self::assertSame(['GET /agreements/12345'], $this->requests);
+    }
+
+    /**
+     * @test
+     */
+    public function it_asks_quickpay_nothing_about_the_agreement_of_an_unusable_gateway_configuration(): void
+    {
+        $this->expectException(UnusableGatewayConfiguration::class);
+
+        try {
+            $this->checks()->agreement(GatewayConfigurations::of(['api_key' => 'the-api-key', 'agreement_id' => 12345]));
+        } finally {
+            self::assertSame([], $this->requests);
+        }
+    }
+
+    private static function withAgreement(int|string $agreementId): GatewayConfiguration
+    {
+        return GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'agreement_id' => $agreementId]);
     }
 
     private function checks(): GatewayChecks
