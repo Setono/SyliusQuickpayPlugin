@@ -7,14 +7,16 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\PaymentLink;
 use PHPUnit\Framework\TestCase;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider;
 use Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfig;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Sylius\Component\Core\Model\Channel;
 use Sylius\Component\Core\Model\Order;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethod;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\UrlHelper;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
@@ -97,7 +99,10 @@ final class PaymentLinkProviderTest extends TestCase
         // UrlHelper is final: a real one resolving against a request context stands in for "the current host"
         $urlHelper = new UrlHelper(new RequestStack(), new RequestContext('', 'GET', 'localhost', 'http'));
 
-        return new PaymentLinkProvider($this->urlGenerator->reveal(), $urlHelper, $unsecuredUrls);
+        // The payment methods carry their gateway configurations, so no other one is stored
+        $gatewayConfigurationProvider = new GatewayConfigurationProvider($this->prophesize(RepositoryInterface::class)->reveal());
+
+        return new PaymentLinkProvider($gatewayConfigurationProvider, $this->urlGenerator->reveal(), $urlHelper, $unsecuredUrls);
     }
 
     /**
@@ -110,13 +115,9 @@ final class PaymentLinkProviderTest extends TestCase
         ?string $tokenValue = 'tok3n',
         ?string $hostname = 'shop.example',
     ): array {
-        $gatewayConfig = new GatewayConfig();
-        $gatewayConfig->setFactoryName($factoryName);
-        $gatewayConfig->setGatewayName($factoryName);
-
         $method = new PaymentMethod();
         $method->setCode($factoryName);
-        $method->setGatewayConfig($gatewayConfig);
+        $method->setGatewayConfig(GatewayConfigurations::entity(gatewayName: $factoryName, factoryName: $factoryName));
 
         $channel = new Channel();
         $channel->setCode('WEB');

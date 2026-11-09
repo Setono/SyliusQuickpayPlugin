@@ -105,6 +105,29 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     /**
      * @test
      */
+    public function the_shared_endpoint_answers_a_500_and_changes_nothing_while_a_quickpay_gateway_configuration_is_unusable(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        // Another Quickpay payment method, stored by fixtures or the database directly with a branding name where
+        // the branding id belongs: its order prefix can't be read, so the callback's order can't be resolved
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'branding_id' => 'Our brand']);
+
+        $response = self::$kernel->handle(self::quickpayCallback(501));
+
+        // Quickpay retries the callback, so it isn't lost once the configuration is fixed
+        self::assertSame(500, $response->getStatusCode());
+        self::assertSame([], $this->quickpay()->sentRequests());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+    }
+
+    /**
+     * @test
+     */
     public function a_notify_for_another_gateways_payment_is_left_to_payum(): void
     {
         self::bootKernel();

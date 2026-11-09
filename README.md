@@ -128,6 +128,13 @@ whose checkout fails. A valid key whose API user lacks the `/ping` permission is
 `/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
 Quickpay — the check fails open on anything but an explicit rejection.
 
+**Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway
+configurations (`payum.dynamic_gateways.encryption.defuse_secret_key`) in a store that uses this plugin. Only Payum's
+own storage and Sylius' admin form decrypt a configuration, so the plugin finds none where it reads one and treats
+that as an error: the shared callback endpoint, for one, answers every callback with a 500 until encryption is
+switched off. Sylius core itself also reads the capture mode (`use_authorize`) before Payum decrypts the
+configuration, so its checkout would capture immediately whatever the payment method's capture mode says.
+
 ## How it works
 
 * During checkout the customer is redirected to the Quickpay payment window through a payment link. What happens to
@@ -245,7 +252,10 @@ https://your-shop.example/payment/quickpay/notify
 ```
 
 That endpoint resolves the payment from the callback body (`order_id` → your order prefix → the Sylius payment)
-precisely because one static url cannot carry a Payum token. A Quickpay account has exactly one such url, so when
+precisely because one static url cannot carry a Payum token. It strips the order prefix of every Quickpay payment
+method, so while one of them has a gateway configuration the gateway can't be built from (written by fixtures, the
+Admin API or the database directly), it answers every callback with a 500 and Quickpay retries it once that is fixed.
+A Quickpay account has exactly one such url, so when
 several environments share an account, only the one it points at receives those callbacks — the others can rely on
 the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries undelivered callbacks 24 times with
 backoff.

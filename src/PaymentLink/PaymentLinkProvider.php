@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\PaymentLink;
 
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -27,6 +26,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 final class PaymentLinkProvider implements PaymentLinkProviderInterface
 {
     public function __construct(
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly UrlGeneratorInterface $urlGenerator,
         private readonly UrlHelper $urlHelper,
         private readonly bool $unsecuredUrls = false,
@@ -40,8 +40,7 @@ final class PaymentLinkProvider implements PaymentLinkProviderInterface
         }
 
         $method = $payment->getMethod();
-        $gatewayConfig = $method instanceof PaymentMethodInterface ? $method->getGatewayConfig() : null;
-        if (!$gatewayConfig instanceof GatewayConfigInterface || QuickpayGatewayFactory::NAME !== $gatewayConfig->getFactoryName()) {
+        if (!$method instanceof PaymentMethodInterface || null === $this->gatewayConfigurationProvider->forPaymentMethod($method)) {
             return null;
         }
 

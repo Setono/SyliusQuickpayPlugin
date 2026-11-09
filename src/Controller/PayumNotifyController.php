@@ -7,11 +7,9 @@ namespace Setono\SyliusQuickpayPlugin\Controller;
 use Payum\Bundle\PayumBundle\Controller\NotifyController;
 use Payum\Core\Payum;
 use Payum\Core\Security\TokenInterface;
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -28,14 +26,11 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class PayumNotifyController
 {
-    /**
-     * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
-     */
     public function __construct(
         private readonly NotifyController $decorated,
         private readonly Payum $payum,
         private readonly PaymentReconcilerInterface $reconciler,
-        private readonly RepositoryInterface $gatewayConfigRepository,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
     ) {
     }
 
@@ -44,7 +39,8 @@ final class PayumNotifyController
         // As Payum's controller does: an unknown token, or one for another url, is answered with an error
         $token = $this->payum->getHttpRequestVerifier()->verify($request);
 
-        if (!$this->isQuickpayGateway($token->getGatewayName())) {
+        // Not a Quickpay gateway's token
+        if (null === $this->gatewayConfigurationProvider->forGatewayName($token->getGatewayName())) {
             return $this->decorated->doAction($request);
         }
 
@@ -58,16 +54,6 @@ final class PayumNotifyController
     public function doUnsafeAction(Request $request): Response
     {
         return $this->decorated->doUnsafeAction($request);
-    }
-
-    /**
-     * Looked up the way Payum finds the gateway it builds for the token: by its name, among the stored gateway configs
-     */
-    private function isQuickpayGateway(string $gatewayName): bool
-    {
-        $gatewayConfig = $this->gatewayConfigRepository->findOneBy(['gatewayName' => $gatewayName]);
-
-        return $gatewayConfig instanceof GatewayConfigInterface && QuickpayGatewayFactory::NAME === $gatewayConfig->getFactoryName();
     }
 
     /**

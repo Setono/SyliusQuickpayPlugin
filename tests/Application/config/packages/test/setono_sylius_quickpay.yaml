@@ -23,3 +23,8 @@ services:
     Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface:
         alias: Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler
         public: true
+
+    # ...and the gateway configuration module likewise
+    Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface:
+        alias: Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider
+        public: true
