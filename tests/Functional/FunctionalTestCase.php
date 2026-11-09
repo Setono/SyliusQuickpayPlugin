@@ -108,7 +108,8 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
-     * The scripted client every Quickpay gateway in the booted kernel sends its requests to
+     * The scripted client every Quickpay gateway, and every Quickpay client the plugin's client factory creates,
+     * in the booted kernel sends its requests to
      */
     protected function quickpay(): ScriptedHttpClient
     {

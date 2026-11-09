@@ -70,13 +70,14 @@ Run any Symfony console command for the plugin from inside that directory, e.g.
 ### Test layout
 Each PHPUnit suite is one directory: `tests/Unit/` (no kernel, no database; paths mirror `src/`, namespace
 `Setono\SyliusQuickpayPlugin\Tests\Unit\…`) and `tests/Functional/` (below). Test support stays outside both, where
-either suite and the test application can reach it: the Quickpay HTTP client doubles and `ScriptedGatewayFactoryBuilder`
-in `tests/Quickpay/`, `tests/GatewayConfiguration/GatewayConfigurations`, `tests/Payum/OfflineNotifyAction`,
-`tests/Application/` and `tests/PHPStan/`. `GatewayConfigurations` is the one shared helper for real gateway config
-objects: `of($config, $gatewayName)` and `encrypted()` give the module's `GatewayConfiguration`, `entity(...)` and
-`encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted flag with nothing decrypted, as Doctrine
-loads it), `USABLE` the two required gateway options. Never double `getConfig()` arrays; a reader's unit test doubles
-`GatewayConfigurationProviderInterface` and returns values from this helper.
+either suite and the test application can reach it: the Quickpay HTTP client doubles, `ScriptedGatewayFactoryBuilder` and
+`ScriptedClientFactory` in `tests/Quickpay/`, `tests/GatewayConfiguration/GatewayConfigurations`,
+`tests/Payum/OfflineNotifyAction`, `tests/Application/` and `tests/PHPStan/`. `GatewayConfigurations` is the one shared
+helper for real gateway config objects: `of($config, $gatewayName)` and `encrypted()` give the module's
+`GatewayConfiguration`, `entity(...)` and `encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted
+flag with nothing decrypted, as Doctrine loads it), `USABLE` the two required gateway options. Never double
+`getConfig()` arrays; a reader's unit test doubles `GatewayConfigurationProviderInterface` and returns values from this
+helper.
 
 ### Functional suite
 `tests/Functional/` holds kernel tests against the test application's database (create it once with
@@ -85,8 +86,12 @@ Extend `tests/Functional/FunctionalTestCase`. dama/doctrine-test-bundle (registe
 each test back, so a test builds its own entities from Sylius' factories (`createSyliusPayment()`); no fixtures.
 Only Quickpay's HTTP is substituted: in the `test` env, `tests/Quickpay/ScriptedGatewayFactoryBuilder` decorates the
 plugin's gateway factory builder and gives every Quickpay gateway an SDK client (library option `quickpay.client`)
-on `tests/Quickpay/ScriptedHttpClient`; script it with `$this->quickpay()->respond('GET', '/payments/1', ...)` and
-assert on `$this->quickpay()->sentRequests()`. The gateway, Sylius' payment-state extension, the state machine, the
+on `tests/Quickpay/ScriptedHttpClient`. The plugin's own client factory (`Quickpay/ClientFactory`, behind the fraud
+check, the operations panel, api key verification, the doctor and the fraud report) is scripted as well:
+`tests/Quickpay/ScriptedClientFactory` decorates it, next to the builder, and builds its SDK clients on the same
+`ScriptedHttpClient`. Script every Quickpay call with `$this->quickpay()->respond('GET', '/payments/1', ...)` and
+assert on `$this->quickpay()->sentRequests()`; an unscripted request throws, whichever path sent it. The gateway,
+Sylius' payment-state extension, the state machine, the
 lock and the database are real. `$this->holdLockOf($quickpayPaymentId)` holds a payment's lock (as a callback
 being handled would) until you release it. To count how often a payment transition (and so its callbacks) ran, under either
 adapter, take `$transitions = $this->recordPaymentTransitions()` before acting and assert on
