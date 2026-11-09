@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Controller\Admin;
 
 use Nyholm\Psr7\Response as PsrResponse;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\AdminUserInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -138,25 +138,10 @@ final class PaymentOperationsPanelTest extends FunctionalTestCase
 
     /**
      * Records what the container's operations panel logs from now on
-     *
-     * @return object{records: list<array{mixed, string, array<array-key, mixed>}>}
      */
-    private function recordPanelLog(): object
+    private function recordPanelLog(): RecordingLogger
     {
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
+        $logger = new RecordingLogger();
 
         $panel = self::getContainer()->get(PaymentOperationsAction::class);
         self::assertInstanceOf(PaymentOperationsAction::class, $panel);

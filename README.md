@@ -434,7 +434,7 @@ when something misbehaves, and after every configuration change:
 
 ```bash
 bin/console setono:sylius-quickpay:doctor          # read-only
-bin/console setono:sylius-quickpay:doctor --live   # also probes the payment link permission
+bin/console setono:sylius-quickpay:doctor --live   # also checks the payment link permission
 ```
 
 For every configured Quickpay gateway it verifies the api key against Quickpay, self-tests the private
@@ -447,8 +447,9 @@ never carries money). The command
 exits non-zero when any check fails, so it can run in CI or cron.
 
 A check against Quickpay prints as passed (✔), failed (✖, failing the run) or, when Quickpay's answer proves neither
-(it didn't answer, answered with an error, or the API user may not ask), as a warning (!) saying why. The agreement
-and payment link checks run only once Quickpay accepts the api key.
+(it didn't answer, answered with an error, or the API user may not ask), as a warning (!) saying why. The checks of
+an agreement id and of the payment link permission run only once Quickpay accepts the api key; without an agreement
+id there is nothing to ask, and Quickpay uses the account's default Payment Window agreement.
 
 First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
 means the gateway can be built:

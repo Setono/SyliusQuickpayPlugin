@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Reconciliation;
 
 use Payum\Core\Exception\ExceptionInterface;
 use Setono\Quickpay\Exception\QuickpayException;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Sylius\Component\Core\Model\PaymentInterface;
 
 /**
@@ -21,9 +22,11 @@ interface PaymentReconcilerInterface
      * nothing persisted, not even the stored details.
      *
      * When the status cannot be read, the error propagates: the SDK's {@see QuickpayException} (e.g.
-     * Quickpay unreachable) or Payum's {@see ExceptionInterface} (e.g. a payment without a gateway).
+     * Quickpay unreachable), Payum's {@see ExceptionInterface} (e.g. a payment without a gateway) or
+     * {@see UnusableGatewayConfiguration} (building the gateway of an unusable gateway configuration).
      *
      * @throws QuickpayException
+     * @throws UnusableGatewayConfiguration
      */
     public function checkStatus(PaymentInterface $payment): StatusCheck;
 
@@ -36,13 +39,15 @@ interface PaymentReconcilerInterface
      * longer manages is loaded afresh. Read what happened from the result, not from the payment passed in.
      *
      * Errors propagate: the SDK's {@see QuickpayException} (e.g. Quickpay unreachable), Payum's
-     * {@see ExceptionInterface} (e.g. a payment without a gateway) or whatever a state-machine callback throws.
+     * {@see ExceptionInterface} (e.g. a payment without a gateway), {@see UnusableGatewayConfiguration} or
+     * whatever a state-machine callback throws.
      * A reconcile that fails saves nothing, not even a transition that was halfway applied when a
      * state-machine callback threw: its transaction is rolled back and the entity manager cleared, so it is
      * usable for the next payment. A failed save is the exception: Doctrine closes the entity manager, and
      * every later reconcile in the same process fails as well.
      *
      * @throws QuickpayException
+     * @throws UnusableGatewayConfiguration
      */
     public function reconcile(PaymentInterface $payment): ReconcileResult;
 
@@ -56,12 +61,13 @@ interface PaymentReconcilerInterface
      * A payment whose lock is held, e.g. by a duplicate of the callback being handled, is skipped untouched.
      *
      * Errors propagate, so the callback is answered with an error and Quickpay retries it: the SDK's
-     * {@see QuickpayException} (e.g. Quickpay unreachable), Payum's {@see ExceptionInterface}, Payum's
-     * HttpResponse reply rejecting a callback whose HMAC doesn't match (a 400) or whatever a state-machine
-     * callback throws. As on demand, a reconcile that fails saves nothing, so the retry finds the payment
-     * as it was.
+     * {@see QuickpayException} (e.g. Quickpay unreachable), Payum's {@see ExceptionInterface},
+     * {@see UnusableGatewayConfiguration}, Payum's HttpResponse reply rejecting a callback whose HMAC doesn't
+     * match (a 400) or whatever a state-machine callback throws. As on demand, a reconcile that fails saves
+     * nothing, so the retry finds the payment as it was.
      *
      * @throws QuickpayException
+     * @throws UnusableGatewayConfiguration
      */
     public function reconcileFromCallback(PaymentInterface $payment): ReconcileResult;
 }

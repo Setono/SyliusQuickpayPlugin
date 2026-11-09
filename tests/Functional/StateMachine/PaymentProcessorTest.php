@@ -6,9 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\StateMachine;
 
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
-use Setono\Payum\Quickpay\Exception\InvalidGatewayOptions;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
@@ -17,6 +15,7 @@ use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -306,9 +305,9 @@ final class PaymentProcessorTest extends FunctionalTestCase
         try {
             $this->applyTransition($payment, $transition);
             self::fail('Capturing or refunding with an unusable gateway configuration must fail');
-        } catch (InvalidGatewayOptions|UnusableGatewayConfiguration $e) {
-            // Which of the two surfaces depends on what reads the configuration first
-            self::assertStringContainsString('branding_id', $e->getMessage());
+        } catch (UnusableGatewayConfiguration $e) {
+            // Building the gateway reads the configuration through the client provider first
+            self::assertSame(['branding_id'], array_keys($e->getViolations()));
         }
 
         self::assertSame([], $transitions->getArrayCopy());
@@ -539,25 +538,10 @@ final class PaymentProcessorTest extends FunctionalTestCase
 
     /**
      * Records what the container's payment processor logs from now on
-     *
-     * @return object{records: list<array{mixed, string, array<array-key, mixed>}>}
      */
-    private function recordProcessorLog(): object
+    private function recordProcessorLog(): RecordingLogger
     {
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
+        $logger = new RecordingLogger();
 
         $processor = self::getContainer()->get(PaymentProcessor::class);
         self::assertInstanceOf(PaymentProcessor::class, $processor);

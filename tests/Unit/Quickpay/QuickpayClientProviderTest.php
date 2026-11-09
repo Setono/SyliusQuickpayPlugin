@@ -17,15 +17,16 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvide
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Quickpay\TemporaryCacheDir;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Payment\Model\PaymentInterface;
-use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class QuickpayClientProviderTest extends TestCase
 {
     use ProphecyTrait;
+    use TemporaryCacheDir;
 
     /**
      * The requests the HTTP client was sent, each as the method, the url and its options
@@ -33,18 +34,6 @@ final class QuickpayClientProviderTest extends TestCase
      * @var list<array{string, string, array<string, mixed>}>
      */
     private array $requests = [];
-
-    private string $cacheDir;
-
-    protected function setUp(): void
-    {
-        $this->cacheDir = sys_get_temp_dir() . '/setono_sylius_quickpay_' . bin2hex(random_bytes(4));
-    }
-
-    protected function tearDown(): void
-    {
-        (new Filesystem())->remove($this->cacheDir);
-    }
 
     /**
      * @test

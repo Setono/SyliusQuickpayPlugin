@@ -156,9 +156,9 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
         } catch (ExceptionInterface|QuickpayException|UnusableGatewayConfiguration $e) {
             // Cancelling the order must not be blocked by Quickpay being unable to cancel
             // the payment, e.g. because it was never authorized or has already expired.
-            // Unused authorizations expire by themselves at Quickpay. An unusable gateway
-            // configuration surfaces as payum-quickpay's InvalidGatewayOptions (a Payum exception)
-            // or as the plugin's UnusableGatewayConfiguration, depending on what reads it first
+            // Unused authorizations expire by themselves at Quickpay. Building the gateway of an
+            // unusable gateway configuration throws the plugin's UnusableGatewayConfiguration;
+            // Payum's ExceptionInterface covers Payum's other errors
             $this->logger?->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
                 'quickpayPaymentId' => $quickpayPaymentId,
                 'paymentId' => $payment->getId(),

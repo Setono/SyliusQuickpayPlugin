@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Validator;
 
 use Nyholm\Psr7\Response;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator;
 use Sylius\Bundle\PayumBundle\Validator\GroupsGenerator\GatewayConfigGroupsGenerator;
@@ -210,13 +210,13 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
     /**
      * The api user may lack the /agreements permission, and an unreachable Quickpay never makes a payment method
-     * unsaveable. Why the agreement couldn't be verified is logged.
+     * unsaveable. Why the agreement check is undetermined is logged.
      *
      * @test
      *
-     * @dataProvider unverifiableAgreements
+     * @dataProvider undeterminedAgreementAnswers
      */
-    public function it_accepts_an_agreement_quickpay_could_not_verify(Response $response, string $why): void
+    public function it_accepts_an_agreement_whose_check_is_undetermined(Response $response, string $why): void
     {
         self::bootKernel();
         $logger = $this->recordValidatorLogs();
@@ -230,8 +230,8 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         self::assertSame(['GET /ping', 'GET /agreements/12345'], $this->quickpay()->sentRequests());
         self::assertSame([[
             LogLevel::INFO,
-            sprintf('Could not verify agreement 12345 of the Quickpay gateway "quickpay_dk", so it was accepted unverified: %s', $why),
-            ['gateway' => 'quickpay_dk'],
+            sprintf('Accepted agreement 12345 of the Quickpay gateway "quickpay_dk", whose check is undetermined: %s', $why),
+            ['gatewayName' => 'quickpay_dk'],
         ]], $logger->records);
     }
 
@@ -299,7 +299,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
             ],
             ['gatewayConfig.config[api_key]'],
         ];
-        yield 'not verifiable' => [
+        yield 'undetermined' => [
             ['/ping' => new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}')],
             [],
         ];
@@ -308,7 +308,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     /**
      * @return iterable<string, array{Response, string}>
      */
-    public static function unverifiableAgreements(): iterable
+    public static function undeterminedAgreementAnswers(): iterable
     {
         yield 'unauthorized' => [
             new Response(401, ['Content-Type' => 'application/json'], '{"message":"Not authorized"}'),
@@ -343,7 +343,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
     /**
      * Only an explicit rejection of the key counts: an unreachable Quickpay never makes a payment method unsaveable.
-     * Why the key couldn't be verified is logged.
+     * Why the api key check is undetermined is logged.
      *
      * @test
      *
@@ -352,7 +352,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
      * @param array<string, Response> $responses
      * @param list<string> $requests
      */
-    public function it_accepts_an_api_key_quickpay_could_not_verify(array $responses, array $requests, string $quickpaysError): void
+    public function it_accepts_an_api_key_whose_check_is_undetermined(array $responses, array $requests, string $quickpaysError): void
     {
         self::bootKernel();
         $logger = $this->recordValidatorLogs();
@@ -367,8 +367,8 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         self::assertSame($requests, $this->quickpay()->sentRequests());
         self::assertSame([[
             LogLevel::INFO,
-            sprintf('Could not verify the api key of the Quickpay gateway "quickpay_dk", so it was accepted unverified: %s', $quickpaysError),
-            ['gateway' => 'quickpay_dk'],
+            sprintf('Accepted the api key of the Quickpay gateway "quickpay_dk", whose check is undetermined: %s', $quickpaysError),
+            ['gatewayName' => 'quickpay_dk'],
         ]], $logger->records);
     }
 
@@ -469,25 +469,10 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
     /**
      * Gives the save validation's validator a logger recording what it logs
-     *
-     * @return object{records: list<array{mixed, string, array<array-key, mixed>}>}
      */
-    private function recordValidatorLogs(): object
+    private function recordValidatorLogs(): RecordingLogger
     {
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
+        $logger = new RecordingLogger();
 
         $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
         self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);

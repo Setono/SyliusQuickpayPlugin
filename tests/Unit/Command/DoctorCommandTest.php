@@ -96,12 +96,12 @@ final class DoctorCommandTest extends TestCase
     public function it_prints_a_passed_api_key_check_with_its_note(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-        $this->gatewayChecks->apiKey(Argument::any())->willReturn(Verdict::passed('verified through /payments: the api user lacks the /ping permission, which is harmless'));
+        $this->gatewayChecks->apiKey(Argument::any())->willReturn(Verdict::passed('checked through /payments: the api user lacks the /ping permission, which is harmless'));
 
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('✔ The api key is accepted by Quickpay (verified through /payments: the api user lacks the /ping permission, which is harmless)', $tester);
+        self::assertDisplayHasLine('✔ The api key is accepted by Quickpay (checked through /payments: the api user lacks the /ping permission, which is harmless)', $tester);
     }
 
     /**
@@ -132,7 +132,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('! Could not verify the api key: The request could not be sent [GET https://api.quickpay.net/ping]: Idle timeout reached', $tester);
+        self::assertDisplayHasLine('! Could not check the api key: The request could not be sent [GET https://api.quickpay.net/ping]: Idle timeout reached', $tester);
     }
 
     /**
@@ -327,20 +327,34 @@ final class DoctorCommandTest extends TestCase
     }
 
     /**
-     * The gateway sends no agreement id for a blank one, so Quickpay uses the default agreement
+     * Quickpay then uses the account's default agreement, and there is nothing to ask it, so the api key's verdict
+     * doesn't matter. The gateway sends no agreement id for a blank one either.
      *
      * @test
+     *
+     * @dataProvider withoutAgreementIdUnderEachApiKeyVerdict
      */
-    public function it_prints_the_note_of_the_agreement_check_when_no_agreement_id_is_set(): void
+    public function it_passes_the_agreement_when_no_agreement_id_is_set_whatever_the_api_keys_verdict(string $agreementId, Verdict $apiKeyVerdict): void
     {
-        $configuration = GatewayConfigurations::of(self::healthyConfig(['agreement_id' => '   ']));
-        $this->configureGateways($configuration);
-        $this->gatewayChecks->agreement($configuration)->shouldBeCalledOnce()->willReturn(Verdict::passed('Quickpay uses the account\'s default Payment Window agreement'));
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => $agreementId])));
+        $this->gatewayChecks->apiKey(Argument::any())->willReturn($apiKeyVerdict);
 
         $tester = $this->executeCommand();
 
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('✔ No agreement id configured (Quickpay uses the account\'s default Payment Window agreement)', $tester);
+        self::assertDisplayHasLine('✔ No agreement id configured — Quickpay uses the account\'s default Payment Window agreement', $tester);
+        self::assertStringNotContainsString('agreement — no usable api key', $tester->getDisplay());
+    }
+
+    /**
+     * @return iterable<string, array{string, Verdict}>
+     */
+    public static function withoutAgreementIdUnderEachApiKeyVerdict(): iterable
+    {
+        foreach (['none' => '', 'a blank one' => '   '] as $name => $agreementId) {
+            yield sprintf('%s, api key passed', $name) => [$agreementId, Verdict::passed()];
+            yield sprintf('%s, api key failed', $name) => [$agreementId, Verdict::failed('Quickpay rejects the api key')];
+            yield sprintf('%s, api key undetermined', $name) => [$agreementId, Verdict::undetermined('The request could not be sent')];
+        }
     }
 
     /**
@@ -371,7 +385,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('! Could not verify agreement 12345: the api user may lack the /agreements permission', $tester);
+        self::assertDisplayHasLine('! Could not check agreement 12345: the api user may lack the /agreements permission', $tester);
     }
 
     /**
@@ -457,7 +471,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand(['--live' => true]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine(sprintf('! Could not verify the payment link permission: The request could not be sent [PUT https://api.quickpay.net/payments/999/link]: Idle timeout reached (%s)', self::TEST_PAYMENT_NOTE), $tester);
+        self::assertDisplayHasLine(sprintf('! Could not check the payment link permission: The request could not be sent [PUT https://api.quickpay.net/payments/999/link]: Idle timeout reached (%s)', self::TEST_PAYMENT_NOTE), $tester);
     }
 
     /**
@@ -465,7 +479,7 @@ final class DoctorCommandTest extends TestCase
      *
      * @test
      */
-    public function it_probes_the_payment_link_permission_only_in_live_mode(): void
+    public function it_checks_the_payment_link_permission_only_in_live_mode(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
         $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
@@ -473,7 +487,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('! Run with --live to probe the payment link permission (creates a harmless test payment)', $tester);
+        self::assertDisplayHasLine('! Run with --live to check the payment link permission (creates a harmless test payment)', $tester);
     }
 
     /**
@@ -485,10 +499,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_skips_the_agreement_and_live_checks_unless_the_api_key_check_passed(Verdict $apiKeyVerdict): void
     {
-        $this->configureGateways(
-            GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345]), 'quickpay_a'),
-            GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_b_']), 'quickpay_b'),
-        );
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
         $this->gatewayChecks->apiKey(Argument::any())->willReturn($apiKeyVerdict);
 
         $this->gatewayChecks->agreement(Argument::any())->shouldNotBeCalled();
@@ -496,9 +507,8 @@ final class DoctorCommandTest extends TestCase
 
         $tester = $this->executeCommand(['--live' => true]);
 
-        self::assertDisplayHasLine('! Skipped verifying agreement 12345 — no usable api key', $tester);
-        self::assertDisplayHasLine('! Skipped verifying the agreement — no usable api key', $tester);
-        self::assertDisplayHasLine('! Skipped probing the payment link permission — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped checking agreement 12345 — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped checking the payment link permission — no usable api key', $tester);
     }
 
     /**

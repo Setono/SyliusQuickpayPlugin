@@ -9,7 +9,6 @@ use Payum\Core\Exception\LogicException;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Response\Payment\Payment as QuickpayPayment;
@@ -17,6 +16,7 @@ use Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentMethod;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
@@ -85,7 +85,7 @@ final class PaymentOperationsActionTest extends TestCase
         $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations_error.html.twig')
             ->willReturn('<div>error</div>');
 
-        $logger = self::recordingLogger();
+        $logger = new RecordingLogger();
         $action = $this->createAction($error, $twig->reveal());
         $action->setLogger($logger);
 
@@ -138,26 +138,5 @@ final class PaymentOperationsActionTest extends TestCase
         }
 
         return new PaymentOperationsAction($paymentRepository->reveal(), $quickpayClientProvider->reveal(), $twig);
-    }
-
-    /**
-     * @return AbstractLogger&object{records: list<array{mixed, string, array<array-key, mixed>}>}
-     */
-    private static function recordingLogger(): AbstractLogger
-    {
-        return new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
     }
 }

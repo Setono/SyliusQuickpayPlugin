@@ -29,7 +29,7 @@ final class UnusableGatewayConfiguration extends \RuntimeException
     {
         return new self($gatewayName, $exception->getViolations(), sprintf(
             'The gateway configuration of %s is invalid: %s',
-            self::gatewayOf($gatewayName),
+            self::describeGateway($gatewayName),
             implode('; ', $exception->getViolations()),
         ), $exception);
     }
@@ -41,7 +41,7 @@ final class UnusableGatewayConfiguration extends \RuntimeException
     {
         return new self($gatewayName, [], sprintf(
             'The gateway configuration of %s reads as empty, as an encrypted one does before Payum decrypts it. Encrypting gateway configurations is not supported.',
-            self::gatewayOf($gatewayName),
+            self::describeGateway($gatewayName),
         ));
     }
 
@@ -49,7 +49,7 @@ final class UnusableGatewayConfiguration extends \RuntimeException
      * A configuration read without its gateway config has no gateway name, as a Payum gateway reads its own: Payum
      * passes none with it
      */
-    private static function gatewayOf(string $gatewayName): string
+    private static function describeGateway(string $gatewayName): string
     {
         return '' === $gatewayName ? 'a Quickpay gateway' : sprintf('the Quickpay gateway "%s"', $gatewayName);
     }

@@ -55,7 +55,7 @@ final class DoctorCommand extends Command
             'live',
             null,
             InputOption::VALUE_NONE,
-            'Also probe the payment link permission by creating a test payment (leaves a harmless, money-less test payment on the account)',
+            'Also check the payment link permission by creating a test payment (leaves a harmless, money-less test payment on the account)',
         );
     }
 
@@ -94,16 +94,16 @@ final class DoctorCommand extends Command
                 $io,
                 $this->gatewayChecks->apiKey($gatewayConfiguration),
                 'The api key is accepted by Quickpay',
-                'Could not verify the api key',
+                'Could not check the api key',
             );
             $this->checkPrivateKey($io, $options->privateKey);
-            $this->checkAgreement($io, $gatewayConfiguration, $options->agreementId, $apiKeyAccepted);
+            $this->checkAgreement($io, $gatewayConfiguration, $apiKeyAccepted);
             $this->checkOrderPrefix($io, $options->orderPrefix);
 
             if ($live) {
                 $this->checkPaymentLinkPermission($io, $gatewayConfiguration, $apiKeyAccepted);
             } elseif ($apiKeyAccepted) {
-                $this->warn($io, 'Run with --live to probe the payment link permission (creates a harmless test payment)');
+                $this->warn($io, 'Run with --live to check the payment link permission (creates a harmless test payment)');
             }
         }
 
@@ -243,14 +243,21 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * @param int|null $agreementId the agreement id the gateway sends, null for none
+     * The agreement the gateway sends. Without one there is nothing to ask Quickpay, so that passes whatever the api
+     * key's verdict.
      */
-    private function checkAgreement(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, ?int $agreementId, bool $apiKeyAccepted): void
+    private function checkAgreement(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, bool $apiKeyAccepted): void
     {
-        $agreement = null === $agreementId ? 'the agreement' : sprintf('agreement %d', $agreementId);
+        $agreementId = $gatewayConfiguration->options()->agreementId;
+
+        if (null === $agreementId) {
+            $this->ok($io, 'No agreement id configured — Quickpay uses the account\'s default Payment Window agreement');
+
+            return;
+        }
 
         if (!$apiKeyAccepted) {
-            $this->warn($io, sprintf('Skipped verifying %s — no usable api key', $agreement));
+            $this->warn($io, sprintf('Skipped checking agreement %d — no usable api key', $agreementId));
 
             return;
         }
@@ -258,8 +265,8 @@ final class DoctorCommand extends Command
         $this->report(
             $io,
             $this->gatewayChecks->agreement($gatewayConfiguration),
-            null === $agreementId ? 'No agreement id configured' : sprintf('Agreement %d exists on the account', $agreementId),
-            sprintf('Could not verify %s', $agreement),
+            sprintf('Agreement %d exists on the account', $agreementId),
+            sprintf('Could not check agreement %d', $agreementId),
         );
     }
 
@@ -288,7 +295,7 @@ final class DoctorCommand extends Command
     private function checkPaymentLinkPermission(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, bool $apiKeyAccepted): void
     {
         if (!$apiKeyAccepted) {
-            $this->warn($io, 'Skipped probing the payment link permission — no usable api key');
+            $this->warn($io, 'Skipped checking the payment link permission — no usable api key');
 
             return;
         }
@@ -297,7 +304,7 @@ final class DoctorCommand extends Command
             $io,
             $this->gatewayChecks->paymentLinkPermission($gatewayConfiguration),
             'The api user may create payment links',
-            'Could not verify the payment link permission',
+            'Could not check the payment link permission',
         );
     }
 
