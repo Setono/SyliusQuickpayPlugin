@@ -5,17 +5,18 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Fraud;
 
 use Nyholm\Psr7\Response;
+use Payum\Core\Exception\LogicException;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
-use Psr\Log\LoggerInterface;
-use Setono\Quickpay\Client\Client;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LogLevel;
+use Setono\Quickpay\Exception\InternalServerErrorException;
+use Setono\Quickpay\Response\Payment\Metadata;
+use Setono\Quickpay\Response\Payment\Payment as QuickpayPayment;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudChecker;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
-use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
-use Setono\SyliusQuickpayPlugin\Tests\Quickpay\FixedResponseHttpClient;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
 
@@ -28,7 +29,7 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_fraud_when_quickpay_flags_the_payment(): void
     {
-        $checker = $this->createChecker($this->createClientFactory($this->paymentResponse(['fraud_suspected' => true])), GatewayConfigurations::of());
+        $checker = $this->createChecker(self::quickpayPayment(new Metadata(fraudSuspected: true)));
 
         self::assertTrue($checker->isFraudSuspected(self::createPayment()));
     }
@@ -38,7 +39,7 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_clean_when_quickpay_does_not_flag_the_payment(): void
     {
-        $checker = $this->createChecker($this->createClientFactory($this->paymentResponse(['fraud_suspected' => false])), GatewayConfigurations::of());
+        $checker = $this->createChecker(self::quickpayPayment(new Metadata(fraudSuspected: false)));
 
         self::assertFalse($checker->isFraudSuspected(self::createPayment()));
     }
@@ -48,143 +49,105 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_clean_when_the_payment_carries_no_fraud_metadata(): void
     {
-        $checker = $this->createChecker($this->createClientFactory($this->paymentResponse(null)), GatewayConfigurations::of());
+        $checker = $this->createChecker(self::quickpayPayment(null));
 
         self::assertFalse($checker->isFraudSuspected(self::createPayment()));
     }
 
     /**
+     * No Quickpay gateway configuration, or no Quickpay payment id
+     *
      * @test
      */
-    public function it_reports_clean_when_the_payment_has_no_quickpay_payment_id(): void
+    public function it_reports_clean_when_the_payment_has_no_quickpay_payment(): void
     {
-        $checker = $this->createChecker($this->createUnusedClientFactory(), GatewayConfigurations::of());
-
-        self::assertFalse($checker->isFraudSuspected(self::createPayment(details: [])));
-    }
-
-    /**
-     * @test
-     */
-    public function it_reports_clean_when_the_payment_has_no_quickpay_gateway_configuration(): void
-    {
-        $checker = $this->createChecker($this->createUnusedClientFactory(), null);
+        $checker = $this->createChecker(null);
 
         self::assertFalse($checker->isFraudSuspected(self::createPayment()));
     }
 
     /**
+     * The question can't be answered, and a check that can't be made never blocks a capture
+     *
      * @test
      *
-     * @dataProvider unusableGatewayConfigurations
+     * @dataProvider unreadableQuickpayPayments
      */
-    public function it_fails_open_with_a_warning_when_the_payment_s_gateway_configuration_is_unusable(GatewayConfiguration $gatewayConfiguration): void
+    public function it_fails_open_with_a_warning_when_the_quickpay_payment_cannot_be_read(\Throwable $error): void
     {
-        $logger = $this->prophesize(LoggerInterface::class);
-        $logger->warning(Argument::containingString('"quickpay_credit_card"'), Argument::any())->shouldBeCalledOnce();
-
-        $checker = $this->createChecker($this->createUnusedClientFactory(), $gatewayConfiguration, $logger->reveal());
+        $logger = self::recordingLogger();
+        $checker = $this->createChecker($error);
+        $checker->setLogger($logger);
 
         self::assertFalse($checker->isFraudSuspected(self::createPayment()));
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertSame('Could not check the Quickpay payment for suspected fraud: ' . $error->getMessage(), $message);
+        self::assertSame(['quickpayPaymentId' => 501, 'paymentId' => null], $context);
     }
 
     /**
-     * @return iterable<string, array{GatewayConfiguration}>
+     * @return iterable<string, array{\Throwable}>
      */
-    public static function unusableGatewayConfigurations(): iterable
+    public static function unreadableQuickpayPayments(): iterable
     {
-        yield 'invalid' => [GatewayConfigurations::of(['api_key' => 'the-api-key'], 'quickpay_credit_card')];
+        yield 'an unusable gateway configuration' => [UnusableGatewayConfiguration::unreadable('quickpay_credit_card')];
 
-        yield 'encrypted' => [GatewayConfigurations::encrypted('quickpay_credit_card')];
+        yield 'an unusable Quickpay payment id' => [new LogicException('The payment has not been created at Quickpay')];
+
+        yield 'Quickpay failing' => [new InternalServerErrorException(new Response(500, [], '{"message": "boom"}'))];
     }
 
     /**
-     * @test
+     * A fraud checker whose client provider answers the Quickpay payment of any Sylius payment with the given
+     * one (null: the payment has no Quickpay payment), or throws the given error
      */
-    public function it_fails_open_when_the_details_carry_an_unusable_quickpay_payment_id(): void
+    private function createChecker(QuickpayPayment|\Throwable|null $quickpayPayment): FraudChecker
     {
-        $checker = $this->createChecker($this->createUnusedClientFactory(), GatewayConfigurations::of());
-
-        self::assertFalse($checker->isFraudSuspected(self::createPayment(details: ['quickpayPaymentId' => 'foo'])));
-    }
-
-    /**
-     * @test
-     */
-    public function it_fails_open_when_quickpay_cannot_be_reached(): void
-    {
-        $checker = $this->createChecker($this->createClientFactory(new Response(500, [], '{"message": "boom"}')), GatewayConfigurations::of());
-
-        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
-    }
-
-    /**
-     * A fraud checker for payments whose gateway configuration is the given one, null meaning the payment has
-     * no Quickpay gateway configuration
-     */
-    private function createChecker(
-        ClientFactoryInterface $clientFactory,
-        ?GatewayConfiguration $gatewayConfiguration,
-        ?LoggerInterface $logger = null,
-    ): FraudChecker {
-        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
-        $gatewayConfigurationProvider->forPayment(Argument::type(PaymentInterface::class))->willReturn($gatewayConfiguration);
-
-        $checker = new FraudChecker($gatewayConfigurationProvider->reveal(), $clientFactory);
-        if (null !== $logger) {
-            $checker->setLogger($logger);
+        $quickpayClientProvider = $this->prophesize(QuickpayClientProviderInterface::class);
+        $quickpayPaymentOf = $quickpayClientProvider->quickpayPaymentOf(Argument::type(PaymentInterface::class));
+        if ($quickpayPayment instanceof \Throwable) {
+            $quickpayPaymentOf->willThrow($quickpayPayment);
+        } else {
+            $quickpayPaymentOf->willReturn($quickpayPayment);
         }
 
-        return $checker;
+        return new FraudChecker($quickpayClientProvider->reveal());
     }
 
-    private function createClientFactory(Response $response): ClientFactoryInterface
+    private static function quickpayPayment(?Metadata $metadata): QuickpayPayment
     {
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory
-            ->create('the-api-key')
-            ->willReturn(new Client('the-api-key', new FixedResponseHttpClient($response)))
-        ;
-
-        return $clientFactory->reveal();
+        return new QuickpayPayment(id: 501, orderId: 'qp_000000123', currency: 'DKK', state: 'new', merchantId: 1, metadata: $metadata);
     }
 
-    private function createUnusedClientFactory(): ClientFactoryInterface
-    {
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory->create(Argument::any())->shouldNotBeCalled();
-
-        return $clientFactory->reveal();
-    }
-
-    /**
-     * @param array{fraud_suspected: bool}|null $metadata
-     */
-    private function paymentResponse(?array $metadata): Response
-    {
-        $payment = [
-            'id' => 501,
-            'order_id' => 'qp_000000123',
-            'currency' => 'DKK',
-            'state' => 'new',
-            'merchant_id' => 1,
-        ];
-
-        if (null !== $metadata) {
-            $payment['metadata'] = $metadata;
-        }
-
-        return new Response(200, ['Content-Type' => 'application/json'], (string) json_encode($payment));
-    }
-
-    /**
-     * @param array<string, mixed> $details
-     */
-    private static function createPayment(array $details = ['quickpayPaymentId' => 501]): PaymentInterface
+    private static function createPayment(): PaymentInterface
     {
         $payment = new Payment();
-        $payment->setDetails($details);
+        $payment->setDetails(['quickpayPaymentId' => 501]);
 
         return $payment;
+    }
+
+    /**
+     * @return AbstractLogger&object{records: list<array{mixed, string, array<array-key, mixed>}>}
+     */
+    private static function recordingLogger(): AbstractLogger
+    {
+        return new class() extends AbstractLogger {
+            /** @var list<array{mixed, string, array<array-key, mixed>}> */
+            public array $records = [];
+
+            /**
+             * @param mixed $level
+             * @param string|\Stringable $message
+             * @param array<array-key, mixed> $context
+             */
+            public function log($level, $message, array $context = []): void
+            {
+                $this->records[] = [$level, (string) $message, $context];
+            }
+        };
     }
 }
