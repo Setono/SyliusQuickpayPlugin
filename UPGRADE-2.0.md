@@ -198,6 +198,8 @@ changed. Every callback and the reconciliation command go through the module.
 | `Payum\Extension\AcknowledgeNotifyAction` | none | the callback endpoints answer a duplicate callback themselves |
 | `Quickpay\ApiKeyResolver` | none | the gateway configuration module: `GatewayConfigurationProviderInterface::forPayment()` (or `all()`, `forGatewayName()`, `forPaymentMethod()`), then `options()->apiKey`, which reads the 1.x `apikey` name like the gateway does |
 | `Validator\Constraints\QuickpayCredentials`, `Validator\Constraints\QuickpayCredentialsValidator` | `Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator`, tagged `validator.constraint_validator` | `Validator\Constraints\UsableGatewayConfiguration`, which verifies the api key on save, also through the Admin API |
+| `Quickpay\ApiKeyVerifierInterface`, `Quickpay\ApiKeyVerifier` | `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface` | the gateway checks: `Quickpay\GatewayCheck\GatewayChecksInterface::apiKey(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and returns a `Verdict` instead of throwing Quickpay's errors |
+| `Quickpay\ApiKeyVerification` | none | the `Verdict`: a key Quickpay accepts is `VerdictOutcome::Passed`, and one verified through `/payments` (`ViaPayments`) carries a note saying so |
 
 The reconciliation command's private Quickpay status → transition mapping is gone as well: Sylius' own
 mapping applies.
@@ -241,7 +243,7 @@ mapping applies.
   payment method's gateway config in `sylius_quickpay` as well, in the admin form and the Admin API alike. The group
   holds one constraint, `Validator\Constraints\UsableGatewayConfiguration`, declared on Sylius' `GatewayConfig` by the
   plugin's validation mapping (validator service `Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator`,
-  constructor `(ApiKeyVerifierInterface $apiKeyVerifier)`). An application that sets
+  constructor `(GatewayChecksInterface $gatewayChecks)`, logger-aware). An application that sets
   `sylius_payum.gateway_config.validation_groups.quickpay` itself replaces the plugin's entry, so it must list
   `sylius_quickpay` too.
 - **One HTTP policy for every request to Quickpay** ([ADR 0003](docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md)).
@@ -255,6 +257,16 @@ mapping applies.
   the gateway configuration's api key and `synchronized`, with the SDK's mapper cache, and throws
   `UnusableGatewayConfiguration` for an unusable configuration. Every Quickpay gateway gets its client from it,
   through payum-quickpay's `quickpay.client` gateway option.
+- **The gateway checks, `Quickpay\GatewayCheck\GatewayChecksInterface`**, service
+  `Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks` (constructor
+  `(QuickpayClientProviderInterface $clientProvider)`), aliased by the interface (terms in [GLOSSARY.md](GLOSSARY.md):
+  Gateway check, Verdict). A gateway check tests against Quickpay what a usable gateway configuration's credentials
+  allow and returns a `Verdict` instead of throwing Quickpay's errors: its `outcome`, a `VerdictOutcome` (`Passed`,
+  `Failed`, or `Undetermined` when Quickpay's answer proves neither), its `reason` (why it failed or proves nothing,
+  null on a pass) and its `note` (a caveat), both English. `apiKey(GatewayConfiguration): Verdict` checks the api key:
+  `/ping` accepted passes; a `/ping` refused with 401/403 is decided by a one-item `/payments` read, which passes with
+  a note when accepted and fails when refused with 401/403; any other error is undetermined, with Quickpay's error as
+  the reason. Save validation and the doctor run it.
 
 ### Changed constructors
 
@@ -266,7 +278,7 @@ mapping applies.
 | `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
 | `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory)` |
 | `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory, Environment $twig)` |
-| `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
+| `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(QuickpayClientProviderInterface $clientProvider, GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 | `FactoryBuilder\QuickpayGatewayFactoryBuilder` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser)` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser, QuickpayClientProviderInterface $clientProvider)` |
 | `Quickpay\ClientFactory` | `()` | `(HttpClientInterface $httpClient)`, the scoped client `setono_sylius_quickpay.http_client` |
@@ -300,6 +312,10 @@ The service definitions changed accordingly; only a redefinition or decoration o
   credentials constraint; the order prefix keeps its length constraint. Each message says, in the admin's language, what
   the option accepts; payum-quickpay's own reason is logged at info level. Fixtures, the console and direct database
   writes are still not validated.
+- **Saving logs why an api key couldn't be verified.** When Quickpay neither accepts nor refuses the api key (it
+  doesn't answer, or answers `/ping` or the `/payments` read with an error other than 401/403), the payment method is
+  still saved, and the reason, Quickpay's error, is logged at info level. Before, it was dropped silently. The doctor
+  prints the same case as a warning, `Could not verify the api key: <Quickpay's error>`.
 - **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
   payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
   retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its
