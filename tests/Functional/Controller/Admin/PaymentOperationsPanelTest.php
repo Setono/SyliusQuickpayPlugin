@@ -19,6 +19,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\SessionFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
  * The operations panel on the admin's order page: the Quickpay payment's operation history, which the order page
@@ -116,6 +117,7 @@ final class PaymentOperationsPanelTest extends FunctionalTestCase
 
         $administrator = $adminUserFactory->createNew();
         self::assertInstanceOf(AdminUserInterface::class, $administrator);
+        self::assertInstanceOf(UserInterface::class, $administrator);
         $administrator->setUsername('administrator');
         $administrator->setEmail('administrator@example.com');
         $administrator->setPassword('not-a-password-hash');

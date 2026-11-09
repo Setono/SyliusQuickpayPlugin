@@ -159,11 +159,23 @@ final class QuickpayClientProviderTest extends TestCase
      * @test
      *
      * @dataProvider detailsWithoutAQuickpayPaymentId
+     *
+     * @param array<string, mixed> $details
      */
     public function it_answers_no_quickpay_payment_for_a_payment_whose_details_carry_no_quickpay_payment_id(array $details): void
     {
         self::assertNull($this->provider(paymentsGatewayConfiguration: GatewayConfigurations::of())->quickpayPaymentOf(self::syliusPayment($details)));
         self::assertSame([], $this->requests);
+    }
+
+    /**
+     * A payment that never reached Quickpay has no Quickpay payment to read, so nothing reads its gateway configuration
+     *
+     * @test
+     */
+    public function it_answers_no_quickpay_payment_for_a_payment_without_a_quickpay_payment_id_even_when_its_gateway_configuration_is_unusable(): void
+    {
+        self::assertNull($this->provider(paymentsGatewayConfiguration: GatewayConfigurations::encrypted())->quickpayPaymentOf(self::syliusPayment([])));
     }
 
     /**
