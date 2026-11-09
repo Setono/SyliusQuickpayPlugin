@@ -387,7 +387,7 @@ It also warns, without failing the run, about two things that work but surprise 
 - a gateway option still stored under its 1.x name (`apikey`, `privatekey`, `agreement`), or the deprecated
   `auto_capture` switched on: re-save the payment method in the admin to replace them;
 - no capture mode stored (`use_authorize`), as fixtures and the Admin API may leave it: checkout then captures
-  immediately, whatever you expected.
+  immediately. Choose the capture mode on the payment method in the admin and save it.
 
 ## Upgrading from 1.x
 
@@ -444,8 +444,8 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
 - `The capture mode is not set, so checkout captures immediately` (a doctor warning)
 
   The gateway configuration has no `use_authorize`, as fixtures and the Admin API can leave it, and Sylius' checkout
-  then lets Quickpay capture the money at authorization. If you want to capture on completion, choose that capture
-  mode on the payment method in the admin and save it.
+  then lets Quickpay capture the money at authorization. The admin form shows it as "Immediately". Open the payment
+  method in the admin, choose the capture mode you want and save it: the mode is then stored, and the warning goes.
 
 - `Payment 42: skipped, it is locked by a callback being handled or another run`
 
