@@ -247,6 +247,9 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
 bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
 ```
 
+`--limit` (default 100) caps the payments reported across all gateways. A report that reaches it says so and names
+the gateways it didn't query; raise `--limit` to see the rest.
+
 ## Callbacks
 
 All callbacks for what your store does arrive on a **per-payment url** the gateway mints and registers itself —

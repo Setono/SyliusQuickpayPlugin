@@ -243,6 +243,53 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * `--limit` is the number of payments reported across gateways: once the report holds that many, the gateways
+     * after it go unqueried, and the report says so
+     *
+     * @test
+     */
+    public function the_fraud_report_stops_at_the_limit_and_names_the_gateways_it_did_not_query(): void
+    {
+        self::bootKernel();
+
+        $this->createPaymentMethod('quickpay_dk', ['api_key' => 'the-dk-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => '1']);
+
+        // Reaching the limit isn't a failure
+        $tester->assertCommandIsSuccessful();
+        $display = (string) preg_replace('/\s+/', ' ', $tester->getDisplay());
+        self::assertStringContainsString('qp_000000001', $display);
+        self::assertStringContainsString('The report stopped at the limit of 1 payment(s) and didn\'t query the gateway(s) "quickpay_se".', $display);
+        self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
+        self::assertSame(['Authorization: Basic ' . base64_encode(':the-dk-api-key')], self::authorizationOf($this->quickpay()->sentRequestOptions()[0]));
+    }
+
+    /**
+     * @test
+     */
+    public function the_fraud_report_names_a_gateway_with_an_unusable_gateway_configuration_and_still_queries_the_others(): void
+    {
+        self::bootKernel();
+
+        // A branding name where the branding id belongs, stored by fixtures or the database directly
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'branding_id' => 'Our brand']);
+        $this->createPaymentMethod('quickpay_dk', ['api_key' => 'the-dk-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $display = (string) preg_replace('/\s+/', ' ', $tester->getDisplay());
+        self::assertStringContainsString('Gateway "quickpay_se": The gateway configuration of the Quickpay gateway "quickpay_se" is invalid: The "branding_id" option', $display);
+        self::assertStringContainsString('quickpay_dk 501 qp_000000001', $display);
+        self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
+        self::assertSame(['Authorization: Basic ' . base64_encode(':the-dk-api-key')], self::authorizationOf($this->quickpay()->sentRequestOptions()[0]));
+    }
+
+    /**
      * @param array<string, mixed> $input
      */
     private function executeCommand(array $input): CommandTester
@@ -254,5 +301,37 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         $tester->execute($input);
 
         return $tester;
+    }
+
+    /**
+     * Quickpay's answer to the fraud report's query: a page of fraud suspected payments, one per order number
+     */
+    private static function fraudSuspectedQuickpayPayments(string ...$orderNumbers): Response
+    {
+        $payments = [];
+        foreach (array_values($orderNumbers) as $i => $orderNumber) {
+            $payments[] = [
+                'id' => 501 + $i,
+                'order_id' => self::ORDER_PREFIX . $orderNumber,
+                'currency' => self::CURRENCY,
+                'state' => 'new',
+                'merchant_id' => 1,
+                'test_mode' => true,
+                'metadata' => ['fraud_suspected' => true],
+            ];
+        }
+
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode($payments, \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param array<string, mixed> $options a request's options, as sent
+     */
+    private static function authorizationOf(array $options): mixed
+    {
+        $headers = $options['normalized_headers'] ?? null;
+        self::assertIsArray($headers);
+
+        return $headers['authorization'] ?? null;
     }
 }
