@@ -249,8 +249,12 @@ exceptions or interpret Quickpay's status codes themselves.
   pass was proven or what a check left on the account). Built with `Verdict::passed(?note)`, `failed(reason, ?note)`
   and `undetermined(reason, ?note)`. The reason and note are English, for the console and logs; a caller showing a
   verdict to an admin words it in their language itself (save validation's translated violations).
-- Classification lives here once: a refusal (401/403) is evidence; any other SDK error (`QuickpayException`, transport
-  errors included) is undetermined, with the error's message as the reason. Anything else propagates.
+- Classification lives here once, in `GatewayChecks::ask()`, which sends one request of a check and takes the verdicts
+  for an accepted request, a refusal (401/403) and, for the agreement, a 404: a refusal is evidence; any other SDK
+  error (`QuickpayException`: transport errors, a body that isn't JSON or doesn't map included) is undetermined, with
+  the error's message as the reason, and so is the PSR-7 body's plain `\RuntimeException` when an answer breaks off
+  after its headers arrived (the SDK reads the body outside its transport error handling, so it doesn't wrap that
+  one). Anything else propagates.
 - **Api key**: `/ping` accepted → passed. `/ping` refused with 401/403 → a one-item `/payments` read decides, because
   Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
   permission (verified live): accepted → passed with the note that the api user lacks `/ping`; 401/403 → failed.

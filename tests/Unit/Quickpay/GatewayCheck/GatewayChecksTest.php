@@ -164,6 +164,20 @@ final class GatewayChecksTest extends TestCase
             new MockResponse('', ['error' => 'Idle timeout reached']),
             'The request could not be sent [GET https://api.quickpay.net/ping]: Idle timeout reached',
         ];
+        yield 'an answer that is not JSON' => [
+            new Response(200, ['Content-Type' => 'text/html'], '<html>Maintenance</html>'),
+            'Could not decode response body as JSON [GET https://api.quickpay.net/ping]: Syntax error.',
+        ];
+        // The connection drops after Quickpay's headers arrived: the SDK reads the body outside its transport error
+        // handling, so the PSR-7 stream's own error reaches the check
+        yield 'an answer that breaks off' => [
+            new MockResponse((static function (): \Generator {
+                yield '{"msg": "Pong';
+
+                throw new \RuntimeException('Connection reset by peer');
+            })(), ['http_code' => 200, 'response_headers' => ['Content-Type' => 'application/json']]),
+            'Unable to read stream contents: Connection reset by peer',
+        ];
     }
 
     /**
