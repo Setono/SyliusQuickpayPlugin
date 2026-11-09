@@ -162,6 +162,11 @@ being moved by spec #156); a new gateway option starts in the library and only g
   `PayumNotifyController` (`forGatewayName()`: is the token's gateway a Quickpay one) and `PaymentLinkProvider`
   (`forPaymentMethod()`). The test env's `ScriptedGatewayFactoryBuilder` reads the api key and `synchronized` through
   `GatewayOptions`.
+- More readers, each keeping its own error policy for an unusable configuration: `PaymentMethodLogoProvider`
+  (`forPaymentMethod()`; unusable → no logos and a warning log), `FraudChecker` (`forPayment()`; none → no fraud,
+  unusable → fails open with a warning log), `PaymentOperationsAction` (`forPayment()`; none → 404, unusable → the
+  inline error, 502) and the reconcile command's fraud report (`all()`; unusable → a warning naming the gateway and a
+  non-zero exit, the other gateways are still queried).
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
@@ -251,8 +256,9 @@ The prefix handling is the source of several documented "order_id" troubleshooti
 admin order view. The panel itself is a `sylius_ui` block prepended onto
 `sylius.admin.order.show.payment_content` (guarded by `hasExtension('sylius_ui')`): a placeholder that
 fetches the route after page load, so the order page never blocks on Quickpay; failures render an
-inline retry notice (HTTP 502). The controller resolves the api key from the payment's own gateway
-config and fetches via `Quickpay/ClientFactory`.
+inline retry notice (HTTP 502). The controller reads the api key from the payment's gateway configuration
+(the module's `forPayment()`: a payment that isn't a Quickpay one → 404, an unusable configuration → the same
+inline notice, 502) and fetches via `Quickpay/ClientFactory`.
 
 `Command/DoctorCommand` (`setono:sylius-quickpay:doctor`) machine-checks the README's Troubleshooting
 section per configured gateway: api key (via the shared `Quickpay/ApiKeyVerifier` ping-then-payments
@@ -263,7 +269,7 @@ link PUT to surface the missing-permission 403. Non-zero exit on any failed chec
 
 `Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args
 `PendingPaymentProviderInterface`, `PaymentReconcilerInterface`, `ClientFactoryInterface`,
-`sylius.repository.gateway_config`) is the backstop for callbacks that never arrive:
+`GatewayConfigurationProviderInterface`) is the backstop for callbacks that never arrive:
 `Provider/PendingPaymentProvider` queries Quickpay payments in state new/processing/authorized with a
 `quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()` (see
 *Reconciling payments* above). Each payment is persisted by its own reconcile (no end-of-loop flush); a changed one
@@ -299,11 +305,13 @@ alone); an unqualified `Refund` refunds the remaining `balance` the library's `R
 itself (every library action that fetches the payment also writes `balance` into the details). Each operation can be turned off via the plugin config
 `operations.capture` / `operations.refund` / `operations.cancel` (defined in `DependencyInjection/Configuration.php`,
 passed to the processor as container parameters). An opt-in `fraud.block_capture` flag makes the processor consult
-`Fraud/FraudChecker` (fetches the payment via `Quickpay/ClientFactory`, reads `metadata.fraud_suspected`, fails
-open on any error) before the automatic capture and skip it with a warning when fraud is suspected — the
+`Fraud/FraudChecker` (reads the api key through the module's `forPayment()`, fetches the payment via
+`Quickpay/ClientFactory`, reads `metadata.fraud_suspected`; no Quickpay configuration → no fraud, and it fails open,
+with a warning log, on any error, an unusable gateway configuration included) before the automatic capture and skip it with a warning when fraud is suspected — the
 transition itself proceeds. The operation-history admin panel shows a fraud badge from the same metadata, and the
 reconcile command has a `--fraud-suspected` report mode that queries each configured gateway's account directly
-(`PaymentsQuery`), transitioning nothing.
+(`PaymentsQuery`, one per gateway configuration from the module's `all()`), transitioning nothing; a gateway that
+can't be queried, an unusable gateway configuration included, prints a warning naming it and fails the run.
 
 ### Payment link (admin)
 `PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel
@@ -324,12 +332,14 @@ subclass `tests/Unit/Twig/PaymentExtensionTest` with `.test` fixtures in `tests/
 `getFixturesDirectory()`).
 
 ### Checkout presentation
-`Checkout/PaymentMethodLogoProvider` turns a Quickpay payment method's gateway `payment_methods` option into a
+`Checkout/PaymentMethodLogoProvider` turns a Quickpay payment method's gateway `payment_methods` option, normalized by
+the gateway configuration module (`forPaymentMethod()`, so one stored as a list gets logos too), into a
 list of `PaymentMethodLogo` value objects (token, label, `asset()` path or null) — parsing Quickpay's token
 grammar (`!` exclusions, `3d-` prefix, `-dk`/`-debet` variants collapsing onto the brand, `creditcard`
 expanding to the configured `checkout.creditcard_brands`) and applying the `checkout.payment_method_logos`
-config overrides (path adds/overrides, null hides). Exposed to Twig as
-`setono_sylius_quickpay_payment_method_logos(method)` (on `Twig/PaymentExtension` + `PaymentRuntime`, the plugin's
+config overrides (path adds/overrides, null hides). It is logger-aware (`setLogger()` call, like the other
+services): an unusable gateway configuration shows no logos and logs a warning, so the checkout page keeps working.
+Exposed to Twig as `setono_sylius_quickpay_payment_method_logos(method)` (on `Twig/PaymentExtension` + `PaymentRuntime`, the plugin's
 single Twig extension/runtime pair; `phpstan.neon` ignores the one error Twig < 3.9's `callable|null` docblock raises
 for the `[Runtime::class, 'method']` form on the lowest-deps job) and
 rendered by `shop/checkout/select_payment/_payment_method_logos.html.twig`, a `sylius_ui` block prepended on

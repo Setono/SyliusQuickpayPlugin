@@ -4,23 +4,30 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Checkout;
 
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 
 /**
  * Derives the checkout presentation from what the payment window will actually offer: the gateway
- * configuration's `payment_methods` option (a comma-separated list of Quickpay payment method
- * tokens, see https://learn.quickpay.net/tech-talk/appendixes/payment-methods/). Nothing is
- * stored and no API is called — the option already says which methods the customer will see.
+ * configuration's `payment_methods` option, read through the gateway configuration module as the
+ * gateway reads it (a comma-separated list of Quickpay payment method tokens, whether stored as
+ * text or as a list, see https://learn.quickpay.net/tech-talk/appendixes/payment-methods/). Nothing
+ * is stored and no API is called — the option already says which methods the customer will see.
+ * An unusable gateway configuration shows no logos and logs a warning, so the checkout page keeps
+ * working.
  *
  * Token handling follows Quickpay's own grammar: exclusions (`!diners`) are skipped, the `3d-`
  * prefix (forced 3-D Secure) is ignored, and regional/debit variants (`visa-dk`,
  * `mastercard-debet-dk`, `mobilepay-subscriptions`) fall back to their base brand. `creditcard`,
  * which means "every card enabled on the agreement", expands to a configurable list of brands.
  */
-final class PaymentMethodLogoProvider implements PaymentMethodLogoProviderInterface
+final class PaymentMethodLogoProvider implements PaymentMethodLogoProviderInterface, LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     private const IMAGE_PATH = 'bundles/setonosyliusquickpayplugin/images/payment-methods/%s.svg';
 
     /**
@@ -61,6 +68,7 @@ final class PaymentMethodLogoProvider implements PaymentMethodLogoProviderInterf
      * @param list<string> $creditcardBrands the brands `creditcard` stands for
      */
     public function __construct(
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly array $images = [],
         private readonly array $creditcardBrands = ['visa', 'mastercard'],
     ) {
@@ -68,13 +76,18 @@ final class PaymentMethodLogoProvider implements PaymentMethodLogoProviderInterf
 
     public function provide(PaymentMethodInterface $paymentMethod): array
     {
-        $gatewayConfig = $paymentMethod->getGatewayConfig();
-        if (!$gatewayConfig instanceof GatewayConfigInterface || QuickpayGatewayFactory::NAME !== $gatewayConfig->getFactoryName()) {
+        try {
+            $paymentMethods = $this->gatewayConfigurationProvider->forPaymentMethod($paymentMethod)?->options()->paymentMethods;
+        } catch (UnusableGatewayConfiguration $e) {
+            // Logos are presentation: the checkout page keeps working, and the gateway itself fails loudly
+            $this->logger?->warning(sprintf('No payment method logos are shown for the Quickpay gateway "%s": %s', $e->gatewayName, $e->getMessage()), [
+                'paymentMethod' => $paymentMethod->getCode(),
+            ]);
+
             return [];
         }
 
-        $paymentMethods = $gatewayConfig->getConfig()['payment_methods'] ?? null;
-        if (!is_string($paymentMethods)) {
+        if (null === $paymentMethods) {
             return [];
         }
 

@@ -7,7 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Fraud;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\Payum\Quickpay\Details;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 
@@ -15,8 +15,10 @@ final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
 {
     use LoggerAwareTrait;
 
-    public function __construct(private readonly ClientFactoryInterface $clientFactory)
-    {
+    public function __construct(
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
+        private readonly ClientFactoryInterface $clientFactory,
+    ) {
     }
 
     public function isFraudSuspected(PaymentInterface $payment): bool
@@ -26,14 +28,16 @@ final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
             return false;
         }
 
-        $apiKey = ApiKeyResolver::fromPayment($payment);
-        if (null === $apiKey) {
+        $gatewayConfiguration = $this->gatewayConfigurationProvider->forPayment($payment);
+        if (null === $gatewayConfiguration) {
             return false;
         }
 
         try {
-            // Details::paymentId() throws for a present but unusable id, which lands in the same
-            // fail-open catch as an unreachable Quickpay: the question cannot be answered
+            // An unusable gateway configuration, and a present but unusable id (Details::paymentId() throws
+            // for one), land in the same fail-open catch as an unreachable Quickpay: the question cannot be
+            // answered, and a configuration problem never blocks a capture
+            $apiKey = $gatewayConfiguration->options()->apiKey;
             $quickpayPaymentId = Details::paymentId($details);
 
             $quickpayPayment = $this->clientFactory->create($apiKey)->payments()->getById($quickpayPaymentId);

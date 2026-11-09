@@ -10,7 +10,8 @@ interface PaymentMethodLogoProviderInterface
 {
     /**
      * The logos to show for a payment method, derived from its Quickpay gateway configuration's
-     * `payment_methods` option. Empty for non-Quickpay methods and for an unset/empty option.
+     * `payment_methods` option. Empty for non-Quickpay methods, for an unset/empty option and for an
+     * unusable gateway configuration.
      *
      * @return list<PaymentMethodLogo>
      */
