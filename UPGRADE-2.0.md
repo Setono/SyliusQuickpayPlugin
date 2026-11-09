@@ -272,7 +272,11 @@ mapping applies.
   null on a pass) and its `note` (a caveat), both English. `apiKey(GatewayConfiguration): Verdict` checks the api key:
   `/ping` accepted passes; a `/ping` refused with 401/403 is decided by a one-item `/payments` read, which passes with
   a note when accepted and fails when refused with 401/403; any other error is undetermined, with Quickpay's error as
-  the reason. Save validation and the doctor run it. `paymentLinkPermission(GatewayConfiguration): Verdict`, the
+  the reason. Save validation and the doctor run it. `agreement(GatewayConfiguration): Verdict` checks that the
+  agreement the gateway sends exists on the account: without an agreement id it passes without asking, with a note
+  that Quickpay uses the default Payment Window agreement; a 404 fails; a 401/403 (the api user may lack the
+  `/agreements` permission) and any other error are undetermined. Save validation and the doctor run it too.
+  `paymentLinkPermission(GatewayConfiguration): Verdict`, the
   doctor's `--live` probe, creates a money-less test payment and puts a link on it: either refused with 401/403 fails,
   any other error is undetermined, and the note names the test payment left on the account.
 
@@ -324,6 +328,16 @@ The service definitions changed accordingly; only a redefinition or decoration o
   doesn't answer, or answers `/ping` or the `/payments` read with an error other than 401/403), the payment method is
   still saved, and the reason, Quickpay's error, is logged at info level. Before, it was dropped silently. The doctor
   prints the same case as a warning, `Could not verify the api key: <Quickpay's error>`.
+- **Saving refuses an agreement id the Quickpay account doesn't have.** Once Quickpay accepts the api key, saving a
+  Quickpay payment method with an agreement id reads that agreement from Quickpay, and a 404 refuses the save with an
+  error on the agreement field in the admin's language. Before, only the doctor found it, and checkout failed when it
+  created the payment link with that agreement id. When the api user may not read agreements (401/403) or Quickpay
+  answers with another error, the payment method is saved and the reason is logged at info level. Without an agreement
+  id, Quickpay isn't asked. Fixtures, the console and direct database writes are still not validated.
+- **The doctor skips its agreement check with a warning whenever Quickpay didn't accept the api key**, also without an
+  agreement id: `Skipped verifying the agreement — no usable api key`. Without an agreement id it now prints `No
+  agreement id configured (Quickpay uses the account's default Payment Window agreement)`, and for an api user that
+  may not read agreements `Could not verify agreement N: the api user may lack the /agreements permission`.
 - **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
   payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
   retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its

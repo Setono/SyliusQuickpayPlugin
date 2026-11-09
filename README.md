@@ -129,7 +129,11 @@ Quickpay's API and refuses the key if Quickpay rejects it — a typo'd key is ca
 customer whose checkout fails. A valid key whose API user lacks the `/ping` permission is verified through a
 `/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
 Quickpay — the check fails open on anything but an explicit rejection, and logs at info level why the key couldn't be
-verified. Fixtures, the console and writes straight to the database skip this validation.
+verified. With the API key accepted, an **Agreement id** is looked up on the account as well, and refused if Quickpay
+doesn't find it — checkout would otherwise fail when it creates the payment link with that agreement. It fails open the
+same way: an API user without the `/agreements` permission, or an unreachable Quickpay, never blocks saving, and why the
+agreement couldn't be verified is logged at info level. Fixtures, the console and writes straight to the database skip
+this validation.
 
 **Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway
 configurations (`payum.dynamic_gateways.encryption.defuse_secret_key`) in a store that uses this plugin. Only Payum's
@@ -475,6 +479,13 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
   `PUT` checkbox checked for *Create or update payment link*. Also make sure the **Api key** field of your
   payment method holds the **API user's** key (*Settings* → *Users*) — not the api key of a Payment Window
   agreement (*Settings* → *Integration*).
+
+- `This agreement doesn't exist on your Quickpay account` when saving a payment method, or `Agreement 12345 does not
+  exist on this Quickpay account` from the doctor
+
+  The payment method's **Agreement id** isn't an agreement of the Quickpay account its API key belongs to, so checkout
+  can't create a payment link with it. Enter the id of one of the account's agreements (*Settings* → *Integration* in
+  the Quickpay manager), or leave the field empty to use the account's default Payment Window agreement.
 
 - `Validation error: order_id already exists on another payment`
 

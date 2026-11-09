@@ -232,9 +232,10 @@ Read `GLOSSARY.md` (Gateway check, Verdict) first. A gateway check tests against
 configuration's credentials allow and returns a **verdict**; callers branch on its outcome and never catch SDK
 exceptions or interpret Quickpay's status codes themselves.
 - **`GatewayChecksInterface`** (service `GatewayChecks`, arg `QuickpayClientProviderInterface`, so every check follows
-  the HTTP policy): `apiKey(GatewayConfiguration): Verdict`, `paymentLinkPermission(GatewayConfiguration): Verdict`.
+  the HTTP policy): `apiKey(GatewayConfiguration): Verdict`, `agreement(GatewayConfiguration): Verdict`,
+  `paymentLinkPermission(GatewayConfiguration): Verdict`.
   Each check takes a usable configuration: the provider throws `UnusableGatewayConfiguration` for an unusable one,
-  before any request. New checks (the agreement) are methods here, each returning a `Verdict`.
+  before any request. New checks are methods here, each returning a `Verdict`.
 - **`Verdict`**: `outcome` (`VerdictOutcome`: `Passed`, `Failed`, `Undetermined` when Quickpay's answer proves
   neither), `reason` (why it failed or proves nothing; null on a pass) and `note` (a caveat, on any outcome, e.g. how a
   pass was proven or what a check left on the account). Built with `Verdict::passed(?note)`, `failed(reason, ?note)`
@@ -245,6 +246,10 @@ exceptions or interpret Quickpay's status codes themselves.
 - **Api key**: `/ping` accepted → passed. `/ping` refused with 401/403 → a one-item `/payments` read decides, because
   Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
   permission (verified live): accepted → passed with the note that the api user lacks `/ping`; 401/403 → failed.
+- **Agreement** (`agreement()`): the agreement id the gateway sends (typed options, so the 1.x `agreement` and a blank
+  id count as payum-quickpay reads them). None → passed without a request, with the note that Quickpay uses the
+  account's default Payment Window agreement. Otherwise `GET /agreements/{id}`: accepted → passed; 404 → failed;
+  401/403 → undetermined (the api user may lack the `/agreements` permission); any other error → undetermined.
 - **Payment link permission** (`paymentLinkPermission()`, the doctor's `--live` probe; the one check that writes to the
   account): creates a money-less test payment (`POST /payments`, DKK, order id = the gateway's order prefix + `dr` + 6
   random hex digits): 401/403 → failed (may not create payments). Then puts a link on it (`PUT /payments/{id}/link`):
@@ -359,9 +364,10 @@ The order prefix checks need no gateway, so they run on every readable configura
 cross-gateway uniqueness among every readable configuration, usable or not. On a usable one it also runs, on the typed options:
 api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
 reason, counted as a failure, undetermined a warning with its reason; the agreement and `--live` checks run only when
-it passed, the agreement on a client from the provider), private key HMAC self-test (`CallbackValidator`), agreement
-existence (`GET agreements/{id}` for the agreement id the gateway sends, none = the default agreement; failing open on
-permission errors), and notify-route registration; `--live` prints the gateway checks' `paymentLinkPermission()`
+it passed, each skipped with a warning otherwise, also without an agreement id), private key HMAC self-test
+(`CallbackValidator`), the agreement (the gateway checks' `agreement()` verdict, printed by `report()` as `Agreement N
+exists on the account`, or `No agreement id configured` with the default-agreement note), and notify-route
+registration; `--live` prints the gateway checks' `paymentLinkPermission()`
 verdict with its note naming the test payment (skipped with a warning when the api key didn't pass). It warns, without failing, about a stored deprecated gateway option
 (`usesDeprecatedOptions()`: re-save the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout
 captures immediately), for a readable configuration even when it is invalid. Non-zero exit on any failed check;
@@ -499,7 +505,10 @@ in that folder) and need `assets:install` in the host app.
   English. Only on a usable configuration
   does it then run the api key gateway check (`GatewayChecksInterface::apiKey()`, shared with the doctor command; see
   *Gateway checks*): failed → a violation at `config[api_key]` (translated `validators` message); undetermined → the
-  save goes through, logged at info level with the reason; passed → nothing. Tested functionally in `tests/Functional/Validator/` (the
+  save goes through, logged at info level with the reason; passed → nothing. Only when the api key passed and an
+  agreement id is set does it then run the agreement gateway check (`agreement()`): failed → a violation at
+  `config[agreement_id]` (translated `validators` message `agreement_id.not_found`); undetermined → the save goes
+  through, logged at info level with the reason. Tested functionally in `tests/Functional/Validator/` (the
   container's validator with the generator's groups) and `tests/Functional/Form/PaymentMethodFormTest` (the real
   payment method form type).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
