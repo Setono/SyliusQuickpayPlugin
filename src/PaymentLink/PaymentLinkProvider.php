@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\PaymentLink;
 
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Symfony\Component\HttpFoundation\UrlHelper;
 use Symfony\Component\Routing\Exception\ExceptionInterface as RoutingException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
@@ -27,6 +25,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 final class PaymentLinkProvider implements PaymentLinkProviderInterface
 {
     public function __construct(
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly UrlGeneratorInterface $urlGenerator,
         private readonly UrlHelper $urlHelper,
         private readonly bool $unsecuredUrls = false,
@@ -39,9 +38,8 @@ final class PaymentLinkProvider implements PaymentLinkProviderInterface
             return null;
         }
 
-        $method = $payment->getMethod();
-        $gatewayConfig = $method instanceof PaymentMethodInterface ? $method->getGatewayConfig() : null;
-        if (!$gatewayConfig instanceof GatewayConfigInterface || QuickpayGatewayFactory::NAME !== $gatewayConfig->getFactoryName()) {
+        // No gateway configuration found: the payment has no Quickpay payment method, so it isn't a Quickpay payment
+        if (null === $this->gatewayConfigurationProvider->forPayment($payment)) {
             return null;
         }
 

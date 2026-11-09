@@ -2,3 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay hylkäsi tämän API-avaimen. Tarkista, että se on API-käyttäjän API-avain Quickpay-hallinnassa (Asetukset → Käyttäjät).'
+        gateway_option:
+            agreement_id: 'Anna positiivinen kokonaisluku tai jätä kenttä tyhjäksi.'
+            api_key: 'Anna API-käyttäjän API-avain Quickpay-hallinnasta (Asetukset → Käyttäjät).'
+            auto_capture: 'Vanhentuneen "auto_capture"-asetuksen on oltava true tai false. Jätä se pois ja valitse sen sijaan veloitusajankohta.'
+            branding_id: 'Anna positiivinen kokonaisluku tai jätä kenttä tyhjäksi.'
+            language: '"language"-asetuksen on oltava tekstiä, esimerkiksi kielikoodi kuten "en" tai "da".'
+            order_prefix: 'Anna tekstiä tai jätä kenttä tyhjäksi.'
+            payment_methods: 'Anna maksutavat pilkuilla erotettuina tai jätä kenttä tyhjäksi.'
+            private_key: 'Anna tilisi yksityinen avain (Asetukset → Integraatio Quickpay-hallinnassa).'
+            synchronized: 'Tämän on oltava päällä tai pois päältä (true tai false).'
+        invalid_gateway_option: 'Quickpay-maksuyhdyskäytävä ei hyväksy maksuyhdyskäytävän asetuksen "{{ option }}" arvoa.'
+        unreadable: 'Maksuyhdyskäytävän asetuksia ei voi lukea, kuten käy, kun ne on salattu. Maksuyhdyskäytävän asetusten salausta ei tueta.'

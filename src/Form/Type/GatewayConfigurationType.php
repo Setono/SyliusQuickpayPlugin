@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
-use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\CaptureMode;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -13,10 +14,15 @@ use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Validator\Constraints\Length;
-use Symfony\Component\Validator\Constraints\NotBlank;
 
 /**
+ * Saving the payment method validates the whole gateway configuration by the gateway's own rules, in the admin and the
+ * Admin API alike, and puts each error on its field
+ * ({@see \Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration}), so the fields carry no
+ * constraints of their own but the order prefix's length
+ *
  * @extends AbstractType<array<string, mixed>>
  */
 final class GatewayConfigurationType extends AbstractType
@@ -30,17 +36,10 @@ final class GatewayConfigurationType extends AbstractType
             ->add('api_key', TextType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'api_key',
                 'help' => self::TRANSLATION_PREFIX . 'api_key_help',
-                'constraints' => [
-                    new NotBlank(['groups' => 'sylius']),
-                    new QuickpayCredentials(['groups' => 'sylius']),
-                ],
             ])
             ->add('private_key', TextType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'private_key',
                 'help' => self::TRANSLATION_PREFIX . 'private_key_help',
-                'constraints' => [
-                    new NotBlank(['groups' => 'sylius']),
-                ],
             ])
             ->add('agreement_id', IntegerType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'agreement_id',
@@ -69,8 +68,8 @@ final class GatewayConfigurationType extends AbstractType
                 'label' => self::TRANSLATION_PREFIX . 'capture_mode',
                 'help' => self::TRANSLATION_PREFIX . 'capture_mode_help',
                 'choices' => [
-                    self::TRANSLATION_PREFIX . 'capture_mode_option.on_completion' => true,
-                    self::TRANSLATION_PREFIX . 'capture_mode_option.immediately' => false,
+                    self::TRANSLATION_PREFIX . 'capture_mode_option.on_completion' => CaptureMode::OnCompletion->useAuthorize(),
+                    self::TRANSLATION_PREFIX . 'capture_mode_option.immediately' => CaptureMode::Immediately->useAuthorize(),
                 ],
             ])
             ->add('synchronized', CheckboxType::class, [
@@ -98,43 +97,68 @@ final class GatewayConfigurationType extends AbstractType
                 'help' => self::TRANSLATION_PREFIX . 'branding_id_help',
                 'required' => false,
             ])
-            // Gateway configurations stored before the options were renamed carry the old keys;
-            // migrate them so the form shows the stored values and saves the new keys. The agreement
-            // id may be stored as a string (or '' from an unset fixture env var), which the integer
-            // field cannot display, so it is normalized while migrating
             ->addEventListener(FormEvents::PRE_SET_DATA, static function (FormEvent $event): void {
-                $data = $event->getData();
-                if (!is_array($data)) {
-                    return;
+                $config = $event->getData();
+                if (is_array($config)) {
+                    $event->setData(self::formDataOf($event->getForm(), $config));
                 }
-
-                $data['api_key'] ??= $data['apikey'] ?? null;
-                $data['private_key'] ??= $data['privatekey'] ?? null;
-
-                $agreementId = $data['agreement_id'] ?? $data['agreement'] ?? null;
-                $data['agreement_id'] = is_numeric($agreementId) ? (int) $agreementId : null;
-
-                // Configurations saved before 2.0 carry the deprecated `auto_capture` option next to a
-                // hidden `use_authorize: true`. An enabled auto capture is what "capture immediately"
-                // now means, so it becomes `use_authorize: false`; a fresh configuration defaults to
-                // authorize — hold the money, capture on completion
-                if (array_key_exists('auto_capture', $data)) {
-                    $data['use_authorize'] = !self::toBool($data['auto_capture']);
-                }
-                $data['use_authorize'] = self::toBool($data['use_authorize'] ?? true);
-
-                unset($data['apikey'], $data['privatekey'], $data['agreement'], $data['auto_capture']);
-
-                $event->setData($data);
             })
         ;
     }
 
     /**
-     * Stored booleans come in every shape Sylius has persisted over the years: bool, 0/1, '0'/'1'
+     * The form's data for a stored gateway configuration, as the gateway configuration module reads it (ADR 0002): the
+     * form only puts each gateway option's value on the field of the same name. Saving it stores the current option
+     * names, with the deprecated `auto_capture` folded into the capture mode, so re-saving an unchanged form never
+     * changes how a working gateway behaves. Options without a field, such as `language`, are kept as stored.
+     *
+     * A configuration the gateway rejects still opens, so it can be fixed here, and fixing one option keeps the
+     * others: each option the gateway accepts is shown as the gateway reads it, and each rejected one as stored where
+     * its field holds it.
+     *
+     * @param FormInterface<mixed> $form
+     * @param array<array-key, mixed> $config
+     *
+     * @return array<array-key, mixed>
      */
-    private static function toBool(mixed $value): bool
+    private static function formDataOf(FormInterface $form, array $config): array
     {
-        return true === $value || 1 === $value || '1' === $value || 'true' === $value;
+        // A new payment method: the defaults, holding the money until the payment completes
+        if ([] === $config) {
+            return ['use_authorize' => CaptureMode::OnCompletion->useAuthorize()];
+        }
+
+        $configuration = GatewayConfiguration::fromConfig($config);
+        $options = $configuration->optionsWithRejectedAsStored();
+        $data = $configuration->withoutDeprecatedOptions();
+
+        foreach ($form as $option => $field) {
+            if (!array_key_exists($option, $options->values)) {
+                continue;
+            }
+
+            $value = $options->values[$option];
+            $data[$option] = !$options->isRejected($option) || self::holds($field, $value) ? $value : null;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Whether the field shows and saves the value unchanged, so a rejected value can be shown as stored. Any other
+     * value the field would show or save changed, a list as text or a string as a number, so it is shown empty.
+     *
+     * @param FormInterface<mixed> $field
+     */
+    private static function holds(FormInterface $field, mixed $value): bool
+    {
+        $type = $field->getConfig()->getType()->getInnerType();
+
+        return match (true) {
+            $type instanceof CheckboxType => is_bool($value),
+            $type instanceof IntegerType => is_int($value),
+            $type instanceof TextType => is_string($value),
+            default => false,
+        };
     }
 }

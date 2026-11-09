@@ -2,3 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay avviste denne API-nøkkelen. Sjekk at det er API-brukerens API-nøkkel i din Quickpay-manager (Innstillinger → Brukere).'
+        gateway_option:
+            agreement_id: 'Skriv inn et positivt heltall, eller la feltet stå tomt.'
+            api_key: 'Skriv inn API-brukerens API-nøkkel fra din Quickpay-manager (Innstillinger → Brukere).'
+            auto_capture: 'Den utfasede innstillingen "auto_capture" må være true eller false. Utelat den, og velg tidspunkt for belastning i stedet.'
+            branding_id: 'Skriv inn et positivt heltall, eller la feltet stå tomt.'
+            language: 'Innstillingen "language" må være tekst, for eksempel en språkkode som "en" eller "da".'
+            order_prefix: 'Skriv inn tekst, eller la feltet stå tomt.'
+            payment_methods: 'Skriv inn betalingsmetoder atskilt med komma, eller la feltet stå tomt.'
+            private_key: 'Skriv inn kontoens private nøkkel (Innstillinger → Integrasjon i Quickpay-manageren).'
+            synchronized: 'Dette må være på eller av (true eller false).'
+        invalid_gateway_option: 'Quickpay-gatewayen godtar ikke verdien av gateway-innstillingen "{{ option }}".'
+        unreadable: 'Gateway-konfigurasjonen kan ikke leses, slik det skjer når den er kryptert. Kryptering av gateway-konfigurasjoner støttes ikke.'

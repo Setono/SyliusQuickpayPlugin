@@ -6,19 +6,20 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Command;
 
 use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\ForbiddenException;
 use Setono\Quickpay\Exception\NotFoundException;
 use Setono\SyliusQuickpayPlugin\Command\DoctorCommand;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\QueuedResponsesHttpClient;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -33,8 +34,8 @@ final class DoctorCommandTest extends TestCase
     /** @var ObjectProphecy<ClientFactoryInterface> */
     private ObjectProphecy $clientFactory;
 
-    /** @var ObjectProphecy<RepositoryInterface<GatewayConfigInterface>> */
-    private ObjectProphecy $gatewayConfigRepository;
+    /** @var ObjectProphecy<GatewayConfigurationProviderInterface> */
+    private ObjectProphecy $gatewayConfigurationProvider;
 
     /** @var ObjectProphecy<RouterInterface> */
     private ObjectProphecy $router;
@@ -43,10 +44,8 @@ final class DoctorCommandTest extends TestCase
     {
         $this->clientFactory = $this->prophesize(ClientFactoryInterface::class);
 
-        /** @var ObjectProphecy<RepositoryInterface<GatewayConfigInterface>> $gatewayConfigRepository */
-        $gatewayConfigRepository = $this->prophesize(RepositoryInterface::class);
-        $this->gatewayConfigRepository = $gatewayConfigRepository;
-        $this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME])->willReturn([]);
+        $this->gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $this->gatewayConfigurationProvider->all()->willReturn([]);
 
         $this->router = $this->prophesize(RouterInterface::class);
         $this->router->getRouteCollection()->willReturn(self::routes(true));
@@ -57,7 +56,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_passes_a_healthy_configuration(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -68,6 +67,8 @@ final class DoctorCommandTest extends TestCase
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         self::assertStringContainsString('accepted by Quickpay', $tester->getDisplay());
         self::assertStringContainsString('All checks passed', $tester->getDisplay());
+        self::assertStringNotContainsString('deprecated gateway option', $tester->getDisplay());
+        self::assertStringNotContainsString('capture mode is not set', $tester->getDisplay());
     }
 
     /**
@@ -75,7 +76,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_fails_when_quickpay_rejects_the_api_key(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(401, [], '{"message": "Invalid API key"}'),   // ping
@@ -96,7 +97,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_accepts_an_api_key_whose_api_user_lacks_the_ping_permission(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(401, [], '{"message": "Invalid API key"}'),   // ping without the permission
@@ -112,22 +113,69 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
-    public function it_fails_when_no_api_key_is_configured(): void
+    public function it_fails_a_check_for_every_gateway_option_the_gateway_rejects(): void
     {
-        $this->configureGateways(['quickpay' => ['private_key' => 'the-private-key', 'order_prefix' => 'qp_']]);
+        // Each of these passed the doctor's own rules before: the agreement as id 12, the branding id unchecked
+        $this->configureGateways(GatewayConfigurations::of([
+            'private_key' => 'the-private-key',
+            'agreement_id' => 12.0,
+            'branding_id' => 'Our brand',
+            'use_authorize' => true,
+        ]));
 
         $tester = $this->executeCommand();
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('No api key is configured', $tester->getDisplay());
+        self::assertStringContainsString('The "api_key" option is required', $tester->getDisplay());
+        self::assertStringContainsString('The "agreement_id" option must be a positive integer', $tester->getDisplay());
+        self::assertStringContainsString('The "branding_id" option must be a positive integer', $tester->getDisplay());
+        self::assertStringContainsString('3 check(s) failed', $tester->getDisplay());
     }
 
     /**
      * @test
      */
-    public function it_fails_when_no_private_key_is_configured(): void
+    public function it_fails_an_encrypted_gateway_configuration_as_unsupported(): void
     {
-        $this->configureGateways(['quickpay' => ['api_key' => 'the-api-key', 'order_prefix' => 'qp_']]);
+        $this->configureGateways(GatewayConfigurations::encrypted());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('reads as empty, as an encrypted one does before Payum decrypts it. Encrypting gateway configurations is not supported.', $tester->getDisplay());
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+        // Its stored options can't be read, so nothing is said about them
+        self::assertStringNotContainsString('capture mode', $tester->getDisplay());
+    }
+
+    /**
+     * They say what is stored, whether or not the gateway can be built from it
+     *
+     * @test
+     */
+    public function it_warns_about_the_stored_options_of_an_invalid_gateway_configuration_too(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(['apikey' => 'the-api-key']));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('The "private_key" option is required', $tester->getDisplay());
+        self::assertStringContainsString('re-save the payment method', $tester->getDisplay());
+        self::assertStringContainsString('checkout captures immediately', $tester->getDisplay());
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider deprecatedGatewayOptions
+     *
+     * @param array<array-key, mixed> $config
+     */
+    public function it_warns_without_failing_when_a_deprecated_gateway_option_is_stored(array $config): void
+    {
+        $this->configureGateways(GatewayConfigurations::of($config));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -135,8 +183,92 @@ final class DoctorCommandTest extends TestCase
 
         $tester = $this->executeCommand();
 
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('re-save the payment method', $tester->getDisplay());
+    }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed>}>
+     */
+    public static function deprecatedGatewayOptions(): iterable
+    {
+        yield 'a 1.x option name' => [['apikey' => 'the-api-key', 'private_key' => 'the-private-key', 'use_authorize' => true]];
+        yield 'auto_capture on' => [self::healthyConfig(['auto_capture' => true])];
+    }
+
+    /**
+     * As fixtures and the Admin API may store it
+     *
+     * @test
+     */
+    public function it_warns_without_failing_when_the_capture_mode_is_not_set(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(GatewayConfigurations::USABLE));
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('checkout captures immediately', $tester->getDisplay());
+    }
+
+    /**
+     * Their errors would only follow from the configuration's
+     *
+     * @test
+     */
+    public function it_skips_the_checks_against_quickpay_for_an_unusable_gateway_configuration(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'agreement_id' => 12345, 'use_authorize' => true]));
+
+        $this->clientFactory->create(Argument::any())->shouldNotBeCalled();
+
+        $tester = $this->executeCommand(['--live' => true]);
+
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('No private key is configured', $tester->getDisplay());
+        self::assertStringContainsString('The "private_key" option is required', $tester->getDisplay());
+        self::assertStringContainsString('Skipped the checks against Quickpay of this gateway', $tester->getDisplay());
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * The order prefix checks need no gateway, only the order prefix
+     *
+     * @test
+     */
+    public function it_checks_the_order_prefix_of_an_unusable_gateway_configuration(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_way_too_long_', 'use_authorize' => true]));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('The "private_key" option is required', $tester->getDisplay());
+        self::assertStringContainsString('The order prefix "qp_way_too_long_" is 16 characters', $tester->getDisplay());
+        self::assertStringContainsString('2 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_a_usable_and_an_unusable_gateway_configuration_share_an_order_prefix(): void
+    {
+        $this->configureGateways(
+            GatewayConfigurations::of(self::healthyConfig(), 'quickpay_a'),
+            GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_', 'use_authorize' => true], 'quickpay_b'),
+            GatewayConfigurations::encrypted('quickpay_c'),
+        );
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertStringContainsString('Gateways "quickpay_a", "quickpay_b" share the order prefix "qp_"', $tester->getDisplay());
     }
 
     /**
@@ -144,7 +276,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_verifies_a_configured_agreement(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 12345])]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -160,9 +292,47 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
+    public function it_verifies_the_agreement_stored_under_its_1x_name(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => null, 'agreement' => '7'])));
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $client->get('agreements/7')->shouldBeCalled()->willReturn(['id' => 7]);
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('Agreement 7 exists', $tester->getDisplay());
+    }
+
+    /**
+     * The gateway sends no agreement id for a blank one, so Quickpay uses the default agreement
+     *
+     * @test
+     */
+    public function it_passes_a_blank_agreement_id_as_the_default_agreement(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => '   '])));
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $client->get(Argument::any())->shouldNotBeCalled();
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('default Payment Window agreement', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
     public function it_fails_when_the_configured_agreement_does_not_exist(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 12345])]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -180,7 +350,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_fails_when_the_order_prefix_is_too_long(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig(['order_prefix' => 'qp_way_too_long_'])]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_way_too_long_'])));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -197,10 +367,10 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_two_gateways_share_an_order_prefix(): void
     {
-        $this->configureGateways([
-            'quickpay_a' => self::healthyConfig(),
-            'quickpay_b' => self::healthyConfig(),
-        ]);
+        $this->configureGateways(
+            GatewayConfigurations::of(self::healthyConfig(), 'quickpay_a'),
+            GatewayConfigurations::of(self::healthyConfig(), 'quickpay_b'),
+        );
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -230,7 +400,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_probes_the_payment_link_permission_in_live_mode(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(200, [], '{}'),                                    // ping
@@ -251,7 +421,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_fails_when_the_api_user_may_not_create_payment_links(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(200, [], '{}'),                                    // ping
@@ -271,7 +441,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_quickpay_does_not_answer_the_ping(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willThrow(new \RuntimeException('Connection timed out'));
@@ -288,7 +458,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_quickpay_does_not_answer_the_payments_fallback(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(401, [], '{"message": "Invalid API key"}'),
@@ -304,26 +474,14 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
-    public function it_fails_when_the_configured_agreement_is_not_a_number(): void
+    public function it_skips_the_agreement_check_when_quickpay_rejects_the_api_key(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 'not-a-number'])]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
 
-        $client = $this->prophesize(ClientInterface::class);
-        $client->ping()->willReturn(true);
-        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
-
-        $tester = $this->executeCommand();
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('agreement id is not a number', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_skips_the_agreement_check_without_a_usable_api_key(): void
-    {
-        $this->configureGateways(['quickpay' => ['private_key' => 'the-private-key', 'agreement_id' => 12345]]);
+        $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
+            new Response(401, [], '{"message": "Invalid API key"}'),   // ping
+            new Response(401, [], '{"message": "Invalid API key"}'),   // the /payments fallback
+        )));
 
         $tester = $this->executeCommand();
 
@@ -336,7 +494,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_the_agreement_cannot_be_verified(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 12345])]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -354,7 +512,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_the_agreement_check_errors(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig(['agreement_id' => 12345])]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -372,7 +530,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_accepts_an_empty_order_prefix(): void
     {
-        $this->configureGateways(['quickpay' => ['api_key' => 'the-api-key', 'private_key' => 'the-private-key']]);
+        $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'private_key' => 'the-private-key']));
 
         $client = $this->prophesize(ClientInterface::class);
         $client->ping()->willReturn(true);
@@ -389,7 +547,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_fails_when_the_api_user_may_not_create_payments(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(200, [], '{}'),
@@ -407,7 +565,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_the_test_payment_cannot_be_created(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(200, [], '{}'),
@@ -425,7 +583,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_the_link_probe_errors(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(200, [], '{}'),
@@ -446,7 +604,7 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_ignores_a_failing_link_cleanup(): void
     {
-        $this->configureGateways(['quickpay' => self::healthyConfig()]);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $this->clientFactory->create('the-api-key')->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
             new Response(200, [], '{}'),
@@ -472,20 +630,9 @@ final class DoctorCommandTest extends TestCase
         self::assertStringContainsString('No Quickpay payment methods are configured', $tester->getDisplay());
     }
 
-    /**
-     * @param array<string, array<array-key, mixed>> $configs gateway name => gateway config
-     */
-    private function configureGateways(array $configs): void
+    private function configureGateways(GatewayConfiguration ...$configurations): void
     {
-        $gatewayConfigs = [];
-        foreach ($configs as $gatewayName => $config) {
-            $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-            $gatewayConfig->getGatewayName()->willReturn($gatewayName);
-            $gatewayConfig->getConfig()->willReturn($config);
-            $gatewayConfigs[] = $gatewayConfig->reveal();
-        }
-
-        $this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME])->willReturn($gatewayConfigs);
+        $this->gatewayConfigurationProvider->all()->willReturn($configurations);
     }
 
     /**
@@ -495,10 +642,9 @@ final class DoctorCommandTest extends TestCase
      */
     private static function healthyConfig(array $overrides = []): array
     {
-        return $overrides + [
-            'api_key' => 'the-api-key',
-            'private_key' => 'the-private-key',
+        return $overrides + GatewayConfigurations::USABLE + [
             'order_prefix' => 'qp_',
+            'use_authorize' => true,
         ];
     }
 
@@ -537,7 +683,7 @@ final class DoctorCommandTest extends TestCase
         $application->add(new DoctorCommand(
             $this->clientFactory->reveal(),
             new ApiKeyVerifier($this->clientFactory->reveal()),
-            $this->gatewayConfigRepository->reveal(),
+            $this->gatewayConfigurationProvider->reveal(),
             $this->router->reveal(),
         ));
 

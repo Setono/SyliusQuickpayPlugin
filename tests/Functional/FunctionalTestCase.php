@@ -108,7 +108,8 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
-     * The scripted client every Quickpay gateway in the booted kernel sends its requests to
+     * The scripted client every Quickpay gateway, and every Quickpay client the plugin's client factory creates,
+     * in the booted kernel sends its requests to
      */
     protected function quickpay(): ScriptedHttpClient
     {
@@ -383,6 +384,31 @@ abstract class FunctionalTestCase extends KernelTestCase
         while (null !== $requestStack->pop()) {
         }
         $requestStack->push($callback);
+    }
+
+    /**
+     * A payment method on the gateway of the given factory, a Quickpay one unless another is given, with the
+     * gateway configuration stored as given, all persisted. Its gateway is named after its code.
+     *
+     * @param array<array-key, mixed> $config
+     */
+    protected function createPaymentMethod(string $code, array $config, string $factoryName = 'quickpay'): PaymentMethodInterface
+    {
+        $paymentMethodFactory = self::getContainer()->get('sylius.factory.payment_method');
+        self::assertInstanceOf(PaymentMethodFactoryInterface::class, $paymentMethodFactory);
+
+        $paymentMethod = $paymentMethodFactory->createWithGateway($factoryName);
+        $paymentMethod->setCode($code);
+
+        $gatewayConfig = $paymentMethod->getGatewayConfig();
+        self::assertNotNull($gatewayConfig);
+        $gatewayConfig->setGatewayName($code);
+        $gatewayConfig->setConfig($config);
+
+        $this->entityManager()->persist($paymentMethod);
+        $this->entityManager()->flush();
+
+        return $paymentMethod;
     }
 
     protected function entityManager(): EntityManagerInterface

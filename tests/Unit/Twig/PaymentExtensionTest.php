@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Twig;
 
 use Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider;
 use Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider;
 use Setono\SyliusQuickpayPlugin\Twig\PaymentExtension;
 use Setono\SyliusQuickpayPlugin\Twig\PaymentRuntime;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\UrlHelper;
 use Symfony\Component\Routing\Generator\UrlGenerator;
@@ -53,11 +55,13 @@ final class PaymentExtensionTest extends IntegrationTestCase
         $routes = new RouteCollection();
         $routes->add('sylius_shop_order_pay', new Route('/{_locale}/order/{tokenValue}/pay'));
         $context = new RequestContext('', 'GET', 'localhost', 'http');
+        // The fixtures' payment methods carry their gateway configurations, so no other one is stored
+        $gatewayConfigurationProvider = new GatewayConfigurationProvider($this->createStub(RepositoryInterface::class));
 
         return [new FactoryRuntimeLoader([
             PaymentRuntime::class => static fn (): PaymentRuntime => new PaymentRuntime(
-                new PaymentMethodLogoProvider(['resurs' => 'https://cdn.example/resurs.png'], ['dankort', 'visa', 'mastercard']),
-                new PaymentLinkProvider(new UrlGenerator($routes, $context), new UrlHelper(new RequestStack(), $context)),
+                new PaymentMethodLogoProvider($gatewayConfigurationProvider, ['resurs' => 'https://cdn.example/resurs.png'], ['dankort', 'visa', 'mastercard']),
+                new PaymentLinkProvider($gatewayConfigurationProvider, new UrlGenerator($routes, $context), new UrlHelper(new RequestStack(), $context)),
             ),
         ])];
     }

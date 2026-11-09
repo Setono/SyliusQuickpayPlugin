@@ -2,3 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay heeft deze API-sleutel geweigerd. Controleer of het de API-sleutel van de API-gebruiker in je Quickpay-manager is (Instellingen → Gebruikers).'
+        gateway_option:
+            agreement_id: 'Voer een positief geheel getal in, of laat het veld leeg.'
+            api_key: 'Voer de API-sleutel van de API-gebruiker uit je Quickpay-manager in (Instellingen → Gebruikers).'
+            auto_capture: 'De verouderde optie "auto_capture" moet true of false zijn. Laat deze weg en kies in plaats daarvan het moment van incasso.'
+            branding_id: 'Voer een positief geheel getal in, of laat het veld leeg.'
+            language: 'De optie "language" moet tekst zijn, bijvoorbeeld een taalcode zoals "en" of "da".'
+            order_prefix: 'Voer tekst in, of laat het veld leeg.'
+            payment_methods: 'Voer betaalmethoden in, gescheiden door komma''s, of laat het veld leeg.'
+            private_key: 'Voer de privésleutel van je account in (Instellingen → Integratie in de Quickpay-manager).'
+            synchronized: 'Dit moet aan of uit staan (true of false).'
+        invalid_gateway_option: 'De Quickpay-gateway accepteert de waarde van de gatewayoptie "{{ option }}" niet.'
+        unreadable: 'De gatewayconfiguratie kan niet worden gelezen, zoals gebeurt wanneer deze versleuteld is. Het versleutelen van gatewayconfiguraties wordt niet ondersteund.'

@@ -122,11 +122,21 @@ out the gateway configuration:
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
 | Branding id | *(optional)* The payment window branding to use |
 
-When you save the payment method, the plugin verifies the API key against Quickpay's API and rejects the
-form if Quickpay rejects the key — a typo'd key is caught immediately instead of by the first customer
-whose checkout fails. A valid key whose API user lacks the `/ping` permission is verified through a
+When you save the payment method, in the admin or through the Admin API, the plugin refuses a gateway configuration
+the gateway would reject (a missing api or private key, a branding name where the branding id belongs, an agreement
+id of 0, ...), with an error on each field to fix. Once the configuration is valid, it verifies the API key against
+Quickpay's API and refuses the key if Quickpay rejects it — a typo'd key is caught immediately instead of by the first
+customer whose checkout fails. A valid key whose API user lacks the `/ping` permission is verified through a
 `/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
-Quickpay — the check fails open on anything but an explicit rejection.
+Quickpay — the check fails open on anything but an explicit rejection. Fixtures, the console and writes straight to
+the database skip this validation.
+
+**Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway
+configurations (`payum.dynamic_gateways.encryption.defuse_secret_key`) in a store that uses this plugin. Only Payum's
+own storage and Sylius' admin form decrypt a configuration, so the plugin finds none where it reads one and treats
+that as an error: the shared callback endpoint, for one, answers every callback with a 500 until encryption is
+switched off. Sylius core itself also reads the capture mode (`use_authorize`) before Payum decrypts the
+configuration, so its checkout would capture immediately whatever the payment method's capture mode says.
 
 ## How it works
 
@@ -162,6 +172,9 @@ from the gateway configuration's **Payment methods** field, so nothing is config
 MobilePay mark; a token without a bundled logo (e.g. `resurs`) renders as a small text label. Quickpay's token
 grammar is understood: exclusions (`!diners`) are skipped, forced 3-D Secure (`3d-creditcard`) is ignored, and
 regional/debit variants (`visa-dk`, `mastercard-debet-dk`, `mobilepay-subscriptions`) collapse onto their brand.
+The field is read the way the gateway reads it, so `payment_methods` stored as a list (by fixtures or the Admin API)
+gets logos too. A payment method whose gateway configuration is unusable shows no logos and a warning is logged; the
+checkout keeps working.
 
 Bundled logos cover cards (Visa, Visa Electron, Mastercard, Maestro, American Express, Diners Club, Discover, JCB,
 UnionPay, Dankort, Forbrugsforeningen) and MobilePay, Apple Pay, Google Pay, Klarna, Anyday, Vipps, Swish, PayPal,
@@ -207,8 +220,8 @@ is sent in the order's locale through Sylius' mailer and can be overridden like 
 Each Quickpay payment on the admin order view shows its **live operation history** — every
 authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
 captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
-so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, the panel shows an
-inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
+so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
+gateway configuration is unusable, the panel shows an inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
 
 ## Fraud signals
 
@@ -219,10 +232,11 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
   the automatic capture on the payment's `complete` transition is skipped when Quickpay reports the payment as
   fraud suspected — the completion itself is not blocked; the payment is logged and left for manual review, so
   you capture or cancel it in the Quickpay manager after looking at it. The check asks Quickpay at capture time
-  and fails open: an unreachable Quickpay never blocks the payment flow. It costs one extra API call per
+  and fails open: an unreachable Quickpay, or an unusable gateway configuration, never blocks the payment flow. It costs one extra API call per
   automatic capture, which is why it is off by default.
 - A **report mode** on the reconciliation command that asks Quickpay for every payment flagged in the period,
-  regardless of its local state — report only, nothing is transitioned:
+  regardless of its local state — report only, nothing is transitioned. A gateway it can't query, because Quickpay
+  fails or its gateway configuration is unusable, is reported by name and makes the run exit non-zero:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
@@ -245,7 +259,10 @@ https://your-shop.example/payment/quickpay/notify
 ```
 
 That endpoint resolves the payment from the callback body (`order_id` → your order prefix → the Sylius payment)
-precisely because one static url cannot carry a Payum token. A Quickpay account has exactly one such url, so when
+precisely because one static url cannot carry a Payum token. It strips the order prefix of every Quickpay payment
+method, so while one of them has a gateway configuration the gateway can't be built from (written by fixtures, the
+Admin API or the database directly), it answers every callback with a 500 and Quickpay retries it once that is fixed.
+A Quickpay account has exactly one such url, so when
 several environments share an account, only the one it points at receives those callbacks — the others can rely on
 the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries undelivered callbacks 24 times with
 backoff.
@@ -354,6 +371,25 @@ link `PUT` the checkout depends on, catching a missing *Create or update payment
 a customer does (the test payment remains visible on the account; it never carries money). The command
 exits non-zero when any check fails, so it can run in CI or cron.
 
+First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
+means the gateway can be built:
+
+- every gateway option the gateway would reject is a failed check of its own, e.g. a missing api key or private key,
+  an agreement or branding id that isn't a positive whole number, or a `synchronized` that isn't a yes/no value. Only
+  the checks against Quickpay are then skipped for that gateway, since their errors would only follow from these: its
+  order prefix is still checked for length and compared with the other gateways' prefixes;
+- an encrypted gateway configuration is a failed check saying encryption isn't supported (see
+  [Configuration](#configuration));
+- the agreement it looks up is the one the gateway sends: an empty agreement id means the account's default
+  agreement, and an agreement id stored under its 1.x name `agreement` is used like the gateway uses it.
+
+It also warns, without failing the run, about two things that work but surprise people:
+
+- a gateway option still stored under its 1.x name (`apikey`, `privatekey`, `agreement`), or the deprecated
+  `auto_capture` switched on: re-save the payment method in the admin to replace them;
+- no capture mode stored (`use_authorize`), as fixtures and the Admin API may leave it: checkout then captures
+  immediately. Choose the capture mode on the payment method in the admin and save it.
+
 ## Upgrading from 1.x
 
 See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the full list of changes an upgrading store has to make —
@@ -386,6 +422,32 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
 - `Validation error: order_id must have length between 4 and 20`
 
   Shorten the *Order prefix* of your Quickpay payment method to 11 characters or less.
+
+- `The "branding_id" option must be a positive integer (or an integer string), got 'Our brand'` from the doctor, or
+  any other `The "<option>" option ...` failure
+
+  The gateway is built from that gateway configuration on every checkout, callback, capture, refund and reconcile,
+  and it rejects the option, so each of them fails for that payment method. Open the payment method in the admin and
+  correct the field named in the message: an agreement or branding id is the number from the Quickpay manager, not
+  its name.
+
+- `The gateway configuration of the Quickpay gateway "<gateway>" reads as empty, as an encrypted one does` from the
+  doctor
+
+  PayumBundle's encryption of gateway configurations is switched on, which this plugin doesn't support. Switch it off
+  (see [Configuration](#configuration)).
+
+- `The gateway configuration uses a deprecated gateway option` (a doctor warning)
+
+  The payment method's gateway configuration still has a 1.x option name (`apikey`, `privatekey`, `agreement`) or
+  `auto_capture` switched on. It works, but 3.0 stops reading them. Open the payment method in the admin and save it:
+  that stores the current names, with `auto_capture` folded into the capture mode.
+
+- `The capture mode is not set, so checkout captures immediately` (a doctor warning)
+
+  The gateway configuration has no `use_authorize`, as fixtures and the Admin API can leave it, and Sylius' checkout
+  then lets Quickpay capture the money at authorization. The admin form shows it as "Immediately". Open the payment
+  method in the admin, choose the capture mode you want and save it: the mode is then stored, and the warning goes.
 
 - `Payment 42: skipped, it is locked by a callback being handled or another run`
 

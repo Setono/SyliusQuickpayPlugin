@@ -10,8 +10,9 @@ use Psr\Http\Message\ResponseInterface;
 
 /**
  * A PSR-18 client standing in for Quickpay's API: a test scripts the response per method and path,
- * and asserts on the requests sent. In the test application every Quickpay gateway sends its
- * requests here (see {@see ScriptedGatewayFactoryBuilder}).
+ * and asserts on the requests sent. In the test application every Quickpay gateway and the plugin's
+ * client factory send their requests here (see {@see ScriptedGatewayFactoryBuilder} and
+ * {@see ScriptedClientFactory}).
  */
 final class ScriptedHttpClient implements ClientInterface
 {

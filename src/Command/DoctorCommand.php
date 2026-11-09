@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Command;
 
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
+use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\Quickpay\Callback\CallbackValidator;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\ForbiddenException;
@@ -12,12 +12,12 @@ use Setono\Quickpay\Exception\NotFoundException;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Request\Payment\CreateLinkRequest;
 use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
 use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -28,8 +28,10 @@ use Symfony\Component\Routing\RouterInterface;
 
 /**
  * Runs the checks that otherwise surface as support cases (see the README's Troubleshooting
- * section) against every configured Quickpay gateway: credentials, permissions, agreement,
- * order prefix, and the notify route. Read-only unless --live is passed.
+ * section) against every configured Quickpay gateway: its gateway options, read through the
+ * gateway configuration module by the rules the gateway is built from, then the api key and
+ * private key, the api user's permissions, the agreement, the order prefix, and the notify route.
+ * Read-only unless --live is passed.
  */
 #[AsCommand(
     name: 'setono:sylius-quickpay:doctor',
@@ -45,13 +47,10 @@ final class DoctorCommand extends Command
 
     private int $failures = 0;
 
-    /**
-     * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
-     */
     public function __construct(
         private readonly ClientFactoryInterface $clientFactory,
         private readonly ApiKeyVerifierInterface $apiKeyVerifier,
-        private readonly RepositoryInterface $gatewayConfigRepository,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly RouterInterface $router,
     ) {
         parent::__construct();
@@ -75,28 +74,36 @@ final class DoctorCommand extends Command
 
         $this->checkNotifyRoute($io);
 
-        /** @var list<GatewayConfigInterface> $gatewayConfigs */
-        $gatewayConfigs = $this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME]);
+        $gateways = [];
+        foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
+            $gateways[] = [$gatewayConfiguration, self::optionsOrWhyUnusable($gatewayConfiguration)];
+        }
 
-        if ([] === $gatewayConfigs) {
+        if ([] === $gateways) {
             $this->warn($io, 'No Quickpay payment methods are configured yet — nothing else to check');
         }
 
-        $this->checkDuplicateOrderPrefixes($io, $gatewayConfigs);
+        $this->checkDuplicateOrderPrefixes($io, $gateways);
 
-        foreach ($gatewayConfigs as $gatewayConfig) {
-            $io->section(sprintf('Gateway "%s"', (string) $gatewayConfig->getGatewayName()));
+        foreach ($gateways as [$gatewayConfiguration, $options]) {
+            $io->section(sprintf('Gateway "%s"', $gatewayConfiguration->gatewayName));
 
-            $config = $gatewayConfig->getConfig();
+            if ($options instanceof UnusableGatewayConfiguration) {
+                $this->reportUnusable($io, $gatewayConfiguration, $options);
 
-            $client = $this->checkApiKey($io, $config);
-            $this->checkPrivateKey($io, $config);
-            $this->checkAgreement($io, $config, $client);
-            $this->checkOrderPrefix($io, $config);
+                continue;
+            }
+
+            $this->checkStoredOptions($io, $gatewayConfiguration);
+
+            $client = $this->checkApiKey($io, $options->apiKey);
+            $this->checkPrivateKey($io, $options->privateKey);
+            $this->checkAgreement($io, $options->agreementId, $client);
+            $this->checkOrderPrefix($io, $options->orderPrefix);
 
             if (null !== $client) {
                 if ($live) {
-                    $this->checkPaymentLinkPermission($io, $config, $client);
+                    $this->checkPaymentLinkPermission($io, $options->orderPrefix, $client);
                 } else {
                     $this->warn($io, 'Run with --live to probe the payment link permission (creates a harmless test payment)');
                 }
@@ -128,44 +135,107 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * Two gateways sharing a prefix on the same account produce the same Quickpay order id for the
-     * same order, and "order_id already exists" for whichever payment reaches Quickpay second
-     *
-     * @param list<GatewayConfigInterface> $gatewayConfigs
+     * The gateway options by the rules the gateway is built from, or why the gateway can't be built
      */
-    private function checkDuplicateOrderPrefixes(SymfonyStyle $io, array $gatewayConfigs): void
+    private static function optionsOrWhyUnusable(GatewayConfiguration $gatewayConfiguration): GatewayOptions|UnusableGatewayConfiguration
     {
-        $byPrefix = [];
-        foreach ($gatewayConfigs as $gatewayConfig) {
-            $prefix = self::orderPrefix($gatewayConfig->getConfig());
-            if ('' !== $prefix) {
-                $byPrefix[$prefix][] = (string) $gatewayConfig->getGatewayName();
+        try {
+            return $gatewayConfiguration->options();
+        } catch (UnusableGatewayConfiguration $e) {
+            return $e;
+        }
+    }
+
+    /**
+     * One failed check per gateway option the gateway rejects, and the order prefix checks, which need no gateway.
+     * The checks against Quickpay are skipped: the gateway can't be built, and their errors would only follow from
+     * the configuration's.
+     */
+    private function reportUnusable(
+        SymfonyStyle $io,
+        GatewayConfiguration $gatewayConfiguration,
+        UnusableGatewayConfiguration $unusable,
+    ): void {
+        // Nothing can be said about the stored options of an unreadable configuration
+        if ($unusable->isUnreadable()) {
+            $this->fail($io, sprintf('%s See the README\'s Configuration section.', $unusable->getMessage()));
+        } else {
+            foreach ($unusable->getViolations() as $violation) {
+                $this->fail($io, $violation);
+            }
+
+            $this->checkStoredOptions($io, $gatewayConfiguration);
+
+            $orderPrefix = self::orderPrefixOf($gatewayConfiguration);
+            if (null !== $orderPrefix) {
+                $this->checkOrderPrefix($io, $orderPrefix);
             }
         }
 
-        foreach ($byPrefix as $prefix => $gateways) {
-            if (\count($gateways) > 1) {
+        $this->warn($io, 'Skipped the checks against Quickpay of this gateway — they need a gateway configuration the gateway can be built from');
+    }
+
+    /**
+     * The order prefix the gateway sends, read even from a configuration the gateway rejects. Null when the
+     * configuration is unreadable, or the gateway rejects the order prefix itself, which its violation reports.
+     */
+    private static function orderPrefixOf(GatewayConfiguration $gatewayConfiguration): ?string
+    {
+        try {
+            $options = $gatewayConfiguration->optionsWithRejectedAsStored();
+        } catch (UnusableGatewayConfiguration) {
+            return null;
+        }
+
+        $orderPrefix = $options->values['order_prefix'] ?? null;
+
+        return !$options->isRejected('order_prefix') && is_string($orderPrefix) ? $orderPrefix : null;
+    }
+
+    /**
+     * What the stored configuration says that works but surprises people. Neither fails the run.
+     */
+    private function checkStoredOptions(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration): void
+    {
+        if ($gatewayConfiguration->usesDeprecatedOptions()) {
+            $this->warn($io, 'The gateway configuration uses a deprecated gateway option (a 1.x option name, or auto_capture) — re-save the payment method in the admin to replace it before 3.0 stops reading it');
+        }
+
+        if (!$gatewayConfiguration->isCaptureModeSet()) {
+            $this->warn($io, 'The capture mode is not set, so checkout captures immediately — choose a capture mode on the payment method in the admin');
+        }
+    }
+
+    /**
+     * Two gateways sharing a prefix on the same account produce the same Quickpay order id for the
+     * same order, and "order_id already exists" for whichever payment reaches Quickpay second. Compared across every
+     * readable configuration, usable or not: an unusable one keeps its order prefix once it is fixed.
+     *
+     * @param list<array{GatewayConfiguration, GatewayOptions|UnusableGatewayConfiguration}> $gateways
+     */
+    private function checkDuplicateOrderPrefixes(SymfonyStyle $io, array $gateways): void
+    {
+        $byPrefix = [];
+        foreach ($gateways as [$gatewayConfiguration]) {
+            $orderPrefix = self::orderPrefixOf($gatewayConfiguration);
+            if (null !== $orderPrefix && '' !== $orderPrefix) {
+                $byPrefix[$orderPrefix][] = $gatewayConfiguration->gatewayName;
+            }
+        }
+
+        foreach ($byPrefix as $prefix => $gatewayNames) {
+            if (\count($gatewayNames) > 1) {
                 $this->warn($io, sprintf(
                     'Gateways %s share the order prefix "%s" — their Quickpay order ids can collide',
-                    implode(', ', array_map(static fn (string $gateway): string => sprintf('"%s"', $gateway), $gateways)),
+                    implode(', ', array_map(static fn (string $gatewayName): string => sprintf('"%s"', $gatewayName), $gatewayNames)),
                     $prefix,
                 ));
             }
         }
     }
 
-    /**
-     * @param array<array-key, mixed> $config
-     */
-    private function checkApiKey(SymfonyStyle $io, array $config): ?ClientInterface
+    private function checkApiKey(SymfonyStyle $io, string $apiKey): ?ClientInterface
     {
-        $apiKey = ApiKeyResolver::fromGatewayConfig($config);
-        if (null === $apiKey) {
-            $this->fail($io, 'No api key is configured');
-
-            return null;
-        }
-
         try {
             $verification = $this->apiKeyVerifier->verify($apiKey);
         } catch (UnauthorizedException|ForbiddenException) {
@@ -186,20 +256,8 @@ final class DoctorCommand extends Command
         return $this->clientFactory->create($apiKey);
     }
 
-    /**
-     * @param array<array-key, mixed> $config
-     */
-    private function checkPrivateKey(SymfonyStyle $io, array $config): void
+    private function checkPrivateKey(SymfonyStyle $io, string $privateKey): void
     {
-        // Configurations written by the 1.x form may still carry the old key
-        $privateKey = $config['private_key'] ?? $config['privatekey'] ?? null;
-
-        if (!is_string($privateKey) || '' === $privateKey) {
-            $this->fail($io, 'No private key is configured — every callback would be rejected as unsigned');
-
-            return;
-        }
-
         // Exercise the sign/verify path the callbacks depend on; a sign-then-verify roundtrip with
         // the same key cannot report false, so the self-test's failure mode is an exception
         $validator = new CallbackValidator($privateKey);
@@ -210,57 +268,43 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * @param array<array-key, mixed> $config
+     * @param int|null $agreementId the agreement id the gateway sends, null for none
      */
-    private function checkAgreement(SymfonyStyle $io, array $config, ?ClientInterface $client): void
+    private function checkAgreement(SymfonyStyle $io, ?int $agreementId, ?ClientInterface $client): void
     {
-        // Configurations written by the 1.x form may still carry the old key
-        $agreementId = $config['agreement_id'] ?? $config['agreement'] ?? null;
-
-        if (null === $agreementId || '' === $agreementId) {
+        if (null === $agreementId) {
             $this->ok($io, 'No agreement id configured — Quickpay uses the account\'s default Payment Window agreement');
 
             return;
         }
 
-        if (!is_numeric($agreementId)) {
-            $this->fail($io, sprintf('The configured agreement id is not a number (got "%s")', get_debug_type($agreementId)));
-
-            return;
-        }
-
         if (null === $client) {
-            $this->warn($io, sprintf('Skipped verifying agreement %d — no usable api key', (int) $agreementId));
+            $this->warn($io, sprintf('Skipped verifying agreement %d — no usable api key', $agreementId));
 
             return;
         }
 
         try {
-            $client->get(sprintf('agreements/%d', (int) $agreementId));
+            $client->get(sprintf('agreements/%d', $agreementId));
         } catch (NotFoundException) {
-            $this->fail($io, sprintf('Agreement %d does not exist on this Quickpay account', (int) $agreementId));
+            $this->fail($io, sprintf('Agreement %d does not exist on this Quickpay account', $agreementId));
 
             return;
         } catch (UnauthorizedException|ForbiddenException) {
-            $this->warn($io, sprintf('Could not verify agreement %d — the api user may not have the /agreements permission', (int) $agreementId));
+            $this->warn($io, sprintf('Could not verify agreement %d — the api user may not have the /agreements permission', $agreementId));
 
             return;
         } catch (\Throwable $e) {
-            $this->warn($io, sprintf('Could not verify agreement %d: %s', (int) $agreementId, $e->getMessage()));
+            $this->warn($io, sprintf('Could not verify agreement %d: %s', $agreementId, $e->getMessage()));
 
             return;
         }
 
-        $this->ok($io, sprintf('Agreement %d exists on the account', (int) $agreementId));
+        $this->ok($io, sprintf('Agreement %d exists on the account', $agreementId));
     }
 
-    /**
-     * @param array<array-key, mixed> $config
-     */
-    private function checkOrderPrefix(SymfonyStyle $io, array $config): void
+    private function checkOrderPrefix(SymfonyStyle $io, string $prefix): void
     {
-        $prefix = self::orderPrefix($config);
-
         if (\strlen($prefix) > self::MAX_ORDER_PREFIX_LENGTH) {
             $this->fail($io, sprintf(
                 'The order prefix "%s" is %d characters — keep it to %d or less, or Quickpay rejects the order id at checkout',
@@ -281,12 +325,10 @@ final class DoctorCommand extends Command
      * The one check that needs a write: create a money-less test payment and attempt the link PUT
      * the checkout depends on, surfacing the "Not authorized to PUT /payments/:id/link" case
      * before a customer does
-     *
-     * @param array<array-key, mixed> $config
      */
-    private function checkPaymentLinkPermission(SymfonyStyle $io, array $config, ClientInterface $client): void
+    private function checkPaymentLinkPermission(SymfonyStyle $io, string $orderPrefix, ClientInterface $client): void
     {
-        $orderId = self::orderPrefix($config) . 'dr' . bin2hex(random_bytes(3));
+        $orderId = $orderPrefix . 'dr' . bin2hex(random_bytes(3));
 
         try {
             $payment = $client->payments()->create(new CreatePaymentRequest(orderId: $orderId, currency: 'DKK'));
@@ -316,16 +358,6 @@ final class DoctorCommand extends Command
         }
 
         $this->warn($io, sprintf('Test payment %d (order id "%s") remains on the account — it never carries money', $payment->id, $orderId));
-    }
-
-    /**
-     * @param array<array-key, mixed> $config
-     */
-    private static function orderPrefix(array $config): string
-    {
-        $prefix = $config['order_prefix'] ?? null;
-
-        return is_string($prefix) ? $prefix : '';
     }
 
     private function ok(SymfonyStyle $io, string $message): void

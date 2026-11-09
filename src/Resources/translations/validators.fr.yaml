@@ -2,3 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay a rejeté cette clé API. Vérifiez qu''il s''agit de la clé API de l''utilisateur API dans votre manager Quickpay (Paramètres → Utilisateurs).'
+        gateway_option:
+            agreement_id: 'Saisissez un nombre entier positif, ou laissez le champ vide.'
+            api_key: 'Saisissez la clé API de l''utilisateur API de votre manager Quickpay (Paramètres → Utilisateurs).'
+            auto_capture: 'L''option obsolète "auto_capture" doit valoir true ou false. Omettez-la et choisissez plutôt le moment de la capture.'
+            branding_id: 'Saisissez un nombre entier positif, ou laissez le champ vide.'
+            language: 'L''option "language" doit être du texte, par exemple un code de langue comme "en" ou "da".'
+            order_prefix: 'Saisissez du texte, ou laissez le champ vide.'
+            payment_methods: 'Saisissez les méthodes de paiement séparées par des virgules, ou laissez le champ vide.'
+            private_key: 'Saisissez la clé privée de votre compte (Paramètres → Intégration dans le manager Quickpay).'
+            synchronized: 'Cette valeur doit être activée ou désactivée (true ou false).'
+        invalid_gateway_option: 'La passerelle Quickpay n''accepte pas la valeur de l''option de passerelle "{{ option }}".'
+        unreadable: 'La configuration de la passerelle ne peut pas être lue, comme c''est le cas lorsqu''elle est chiffrée. Le chiffrement des configurations de passerelle n''est pas pris en charge.'

@@ -9,15 +9,15 @@ use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Client\Client;
 use Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\FixedResponseHttpClient;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -39,18 +39,15 @@ final class ReconcilePaymentsCommandTest extends TestCase
     /** @var ObjectProphecy<ClientFactoryInterface> */
     private ObjectProphecy $clientFactory;
 
-    /** @var ObjectProphecy<RepositoryInterface<GatewayConfigInterface>> */
-    private ObjectProphecy $gatewayConfigRepository;
+    /** @var ObjectProphecy<GatewayConfigurationProviderInterface> */
+    private ObjectProphecy $gatewayConfigurationProvider;
 
     protected function setUp(): void
     {
         $this->pendingPaymentProvider = $this->prophesize(PendingPaymentProviderInterface::class);
         $this->reconciler = $this->prophesize(PaymentReconcilerInterface::class);
         $this->clientFactory = $this->prophesize(ClientFactoryInterface::class);
-
-        /** @var ObjectProphecy<RepositoryInterface<GatewayConfigInterface>> $gatewayConfigRepository */
-        $gatewayConfigRepository = $this->prophesize(RepositoryInterface::class);
-        $this->gatewayConfigRepository = $gatewayConfigRepository;
+        $this->gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
     }
 
     /**
@@ -91,14 +88,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
      */
     public function it_reports_fraud_suspected_payments_without_touching_any_payment(): void
     {
-        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
-        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
-
-        $this->gatewayConfigRepository
-            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
-            ->willReturn([$gatewayConfig->reveal()])
-        ;
+        $this->gatewayConfigurationProvider->all()->willReturn([GatewayConfigurations::of(gatewayName: 'quickpay_credit_card')]);
 
         $response = new Response(200, ['Content-Type' => 'application/json'], (string) json_encode([[
             'id' => 501,
@@ -130,14 +120,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
      */
     public function it_caps_the_fraud_report_at_the_limit(): void
     {
-        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
-        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
-
-        $this->gatewayConfigRepository
-            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
-            ->willReturn([$gatewayConfig->reveal()])
-        ;
+        $this->gatewayConfigurationProvider->all()->willReturn([GatewayConfigurations::of(gatewayName: 'quickpay_credit_card')]);
 
         $payment = [
             'id' => 501,
@@ -166,24 +149,37 @@ final class ReconcilePaymentsCommandTest extends TestCase
 
     /**
      * @test
+     *
+     * @dataProvider unusableGatewayConfigurations
      */
-    public function it_skips_gateways_without_an_api_key_in_the_fraud_report(): void
+    public function it_reports_a_gateway_with_an_unusable_gateway_configuration_in_the_fraud_report(GatewayConfiguration $unusable): void
     {
-        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-        $gatewayConfig->getConfig()->willReturn([]);
-        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
+        $this->gatewayConfigurationProvider->all()->willReturn([
+            $unusable,
+            GatewayConfigurations::of(gatewayName: 'quickpay_mobilepay'),
+        ]);
 
-        $this->gatewayConfigRepository
-            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
-            ->willReturn([$gatewayConfig->reveal()])
+        $this->clientFactory
+            ->create('the-api-key')
+            ->willReturn(new Client('the-api-key', new FixedResponseHttpClient(new Response(200, ['Content-Type' => 'application/json'], '[]'))))
         ;
-
-        $this->clientFactory->create(Argument::any())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--fraud-suspected' => true]);
 
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('Gateway "quickpay_credit_card"', $tester->getDisplay());
+        // The other gateway is still queried
         self::assertStringContainsString('no fraud suspected payments', $tester->getDisplay());
+    }
+
+    /**
+     * @return iterable<string, array{GatewayConfiguration}>
+     */
+    public static function unusableGatewayConfigurations(): iterable
+    {
+        yield 'without an api key' => [GatewayConfigurations::of(['private_key' => 'the-private-key'], 'quickpay_credit_card')];
+
+        yield 'encrypted' => [GatewayConfigurations::encrypted('quickpay_credit_card')];
     }
 
     /**
@@ -191,14 +187,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
      */
     public function it_reports_an_error_when_a_gateway_cannot_be_queried_for_fraud(): void
     {
-        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
-        $gatewayConfig->getGatewayName()->willReturn('quickpay_credit_card');
-
-        $this->gatewayConfigRepository
-            ->findBy(['factoryName' => QuickpayGatewayFactory::NAME])
-            ->willReturn([$gatewayConfig->reveal()])
-        ;
+        $this->gatewayConfigurationProvider->all()->willReturn([GatewayConfigurations::of(gatewayName: 'quickpay_credit_card')]);
 
         $this->clientFactory
             ->create('the-api-key')
@@ -221,7 +210,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
             $this->pendingPaymentProvider->reveal(),
             $this->reconciler->reveal(),
             $this->clientFactory->reveal(),
-            $this->gatewayConfigRepository->reveal(),
+            $this->gatewayConfigurationProvider->reveal(),
         ));
 
         $tester = new CommandTester($application->find('setono:sylius-quickpay:reconcile-payments'));

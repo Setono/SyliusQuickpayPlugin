@@ -2,3 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay rejected this API key. Check that it is the API key of the API user in your Quickpay manager (Settings → Users).'
+        gateway_option:
+            agreement_id: 'Enter a positive whole number, or leave the field empty.'
+            api_key: 'Enter the API key of the API user in your Quickpay manager (Settings → Users).'
+            auto_capture: 'The deprecated "auto_capture" option must be true or false. Leave it out and choose the capture mode instead.'
+            branding_id: 'Enter a positive whole number, or leave the field empty.'
+            language: 'The "language" option must be text, for example a language code such as "en" or "da".'
+            order_prefix: 'Enter text, or leave the field empty.'
+            payment_methods: 'Enter payment methods separated by commas, or leave the field empty.'
+            private_key: 'Enter the private key of your account (Settings → Integration in the Quickpay manager).'
+            synchronized: 'This must be on or off (true or false).'
+        invalid_gateway_option: 'The Quickpay gateway doesn''t accept the value of the gateway option "{{ option }}".'
+        unreadable: 'The gateway configuration can''t be read, as happens when it is encrypted. Encrypting gateway configurations is not supported.'
