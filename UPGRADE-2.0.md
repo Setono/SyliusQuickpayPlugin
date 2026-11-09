@@ -355,3 +355,19 @@ The service definitions changed accordingly; only a redefinition or decoration o
   cancel (skip the operation when Quickpay already did it) use the status check. Before, completing a payment
   Quickpay had already captured ran `complete` and its callbacks a second time from inside the first, and the
   guard's status read saved refreshed details; now it saves nothing.
+- **Completing a payment Quickpay holds no authorization for fails with the plugin's own error, and sends nothing else
+  to Quickpay.** When the status check before the capture maps the Quickpay payment's status to any payment state but
+  `authorized` or `completed` (`new` for a payment the customer never paid, `failed` for a declined one), the
+  `complete` transition throws the new `StateMachine\NoAuthorizationToCapture`, which names the Sylius payment, its
+  Quickpay payment id and that state, and the transition aborts; the admin sees an error page with its message. Before,
+  the plugin executed a capture anyway: for a never-paid payment Sylius fell back to a Convert without a token and the
+  admin got an unexplained 500, and a declined payment had its link at Quickpay replaced with an auto-capture link
+  before the transition aborted with a redirect. A payment Quickpay already captured still completes without a
+  capture, and an authorized one is captured as before, after the opt-in fraud guard, which no longer runs for a
+  payment that can't be captured.
+- **An operation switched off in the plugin's config (`operations.capture`, `refund` or `cancel`) never touches the
+  gateway**, so its transition is applied even when the payment's gateway configuration is unusable. Before, the
+  gateway was built before the switch was read, so an unusable configuration aborted `complete` and `cancel` even with
+  the operation switched off. With the operation on, an unusable configuration is that operation's error: `complete`
+  and `refund` abort the transition, as before, and `cancel` logs a warning and the transition proceeds, like any
+  other failed cancel; before, it aborted.

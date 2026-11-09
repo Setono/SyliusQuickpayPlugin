@@ -155,7 +155,11 @@ configuration, so its checkout would capture immediately whatever the payment me
   most once.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
-  completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order.
+  completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order. Completing
+  captures only a payment Quickpay holds an authorization for: completing one the customer never paid, or whose
+  authorization was declined, fails with an error naming the payment and the state Quickpay's status maps to, and
+  nothing is sent to Quickpay. An operation turned off in the [plugin config](#3-configure-the-plugin-optional) leaves
+  Quickpay alone: its transition is applied without contacting Quickpay.
 * A refund targets Quickpay's **balance** (what is still captured) rather than the original amount — so a payment
   that was partially refunded directly in the Quickpay manager refunds only the remainder instead of failing. The
   balance is also persisted into the payment details whenever a callback or the
