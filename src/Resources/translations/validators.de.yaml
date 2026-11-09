@@ -2,4 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay hat diesen API-Schlüssel abgelehnt. Prüfen Sie, ob es der API-Schlüssel des API-Benutzers in Ihrem Quickpay-Manager ist (Einstellungen → Benutzer).'
+        gateway_option:
+            agreement_id: 'Geben Sie eine positive ganze Zahl ein, oder lassen Sie das Feld leer.'
+            api_key: 'Geben Sie den API-Schlüssel des API-Benutzers aus Ihrem Quickpay-Manager ein (Einstellungen → Benutzer).'
+            auto_capture: 'Die veraltete Option "auto_capture" muss true oder false sein. Lassen Sie sie weg und wählen Sie stattdessen den Zeitpunkt der Belastung.'
+            branding_id: 'Geben Sie eine positive ganze Zahl ein, oder lassen Sie das Feld leer.'
+            language: 'Die Option "language" muss ein Sprachcode sein, z. B. "en" oder "da".'
+            order_prefix: 'Geben Sie einen Text ein, oder lassen Sie das Feld leer.'
+            payment_methods: 'Geben Sie die Zahlungsarten durch Kommas getrennt ein, oder lassen Sie das Feld leer.'
+            private_key: 'Geben Sie den privaten Schlüssel Ihres Kontos ein (Einstellungen → Integration im Quickpay-Manager).'
+            synchronized: 'Dies muss ein- oder ausgeschaltet sein (true oder false).'
+        invalid_gateway_option: 'Das Quickpay-Gateway akzeptiert den Wert der Gateway-Option "{{ option }}" nicht.'
         unreadable: 'Die Gateway-Konfiguration kann nicht gelesen werden, wie es bei einer verschlüsselten Konfiguration der Fall ist. Die Verschlüsselung von Gateway-Konfigurationen wird nicht unterstützt.'

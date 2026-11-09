@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Validator;
 
 use Nyholm\Psr7\Response;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator;
 use Sylius\Bundle\PayumBundle\Validator\GroupsGenerator\GatewayConfigGroupsGenerator;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Symfony\Component\Translation\TranslatorBagInterface;
@@ -39,6 +43,92 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
             'gatewayConfig.config[branding_id]',
         ], array_keys($this->violationsOf($paymentMethod)));
         self::assertSame([], $this->quickpay()->sentRequests(), 'The api key of a configuration that is refused anyway is not verified');
+    }
+
+    /**
+     * payum-quickpay's reasons are English: the admin reads, in their own language and on the field, what the field
+     * accepts
+     *
+     * @test
+     */
+    public function it_says_what_each_rejected_option_accepts_in_the_admins_language(): void
+    {
+        self::bootKernel();
+        $this->translatorIn('da');
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [
+            'api_key' => 'the-api-key',
+            'agreement_id' => 0,
+            'branding_id' => 'Our brand',
+        ]);
+
+        self::assertEquals([
+            'gatewayConfig.config[private_key]' => 'Indtast din kontos private nøgle (Indstillinger → Integration i Quickpay manageren).',
+            'gatewayConfig.config[agreement_id]' => 'Indtast et positivt heltal, eller lad feltet være tomt.',
+            'gatewayConfig.config[branding_id]' => 'Indtast et positivt heltal, eller lad feltet være tomt.',
+        ], $this->messagesOf($paymentMethod));
+    }
+
+    /**
+     * Until the plugin says what an option a later payum-quickpay adds accepts, a rejected value of it still shows a
+     * translated message, on its field
+     *
+     * @test
+     */
+    public function it_words_a_rejected_option_without_a_message_of_its_own_generically(): void
+    {
+        self::bootKernel();
+        $this->translatorIn('da');
+
+        // The branding id stands in for an option the plugin has no message for yet
+        $constraint = new UsableGatewayConfiguration();
+        unset($constraint->optionMessages['branding_id']);
+
+        $violations = $this->validator()->validate(
+            GatewayConfigurations::entity([...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand'], 'quickpay_dk'),
+            $constraint,
+        );
+
+        self::assertCount(1, $violations);
+        self::assertSame('config[branding_id]', $violations->get(0)->getPropertyPath());
+        self::assertSame('Quickpay-gatewayen accepterer ikke værdien af gateway-indstillingen "branding_id".', $violations->get(0)->getMessage());
+    }
+
+    /**
+     * The admin reads what the field accepts; payum-quickpay's reason, which says what was wrong with the value, is
+     * kept in the log
+     *
+     * @test
+     */
+    public function it_logs_payum_quickpays_reason_for_rejecting_an_option(): void
+    {
+        self::bootKernel();
+
+        $logger = new class() extends AbstractLogger {
+            /** @var list<array{mixed, string, array<array-key, mixed>}> */
+            public array $records = [];
+
+            /**
+             * @param mixed $level
+             * @param string|\Stringable $message
+             * @param array<array-key, mixed> $context
+             */
+            public function log($level, $message, array $context = []): void
+            {
+                $this->records[] = [$level, (string) $message, $context];
+            }
+        };
+        $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
+        self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);
+        $validator->setLogger($logger);
+
+        $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand']));
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::INFO, $level);
+        self::assertStringContainsString('The "branding_id" option must be a positive integer (or an integer string), got \'Our brand\'', $message);
+        self::assertSame('branding_id', $context['option'] ?? null);
     }
 
     /**
@@ -133,38 +223,61 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
-     * The plugin's own messages, unlike payum-quickpay's per-option ones, are shown in the admin's language
+     * Every refusal is shown in the admin's language: a message per gateway option payum-quickpay rejects, the
+     * fallback for an option without one, a rejected api key and an unreadable configuration
      *
      * @test
      *
      * @dataProvider locales
      */
-    public function it_words_its_own_refusals_in_every_locale(string $locale): void
+    public function it_words_its_refusals_in_every_locale(string $locale): void
     {
         self::bootKernel();
-
-        $translator = self::getContainer()->get('translator');
-        self::assertInstanceOf(TranslatorBagInterface::class, $translator);
-        self::assertInstanceOf(LocaleAwareInterface::class, $translator);
-        $translator->setLocale($locale);
+        $translator = $this->translatorIn($locale);
 
         $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
         $this->quickpay()->respond('GET', '/payments', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
 
+        $everyOptionRejected = $this->createPaymentMethod('quickpay_no', [
+            'api_key' => '',
+            'private_key' => '',
+            'order_prefix' => ['ab'],
+            'payment_methods' => ['visa', 1],
+            'language' => ['da'],
+            'auto_capture' => 'maybe',
+            'synchronized' => 'maybe',
+            'agreement_id' => 0,
+            'branding_id' => 'Our brand',
+        ]);
         $rejectedApiKey = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
         $unreadable = $this->createPaymentMethod('quickpay_se', GatewayConfigurations::USABLE);
         $unreadable->setGatewayConfig(GatewayConfigurations::encryptedEntity('quickpay_se'));
 
+        $withoutOptionMessages = new UsableGatewayConfiguration();
+        $withoutOptionMessages->optionMessages = [];
+
         $violations = [
+            ...array_values($this->violationsOf($everyOptionRejected)),
+            ...$this->validator()->validate(
+                GatewayConfigurations::entity([...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand'], 'quickpay_fi'),
+                $withoutOptionMessages,
+            ),
             ...array_values($this->violationsOf($rejectedApiKey)),
             ...array_values($this->violationsOf($unreadable)),
         ];
-        self::assertCount(2, $violations);
+        self::assertCount(12, $violations);
+        self::assertCount(12, array_unique(array_map(
+            static fn (ConstraintViolationInterface $violation): string => $violation->getMessageTemplate(),
+            $violations,
+        )), 'Each gateway option has a message of its own');
 
+        $catalogue = $translator->getCatalogue($locale);
         foreach ($violations as $violation) {
-            $catalogue = $translator->getCatalogue($locale);
             self::assertTrue($catalogue->defines($violation->getMessageTemplate(), 'validators'), sprintf('"%s" is translated into "%s"', $violation->getMessageTemplate(), $locale));
-            self::assertSame($catalogue->get($violation->getMessageTemplate(), 'validators'), $violation->getMessage());
+            self::assertSame(
+                strtr($catalogue->get($violation->getMessageTemplate(), 'validators'), $violation->getParameters()),
+                $violation->getMessage(),
+            );
         }
     }
 
@@ -179,6 +292,32 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
+     * Switches the translator, and so the violations' messages, to the locale
+     */
+    private function translatorIn(string $locale): TranslatorBagInterface
+    {
+        $translator = self::getContainer()->get('translator');
+        self::assertInstanceOf(TranslatorBagInterface::class, $translator);
+        self::assertInstanceOf(LocaleAwareInterface::class, $translator);
+        $translator->setLocale($locale);
+
+        return $translator;
+    }
+
+    /**
+     * The messages saving the payment method shows, keyed by their paths
+     *
+     * @return array<string, string>
+     */
+    private function messagesOf(PaymentMethodInterface $paymentMethod): array
+    {
+        return array_map(
+            static fn (ConstraintViolationInterface $violation): string => (string) $violation->getMessage(),
+            $this->violationsOf($paymentMethod),
+        );
+    }
+
+    /**
      * The violations saving the payment method meets, keyed by their paths
      *
      * @return array<string, ConstraintViolationInterface>
@@ -188,14 +327,19 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         $groupsGenerator = self::getContainer()->get(GatewayConfigGroupsGenerator::class);
         self::assertInstanceOf(GatewayConfigGroupsGenerator::class, $groupsGenerator);
 
-        $validator = self::getContainer()->get('validator');
-        self::assertInstanceOf(ValidatorInterface::class, $validator);
-
         $violations = [];
-        foreach ($validator->validate($paymentMethod, groups: $groupsGenerator($paymentMethod)) as $violation) {
+        foreach ($this->validator()->validate($paymentMethod, groups: $groupsGenerator($paymentMethod)) as $violation) {
             $violations[$violation->getPropertyPath()] = $violation;
         }
 
         return $violations;
+    }
+
+    private function validator(): ValidatorInterface
+    {
+        $validator = self::getContainer()->get('validator');
+        self::assertInstanceOf(ValidatorInterface::class, $validator);
+
+        return $validator;
     }
 }

@@ -2,4 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'A Quickpay elutasította ezt az API-kulcsot. Ellenőrizd, hogy az API-felhasználó API-kulcsa-e a Quickpay managerben (Beállítások → Felhasználók).'
+        gateway_option:
+            agreement_id: 'Adj meg egy pozitív egész számot, vagy hagyd üresen a mezőt.'
+            api_key: 'Add meg az API-felhasználó API-kulcsát a Quickpay managerből (Beállítások → Felhasználók).'
+            auto_capture: 'Az elavult "auto_capture" beállítás értéke csak true vagy false lehet. Hagyd el, és helyette válaszd ki a terhelés időpontját.'
+            branding_id: 'Adj meg egy pozitív egész számot, vagy hagyd üresen a mezőt.'
+            language: 'A "language" beállításnak nyelvkódnak kell lennie, például "en" vagy "da".'
+            order_prefix: 'Adj meg szöveget, vagy hagyd üresen a mezőt.'
+            payment_methods: 'Add meg a fizetési módokat vesszővel elválasztva, vagy hagyd üresen a mezőt.'
+            private_key: 'Add meg a fiókod privát kulcsát (Beállítások → Integráció a Quickpay managerben).'
+            synchronized: 'Ennek be- vagy kikapcsoltnak kell lennie (true vagy false).'
+        invalid_gateway_option: 'A Quickpay fizetési átjáró nem fogadja el a(z) "{{ option }}" átjáróbeállítás értékét.'
         unreadable: 'A fizetési átjáró konfigurációja nem olvasható, ahogy az titkosítás esetén történik. A fizetési átjárók konfigurációjának titkosítása nem támogatott.'

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Validator\Constraints;
 
 use Payum\Core\Model\GatewayConfigInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use Setono\Quickpay\Exception\ForbiddenException;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
@@ -15,8 +17,10 @@ use Symfony\Component\Validator\ConstraintValidator;
 use Symfony\Component\Validator\Exception\UnexpectedTypeException;
 use Symfony\Component\Validator\Exception\UnexpectedValueException;
 
-final class UsableGatewayConfigurationValidator extends ConstraintValidator
+final class UsableGatewayConfigurationValidator extends ConstraintValidator implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     public function __construct(private readonly ApiKeyVerifierInterface $apiKeyVerifier)
     {
     }
@@ -41,14 +45,18 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator
                 ;
             }
 
-            // What an option means, and so what is wrong with it, is payum-quickpay's to say: its per-option messages
-            // pass through as the library's English, untranslated
-            foreach ($e->getViolations() as $option => $message) {
-                $this->context->buildViolation($message)
-                    ->disableTranslation()
+            // The admin reads, in their language, what the option accepts. payum-quickpay's reason, which says what
+            // was wrong with the value, is English, so it goes to the log.
+            foreach ($e->getViolations() as $option => $reason) {
+                $this->context->buildViolation($constraint->optionMessages[$option] ?? $constraint->invalidOptionMessage)
+                    ->setParameter('{{ option }}', $option)
                     ->atPath(sprintf('config[%s]', $option))
                     ->addViolation()
                 ;
+
+                $this->logger?->info(sprintf('Refused the gateway configuration of the Quickpay gateway "%s": %s', $e->gatewayName, $reason), [
+                    'option' => $option,
+                ]);
             }
 
             // The api key is verified once the gateway would be built: a key the library rejects already has its

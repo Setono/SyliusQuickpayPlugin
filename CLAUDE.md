@@ -391,11 +391,16 @@ in that folder) and need `assets:install` in the host app.
   Admin API alike (the payment method's `Valid` cascade reaches the gateway config; the pattern Sylius' Stripe and
   PayPal gateways use). The plugin's validation mapping (`Resources/config/validation/GatewayConfig.xml`) declares
   `Validator/Constraints/UsableGatewayConfiguration` (class constraint on Sylius' `GatewayConfig`, group
-  `sylius_quickpay`): its validator reads the config through the gateway configuration module and adds payum-quickpay's
-  violations, in the library's English, one per option at `config[<option>]` (lands on the form field; an option
-  without a field, like `language`, on the config form); an unreadable/encrypted config (`isUnreadable()`) gets the
-  plugin's `unreadable` message on `config`. Every message the plugin owns is a `validators` key shipped in all 16 locales
-  (the functional test checks each locale). Only on a usable configuration
+  `sylius_quickpay`): its validator reads the config through the gateway configuration module and adds a violation per
+  option payum-quickpay rejects, at `config[<option>]` (lands on the form field; an option without a field, like
+  `language`, on the config form). The admin never sees the library's English: each violation is the plugin's own
+  message saying what the option accepts (the constraint's `optionMessages`, keys
+  `setono_sylius_quickpay.gateway_configuration.gateway_option.<option>`), or, for an option without one (a later
+  payum-quickpay's), the generic `invalid_gateway_option` naming it; the library's reason is logged at info level with
+  the option name (`setLogger`). When payum-quickpay adds an option, add its message. An unreadable/encrypted config
+  (`isUnreadable()`) gets the plugin's `unreadable` message on `config`. Every message is a `validators` key shipped in
+  all 16 locales (the functional test checks each locale). The doctor still prints the library's text: console output is
+  English. Only on a usable configuration
   does it then verify the api key through `Quickpay/ApiKeyVerifier` (shared with the doctor command; backed by
   `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first, falling back to a one-item `/payments` read
   because Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`

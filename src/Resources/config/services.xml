@@ -108,6 +108,10 @@
         <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface"/>
 
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
+
             <tag name="validator.constraint_validator"/>
         </service>
 

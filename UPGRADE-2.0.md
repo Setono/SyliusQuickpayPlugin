@@ -271,8 +271,9 @@ The service definitions changed accordingly; only a redefinition or decoration o
   Quickpay as before. Before, the form only required the api and private keys and verified the api key, and the Admin
   API checked nothing, so a branding name where the branding id belongs, or agreement id 0, was saved and every
   operation on that gateway then threw. The form's fields lost their `NotBlank` constraints and the api key its
-  credentials constraint; the order prefix keeps its length constraint. The messages for the gateway's rules are
-  payum-quickpay's, in English. Fixtures, the console and direct database writes are still not validated.
+  credentials constraint; the order prefix keeps its length constraint. Each message says, in the admin's language, what
+  the option accepts; payum-quickpay's own reason is logged at info level. Fixtures, the console and direct database
+  writes are still not validated.
 - **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
   payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
   retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its

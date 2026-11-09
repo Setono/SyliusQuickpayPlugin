@@ -2,4 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay a respins această cheie API. Verifică dacă este cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori).'
+        gateway_option:
+            agreement_id: 'Introdu un număr întreg pozitiv sau lasă câmpul gol.'
+            api_key: 'Introdu cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori).'
+            auto_capture: 'Opțiunea învechită "auto_capture" trebuie să fie true sau false. Omite-o și alege în schimb momentul încasării.'
+            branding_id: 'Introdu un număr întreg pozitiv sau lasă câmpul gol.'
+            language: 'Opțiunea "language" trebuie să fie un cod de limbă, de exemplu "en" sau "da".'
+            order_prefix: 'Introdu text sau lasă câmpul gol.'
+            payment_methods: 'Introdu metodele de plată separate prin virgulă sau lasă câmpul gol.'
+            private_key: 'Introdu cheia privată a contului tău (Setări → Integrare în managerul Quickpay).'
+            synchronized: 'Această valoare trebuie să fie activată sau dezactivată (true sau false).'
+        invalid_gateway_option: 'Gateway-ul Quickpay nu acceptă valoarea opțiunii de gateway "{{ option }}".'
         unreadable: 'Configurația gateway-ului nu poate fi citită, așa cum se întâmplă când este criptată. Criptarea configurațiilor gateway-ului nu este acceptată.'

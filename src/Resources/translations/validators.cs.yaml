@@ -2,4 +2,15 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay tento API klíč odmítl. Zkontrolujte, že jde o API klíč API uživatele ve vašem Quickpay manageru (Nastavení → Uživatelé).'
+        gateway_option:
+            agreement_id: 'Zadejte kladné celé číslo, nebo pole ponechte prázdné.'
+            api_key: 'Zadejte API klíč API uživatele z vašeho Quickpay manageru (Nastavení → Uživatelé).'
+            auto_capture: 'Zastaralá volba "auto_capture" musí být true nebo false. Vynechte ji a místo toho zvolte okamžik stržení platby.'
+            branding_id: 'Zadejte kladné celé číslo, nebo pole ponechte prázdné.'
+            language: 'Volba "language" musí být kód jazyka, například "en" nebo "da".'
+            order_prefix: 'Zadejte text, nebo pole ponechte prázdné.'
+            payment_methods: 'Zadejte platební metody oddělené čárkami, nebo pole ponechte prázdné.'
+            private_key: 'Zadejte soukromý klíč vašeho účtu (Nastavení → Integrace v Quickpay manageru).'
+            synchronized: 'Tato hodnota musí být zapnutá, nebo vypnutá (true nebo false).'
+        invalid_gateway_option: 'Platební brána Quickpay nepřijímá hodnotu volby platební brány "{{ option }}".'
         unreadable: 'Konfiguraci platební brány nelze přečíst, k čemuž dochází, když je zašifrovaná. Šifrování konfigurací platebních bran není podporováno.'
