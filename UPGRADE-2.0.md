@@ -190,6 +190,12 @@ Since `v2.0.0-alpha.2`, a Sylius payment is brought in line with its Quickpay pa
 thing that applies a payment transition; the plugin triggers it under the payment's lock and reports what
 changed. Every callback and the reconciliation command go through the module.
 
+Likewise, the plugin reads a stored Quickpay gateway configuration only through the gateway configuration module, by
+payum-quickpay's rules ([ADR 0002](docs/adr/0002-payum-quickpay-owns-gateway-option-rules.md)). Every request to
+Quickpay, the gateway's and the plugin's own, gets its client from the client provider, on one scoped HTTP client with
+one HTTP policy, and the api key, agreement and payment link checks are gateway checks that return a verdict
+([ADR 0003](docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md)).
+
 ### Removed
 
 | Class | Service | Replaced by |
@@ -200,6 +206,7 @@ changed. Every callback and the reconciliation command go through the module.
 | `Validator\Constraints\QuickpayCredentials`, `Validator\Constraints\QuickpayCredentialsValidator` | `Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator`, tagged `validator.constraint_validator` | `Validator\Constraints\UsableGatewayConfiguration`, which verifies the api key on save, also through the Admin API |
 | `Quickpay\ApiKeyVerifierInterface`, `Quickpay\ApiKeyVerifier` | `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface` | the gateway checks: `Quickpay\GatewayCheck\GatewayChecksInterface::apiKey(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and returns a `Verdict` instead of throwing Quickpay's errors |
 | `Quickpay\ApiKeyVerification` | none | the `Verdict`: a key Quickpay accepts is `VerdictOutcome::Passed`, and one verified through `/payments` (`ViaPayments`) carries a note saying so |
+| `Quickpay\ClientFactoryInterface`, `Quickpay\ClientFactory` | `Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface` | the client provider: `Quickpay\QuickpayClientProviderInterface::forGatewayConfiguration(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and builds the client on the plugin's HTTP policy, or `quickpayPaymentOf(PaymentInterface)` to read a Sylius payment's Quickpay payment |
 
 The reconciliation command's private Quickpay status → transition mapping is gone as well: Sylius' own
 mapping applies.
@@ -257,7 +264,7 @@ mapping applies.
   `forGatewayConfiguration(GatewayConfiguration): ClientInterface` builds a new SDK client on the scoped client from
   the gateway configuration's api key and `synchronized`, with the SDK's mapper cache, and throws
   `UnusableGatewayConfiguration` for an unusable configuration. Every Quickpay gateway gets its client from it,
-  through payum-quickpay's `quickpay.client` gateway option.
+  through payum-quickpay's `quickpay.client` gateway option, and so do the gateway checks and the fraud report.
   `quickpayPaymentOf(PaymentInterface): ?Payment` reads the Quickpay payment (the SDK's `Payment`) of a Sylius payment
   with a client for its gateway configuration: null when the payment's method has no Quickpay gateway configuration
   or its details carry no Quickpay payment id (read through payum-quickpay's `Details`). It throws
@@ -293,7 +300,6 @@ mapping applies.
 | `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 | `FactoryBuilder\QuickpayGatewayFactoryBuilder` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser)` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser, QuickpayClientProviderInterface $clientProvider)` |
-| `Quickpay\ClientFactory` | `()` | `(HttpClientInterface $httpClient)`, the scoped client `setono_sylius_quickpay.http_client` |
 
 The service definitions changed accordingly; only a redefinition or decoration of these services needs updating.
 
@@ -307,6 +313,9 @@ The service definitions changed accordingly; only a redefinition or decoration o
   admin's complete, refund or cancel, checkout or a callback for minutes. The plugin's own calls (the fraud check, the
   operation history, the fraud report, the doctor, the api key check on save) gave up after 5 seconds and now wait up
   to 10. Neither used your `framework.http_client` configuration; both do now, and the requests show in the profiler.
+  App-wide retries (`default_options.retry_failed`) don't reach the plugin's client unless you configure that client
+  in the same file, and then they apply to it, by Symfony's defaults to POST requests too: read the README's *HTTP
+  policy* first.
   The SDK now also maps Quickpay's responses with its mapper cache, in the kernel cache directory.
 - **Building the gateway of an unusable gateway configuration throws the plugin's `UnusableGatewayConfiguration`**
   (a `RuntimeException`) instead of payum-quickpay's `InvalidGatewayOptions` (a Payum `LogicException`), since the
@@ -334,6 +343,12 @@ The service definitions changed accordingly; only a redefinition or decoration o
   created the payment link with that agreement id. When the api user may not read agreements (401/403) or Quickpay
   answers with another error, the payment method is saved and the reason is logged at info level. Without an agreement
   id, Quickpay isn't asked. Fixtures, the console and direct database writes are still not validated.
+- **`doctor --live` prints the payment link permission check as one line.** It passes (✔), fails (✖) or, when
+  Quickpay's answer proves neither, warns `Could not verify the payment link permission: <Quickpay's error>`, where it
+  printed `Could not create a test payment: …` or `Could not create a payment link: …`. The test payment left on the
+  account is named on that line, in parentheses, instead of in a warning of its own. When Quickpay didn't accept the
+  api key, `--live` now prints `Skipped probing the payment link permission — no usable api key`; before, it printed
+  nothing.
 - **The doctor skips its agreement check with a warning whenever Quickpay didn't accept the api key**, also without an
   agreement id: `Skipped verifying the agreement — no usable api key`. Without an agreement id it now prints `No
   agreement id configured (Quickpay uses the account's default Payment Window agreement)`, and for an api user that
