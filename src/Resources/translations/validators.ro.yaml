@@ -1,5 +1,7 @@
 setono_sylius_quickpay:
     gateway_configuration:
+        agreement_id:
+            not_found: 'Acest acord nu există în contul tău Quickpay. Introdu ID-ul unuia dintre acordurile contului (Setări → Integrare în managerul Quickpay) sau lasă câmpul gol pentru a folosi acordul implicit al ferestrei de plată.'
         api_key:
             invalid: 'Quickpay a respins această cheie API. Verifică dacă este cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori).'
         gateway_option:

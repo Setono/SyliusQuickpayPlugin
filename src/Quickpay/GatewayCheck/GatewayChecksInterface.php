@@ -21,6 +21,14 @@ interface GatewayChecksInterface
     public function apiKey(GatewayConfiguration $gatewayConfiguration): Verdict;
 
     /**
+     * Whether the agreement the gateway sends exists on the Quickpay account. Without an agreement id Quickpay uses the
+     * account's default agreement, so it passes without asking.
+     *
+     * @throws UnusableGatewayConfiguration
+     */
+    public function agreement(GatewayConfiguration $gatewayConfiguration): Verdict;
+
+    /**
      * Whether the api user may put a link on a payment, as checkout does. The one check that writes to the Quickpay
      * account: it creates a money-less test payment, which stays on the account (the verdict's note names it), and puts
      * a link on it.

@@ -133,7 +133,6 @@
 
         <!-- Command -->
         <service id="Setono\SyliusQuickpayPlugin\Command\DoctorCommand">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
             <argument type="service" id="router"/>

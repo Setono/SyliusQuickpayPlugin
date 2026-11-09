@@ -4,20 +4,15 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Command;
 
-use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
-use Setono\Quickpay\Client\ClientInterface;
-use Setono\Quickpay\Exception\ForbiddenException;
-use Setono\Quickpay\Exception\NotFoundException;
 use Setono\SyliusQuickpayPlugin\Command\DoctorCommand;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
-use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
@@ -35,9 +30,6 @@ final class DoctorCommandTest extends TestCase
     /** @var ObjectProphecy<GatewayChecksInterface> */
     private ObjectProphecy $gatewayChecks;
 
-    /** @var ObjectProphecy<QuickpayClientProviderInterface> */
-    private ObjectProphecy $clientProvider;
-
     /** @var ObjectProphecy<GatewayConfigurationProviderInterface> */
     private ObjectProphecy $gatewayConfigurationProvider;
 
@@ -48,8 +40,7 @@ final class DoctorCommandTest extends TestCase
     {
         $this->gatewayChecks = $this->prophesize(GatewayChecksInterface::class);
         $this->gatewayChecks->apiKey(Argument::any())->willReturn(Verdict::passed());
-
-        $this->clientProvider = $this->prophesize(QuickpayClientProviderInterface::class);
+        $this->gatewayChecks->agreement(Argument::any())->willReturn(Verdict::passed());
 
         $this->gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
         $this->gatewayConfigurationProvider->all()->willReturn([]);
@@ -251,7 +242,8 @@ final class DoctorCommandTest extends TestCase
         $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'agreement_id' => 12345, 'use_authorize' => true]));
 
         $this->gatewayChecks->apiKey(Argument::any())->shouldNotBeCalled();
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->agreement(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--live' => true]);
 
@@ -297,36 +289,41 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
-    public function it_verifies_a_configured_agreement_with_the_gateway_configurations_client(): void
+    public function it_runs_the_agreement_check_on_each_usable_gateway_configuration(): void
     {
-        $configuration = GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345]));
+        $configuration = GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345]), 'quickpay_dk');
         $this->configureGateways($configuration);
 
-        $client = $this->prophesize(ClientInterface::class);
-        $client->get('agreements/12345')->shouldBeCalled()->willReturn(['id' => 12345]);
-        $this->clientProvider->forGatewayConfiguration($configuration)->willReturn($client->reveal());
+        $this->gatewayChecks->agreement($configuration)->shouldBeCalledOnce()->willReturn(Verdict::passed());
 
-        $tester = $this->executeCommand();
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('Agreement 12345 exists', $tester->getDisplay());
+        $this->executeCommand();
     }
 
     /**
      * @test
      */
-    public function it_verifies_the_agreement_stored_under_its_1x_name(): void
+    public function it_prints_a_passed_agreement_check(): void
     {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => null, 'agreement' => '7'])));
-
-        $client = $this->prophesize(ClientInterface::class);
-        $client->get('agreements/7')->shouldBeCalled()->willReturn(['id' => 7]);
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn($client->reveal());
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
+        $this->gatewayChecks->agreement(Argument::any())->willReturn(Verdict::passed());
 
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('Agreement 7 exists', $tester->getDisplay());
+        self::assertDisplayHasLine('✔ Agreement 12345 exists on the account', $tester);
+    }
+
+    /**
+     * @test
+     */
+    public function it_names_the_agreement_the_gateway_sends(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => null, 'agreement' => '7'])));
+        $this->gatewayChecks->agreement(Argument::any())->willReturn(Verdict::passed());
+
+        $tester = $this->executeCommand();
+
+        self::assertDisplayHasLine('✔ Agreement 7 exists on the account', $tester);
     }
 
     /**
@@ -334,35 +331,47 @@ final class DoctorCommandTest extends TestCase
      *
      * @test
      */
-    public function it_passes_a_blank_agreement_id_as_the_default_agreement(): void
+    public function it_prints_the_note_of_the_agreement_check_when_no_agreement_id_is_set(): void
     {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => '   '])));
-
-        $client = $this->prophesize(ClientInterface::class);
-        $client->get(Argument::any())->shouldNotBeCalled();
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn($client->reveal());
+        $configuration = GatewayConfigurations::of(self::healthyConfig(['agreement_id' => '   ']));
+        $this->configureGateways($configuration);
+        $this->gatewayChecks->agreement($configuration)->shouldBeCalledOnce()->willReturn(Verdict::passed('Quickpay uses the account\'s default Payment Window agreement'));
 
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('default Payment Window agreement', $tester->getDisplay());
+        self::assertDisplayHasLine('✔ No agreement id configured (Quickpay uses the account\'s default Payment Window agreement)', $tester);
     }
 
     /**
      * @test
      */
-    public function it_fails_when_the_configured_agreement_does_not_exist(): void
+    public function it_fails_on_a_failed_agreement_check(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
-
-        $client = $this->prophesize(ClientInterface::class);
-        $client->get('agreements/12345')->willThrow(new NotFoundException(new Response(404), 'Not found'));
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn($client->reveal());
+        $this->gatewayChecks->agreement(Argument::any())->willReturn(Verdict::failed('Agreement 12345 does not exist on this Quickpay account'));
 
         $tester = $this->executeCommand();
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('Agreement 12345 does not exist', $tester->getDisplay());
+        self::assertDisplayHasLine('✖ Agreement 12345 does not exist on this Quickpay account', $tester);
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * Quickpay's answer proved nothing, so nothing is known to be wrong
+     *
+     * @test
+     */
+    public function it_warns_without_failing_on_an_undetermined_agreement_check(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
+        $this->gatewayChecks->agreement(Argument::any())->willReturn(Verdict::undetermined('the api user may lack the /agreements permission'));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertDisplayHasLine('! Could not verify agreement 12345: the api user may lack the /agreements permission', $tester);
     }
 
     /**
@@ -476,15 +485,19 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_skips_the_agreement_and_live_checks_unless_the_api_key_check_passed(Verdict $apiKeyVerdict): void
     {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
+        $this->configureGateways(
+            GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345]), 'quickpay_a'),
+            GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_b_']), 'quickpay_b'),
+        );
         $this->gatewayChecks->apiKey(Argument::any())->willReturn($apiKeyVerdict);
 
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->agreement(Argument::any())->shouldNotBeCalled();
         $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--live' => true]);
 
-        self::assertStringContainsString('Skipped verifying agreement 12345', $tester->getDisplay());
+        self::assertDisplayHasLine('! Skipped verifying agreement 12345 — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped verifying the agreement — no usable api key', $tester);
         self::assertDisplayHasLine('! Skipped probing the payment link permission — no usable api key', $tester);
     }
 
@@ -495,40 +508,6 @@ final class DoctorCommandTest extends TestCase
     {
         yield 'failed' => [Verdict::failed('Quickpay rejects the api key')];
         yield 'undetermined' => [Verdict::undetermined('The request could not be sent')];
-    }
-
-    /**
-     * @test
-     */
-    public function it_warns_when_the_agreement_cannot_be_verified(): void
-    {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
-
-        $client = $this->prophesize(ClientInterface::class);
-        $client->get('agreements/12345')->willThrow(new ForbiddenException(new Response(403), 'Not authorized'));
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn($client->reveal());
-
-        $tester = $this->executeCommand();
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('/agreements permission', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_warns_when_the_agreement_check_errors(): void
-    {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
-
-        $client = $this->prophesize(ClientInterface::class);
-        $client->get('agreements/12345')->willThrow(new \RuntimeException('Connection timed out'));
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn($client->reveal());
-
-        $tester = $this->executeCommand();
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('Could not verify agreement 12345', $tester->getDisplay());
     }
 
     /**
@@ -599,7 +578,6 @@ final class DoctorCommandTest extends TestCase
     {
         $application = new Application();
         $application->add(new DoctorCommand(
-            $this->clientProvider->reveal(),
             $this->gatewayChecks->reveal(),
             $this->gatewayConfigurationProvider->reveal(),
             $this->router->reveal(),
