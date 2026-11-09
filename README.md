@@ -128,8 +128,12 @@ id of 0, ...), with an error on each field to fix. Once the configuration is val
 Quickpay's API and refuses the key if Quickpay rejects it — a typo'd key is caught immediately instead of by the first
 customer whose checkout fails. A valid key whose API user lacks the `/ping` permission is verified through a
 `/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
-Quickpay — the check fails open on anything but an explicit rejection. Fixtures, the console and writes straight to
-the database skip this validation.
+Quickpay — the check fails open on anything but an explicit rejection, and logs at info level why the key couldn't be
+verified. With the API key accepted, an **Agreement id** is looked up on the account as well, and refused if Quickpay
+doesn't find it — checkout would otherwise fail when it creates the payment link with that agreement. It fails open the
+same way: an API user without the `/agreements` permission, or an unreachable Quickpay, never blocks saving, and why the
+agreement couldn't be verified is logged at info level. Fixtures, the console and writes straight to the database skip
+this validation.
 
 **Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway
 configurations (`payum.dynamic_gateways.encryption.defuse_secret_key`) in a store that uses this plugin. Only Payum's
@@ -155,7 +159,11 @@ configuration, so its checkout would capture immediately whatever the payment me
   most once.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
-  completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order.
+  completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order. Completing
+  captures only a payment Quickpay holds an authorization for: completing one the customer never paid, or whose
+  authorization was declined, fails with an error naming the payment and the state Quickpay's status maps to, and
+  nothing is sent to Quickpay. An operation turned off in the [plugin config](#3-configure-the-plugin-optional) leaves
+  Quickpay alone: its transition is applied without contacting Quickpay.
 * A refund targets Quickpay's **balance** (what is still captured) rather than the original amount — so a payment
   that was partially refunded directly in the Quickpay manager refunds only the remainder instead of failing. The
   balance is also persisted into the payment details whenever a callback or the
@@ -221,7 +229,8 @@ Each Quickpay payment on the admin order view shows its **live operation history
 authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
 captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
-gateway configuration is unusable, the panel shows an inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
+gateway configuration is unusable, the panel shows an inline notice with a retry link, and the cause is logged as a
+warning with the payment id and the gateway name. Nothing is stored — the panel reflects what Quickpay reports right now.
 
 ## Fraud signals
 
@@ -241,6 +250,9 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
 ```
+
+`--limit` (default 100) caps the payments reported across all gateways. A report that reaches it says so and names
+the gateways it didn't query; raise `--limit` to see the rest.
 
 ## Callbacks
 
@@ -342,6 +354,68 @@ Scheduling is your application's choice; a cron entry along these lines is plent
 The command exits non-zero when any payment could not be checked, so cron mail or your monitoring
 will surface persistent problems.
 
+## HTTP policy
+
+Every request to Quickpay, the gateway's (checkout, capture, refund, cancel, callbacks, reconciling) and the plugin's
+own (the fraud check, the operation history, the fraud report, the doctor, checking the api key and agreement on save), goes
+through one [scoped HTTP client](https://symfony.com/doc/current/http_client.html#scoping-client) that the plugin adds
+to your framework configuration: `setono_sylius_quickpay.http_client`. Its defaults:
+
+| Option | Default | |
+|---|---|---|
+| `base_uri` | `https://api.quickpay.net` | |
+| `timeout` | `10` | seconds a request may wait for Quickpay without receiving anything |
+| `max_duration` | `10` | seconds a request may take in total |
+| `retry_failed` | off | no request is retried |
+
+So a slow Quickpay can't hang checkout, the admin or a callback for more than 10 seconds per request, and the requests
+show up in the Symfony profiler. Override any option under the same name in your own framework configuration; the
+others keep the plugin's defaults. A proxy or extra headers go here too:
+
+```yaml
+# config/packages/framework.yaml
+framework:
+    http_client:
+        scoped_clients:
+            setono_sylius_quickpay.http_client:
+                timeout: 5
+                max_duration: 15
+                proxy: 'http://proxy.example.com:3128'
+```
+
+Mind the [reconcile lock](#callbacks) when you raise the timeouts: a callback makes up to four requests in a row while
+it holds its payment's lock, which expires after 60 seconds.
+
+**Retries are off on purpose.** Symfony's `retry_failed` also retries `POST` requests on some statuses (423, 425,
+429, 502 and 503), and a retried capture or refund can take or return the money twice. If you enable retries, limit
+them to reads:
+
+```yaml
+framework:
+    http_client:
+        scoped_clients:
+            setono_sylius_quickpay.http_client:
+                retry_failed:
+                    max_retries: 1
+                    http_codes:
+                        0: [GET]     # no response at all, a timeout included
+                        429: [GET]
+                        500: [GET]
+                        502: [GET]
+                        503: [GET]
+                        504: [GET]
+```
+
+Each retry waits up to the full timeouts again, so keep `max_retries` low with the lock in mind.
+
+**Mind app-wide retries.** Your `framework.http_client.default_options.retry_failed` doesn't reach the plugin's client
+by itself: Symfony copies it onto a scoped client only when the same `framework:` block configures that scoped client
+too (the same file, and the same `when@<env>` section if it is in one), and only when it is given as settings rather
+than just `true`. So configuring `setono_sylius_quickpay.http_client` in the file that sets your app-wide retries, as in
+the examples above, turns them on for Quickpay, for `POST` requests too unless their `http_codes` say otherwise. Give
+the plugin's client a `retry_failed` of its own there: `false`, or the reads-only settings above. Include `http_codes`
+in it, because any setting it leaves out is taken from the app-wide one.
+
 ## Testing
 
 ```bash
@@ -360,7 +434,7 @@ when something misbehaves, and after every configuration change:
 
 ```bash
 bin/console setono:sylius-quickpay:doctor          # read-only
-bin/console setono:sylius-quickpay:doctor --live   # also probes the payment link permission
+bin/console setono:sylius-quickpay:doctor --live   # also checks the payment link permission
 ```
 
 For every configured Quickpay gateway it verifies the api key against Quickpay, self-tests the private
@@ -368,8 +442,14 @@ key's checksum computation, checks that a configured agreement id exists on the 
 the order prefix length — plus, across gateways, that no two share a prefix, and that the notify route
 is registered at all. With `--live` it also creates a money-less test payment and attempts the payment
 link `PUT` the checkout depends on, catching a missing *Create or update payment link* permission before
-a customer does (the test payment remains visible on the account; it never carries money). The command
+a customer does (the test payment remains visible on the account, and the check's line names its id and order id; it
+never carries money). The command
 exits non-zero when any check fails, so it can run in CI or cron.
+
+A check against Quickpay prints as passed (✔), failed (✖, failing the run) or, when Quickpay's answer proves neither
+(it didn't answer, answered with an error, or the API user may not ask), as a warning (!) saying why. The checks of
+an agreement id and of the payment link permission run only once Quickpay accepts the api key; without an agreement
+id there is nothing to ask, and Quickpay uses the account's default Payment Window agreement.
 
 First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
 means the gateway can be built:
@@ -408,6 +488,13 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
   `PUT` checkbox checked for *Create or update payment link*. Also make sure the **Api key** field of your
   payment method holds the **API user's** key (*Settings* → *Users*) — not the api key of a Payment Window
   agreement (*Settings* → *Integration*).
+
+- `This agreement doesn't exist on your Quickpay account` when saving a payment method, or `Agreement 12345 does not
+  exist on this Quickpay account` from the doctor
+
+  The payment method's **Agreement id** isn't an agreement of the Quickpay account its API key belongs to, so checkout
+  can't create a payment link with it. Enter the id of one of the account's agreements (*Settings* → *Integration* in
+  the Quickpay manager), or leave the field empty to use the account's default Payment Window agreement.
 
 - `Validation error: order_id already exists on another payment`
 
