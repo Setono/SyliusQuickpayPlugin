@@ -231,7 +231,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         self::assertSame([[
             LogLevel::INFO,
             sprintf('Could not verify agreement 12345 of the Quickpay gateway "quickpay_dk", so it was accepted unverified: %s', $why),
-            ['gateway' => 'quickpay_dk'],
+            ['gatewayName' => 'quickpay_dk'],
         ]], $logger->records);
     }
 
@@ -368,7 +368,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         self::assertSame([[
             LogLevel::INFO,
             sprintf('Could not verify the api key of the Quickpay gateway "quickpay_dk", so it was accepted unverified: %s', $quickpaysError),
-            ['gateway' => 'quickpay_dk'],
+            ['gatewayName' => 'quickpay_dk'],
         ]], $logger->records);
     }
 

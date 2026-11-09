@@ -10,6 +10,7 @@ use Psr\Log\LoggerAwareTrait;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
@@ -65,44 +66,48 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             return;
         }
 
-        $verdict = $this->gatewayChecks->apiKey($gatewayConfiguration);
-
-        if (VerdictOutcome::Failed === $verdict->outcome) {
-            $this->context->buildViolation($constraint->apiKeyRejectedMessage)
-                ->atPath('config[api_key]')
-                ->addViolation()
-            ;
-        } elseif (VerdictOutcome::Undetermined === $verdict->outcome) {
-            // Fail open: Quickpay's answer proves nothing, and an unreachable Quickpay must not make the payment method
-            // unsaveable
-            $this->logger?->info(sprintf(
-                'Could not verify the api key of the Quickpay gateway "%s", so it was accepted unverified: %s',
-                $gatewayConfiguration->gatewayName,
-                (string) $verdict->reason,
-            ), ['gateway' => $gatewayConfiguration->gatewayName]);
-        }
+        $apiKeyVerdict = $this->gatewayChecks->apiKey($gatewayConfiguration);
+        $this->applyVerdict(
+            $apiKeyVerdict,
+            $constraint->apiKeyRejectedMessage,
+            'config[api_key]',
+            sprintf('Could not verify the api key of the Quickpay gateway "%s", so it was accepted unverified', $gatewayConfiguration->gatewayName),
+            $gatewayConfiguration->gatewayName,
+        );
 
         // Quickpay's answer about the agreement proves something only with an api key it accepts, and a rejected key
         // is one error, not two. Without an agreement id the account's default agreement is used, which needs no check.
-        if (VerdictOutcome::Passed !== $verdict->outcome || null === $options->agreementId) {
+        if (VerdictOutcome::Passed !== $apiKeyVerdict->outcome || null === $options->agreementId) {
             return;
         }
 
-        $agreementVerdict = $this->gatewayChecks->agreement($gatewayConfiguration);
+        $this->applyVerdict(
+            $this->gatewayChecks->agreement($gatewayConfiguration),
+            $constraint->agreementNotFoundMessage,
+            'config[agreement_id]',
+            sprintf('Could not verify agreement %d of the Quickpay gateway "%s", so it was accepted unverified', $options->agreementId, $gatewayConfiguration->gatewayName),
+            $gatewayConfiguration->gatewayName,
+        );
+    }
 
-        if (VerdictOutcome::Failed === $agreementVerdict->outcome) {
-            $this->context->buildViolation($constraint->agreementNotFoundMessage)
-                ->atPath('config[agreement_id]')
+    /**
+     * A failed gateway check refuses the gateway configuration with the violation at the path. An undetermined one
+     * fails open: Quickpay's answer proves nothing, and an unreachable Quickpay or an api user that may not ask must
+     * not make the payment method unsaveable, so the reason is logged at info level instead, after the log text.
+     */
+    private function applyVerdict(Verdict $verdict, string $violationMessage, string $violationPath, string $logText, string $gatewayName): void
+    {
+        if (VerdictOutcome::Failed === $verdict->outcome) {
+            $this->context->buildViolation($violationMessage)
+                ->atPath($violationPath)
                 ->addViolation()
             ;
-        } elseif (VerdictOutcome::Undetermined === $agreementVerdict->outcome) {
-            // Fail open, as for the api key: an api user that may not read agreements must not block saving
-            $this->logger?->info(sprintf(
-                'Could not verify agreement %d of the Quickpay gateway "%s", so it was accepted unverified: %s',
-                $options->agreementId,
-                $gatewayConfiguration->gatewayName,
-                (string) $agreementVerdict->reason,
-            ), ['gateway' => $gatewayConfiguration->gatewayName]);
+
+            return;
+        }
+
+        if (VerdictOutcome::Undetermined === $verdict->outcome) {
+            $this->logger?->info(sprintf('%s: %s', $logText, (string) $verdict->reason), ['gatewayName' => $gatewayName]);
         }
     }
 }
