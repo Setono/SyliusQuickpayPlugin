@@ -223,9 +223,10 @@ Quickpay goes through one scoped HTTP client with one policy**, the gateway's an
   gateway option to a closure Payum resolves with the gateway's own config (builder defaults come before
   `payum.api`, and Payum resolves closures in order). payum-quickpay's check that the client agrees with
   `synchronized` still runs on that client (`QuickpayGatewayFactoryBuilderTest`).
-- `Quickpay/ClientFactory` (the plugin's own calls, until they move onto the provider) builds its clients on the
-  same scoped client, so the whole plugin follows the one policy. `tests/Functional/QuickpayHttpPolicyTest` asserts
-  `timeout` and `max_duration` on a gateway operation's request and on a client factory request.
+- `Quickpay/ClientFactory` is still defined, on the same scoped client, but nothing uses it any more: every plugin call
+  goes through the provider. `tests/Functional/QuickpayHttpPolicyTest` asserts `timeout` and `max_duration` on a
+  gateway operation's request and on a plugin call's request (the api key gateway check), and
+  `tests/Functional/QuickpayClientProviderTest` proves the provider's clients reach the scripted Quickpay.
 
 ### Gateway checks (`src/Quickpay/GatewayCheck/`)
 Read `GLOSSARY.md` (Gateway check, Verdict) first. A gateway check tests against Quickpay what a usable gateway
