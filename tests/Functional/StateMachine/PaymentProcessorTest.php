@@ -6,7 +6,6 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\StateMachine;
 
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\Payum\Quickpay\Exception\InvalidGatewayOptions;
 use Setono\Quickpay\Exception\QuickpayException;
@@ -17,6 +16,7 @@ use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -539,25 +539,10 @@ final class PaymentProcessorTest extends FunctionalTestCase
 
     /**
      * Records what the container's payment processor logs from now on
-     *
-     * @return object{records: list<array{mixed, string, array<array-key, mixed>}>}
      */
-    private function recordProcessorLog(): object
+    private function recordProcessorLog(): RecordingLogger
     {
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
+        $logger = new RecordingLogger();
 
         $processor = self::getContainer()->get(PaymentProcessor::class);
         self::assertInstanceOf(PaymentProcessor::class, $processor);

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Validator;
 
 use Nyholm\Psr7\Response;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator;
 use Sylius\Bundle\PayumBundle\Validator\GroupsGenerator\GatewayConfigGroupsGenerator;
@@ -469,25 +469,10 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
     /**
      * Gives the save validation's validator a logger recording what it logs
-     *
-     * @return object{records: list<array{mixed, string, array<array-key, mixed>}>}
      */
-    private function recordValidatorLogs(): object
+    private function recordValidatorLogs(): RecordingLogger
     {
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
+        $logger = new RecordingLogger();
 
         $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
         self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);

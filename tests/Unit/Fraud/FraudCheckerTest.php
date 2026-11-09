@@ -9,7 +9,6 @@ use Payum\Core\Exception\LogicException;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\InternalServerErrorException;
 use Setono\Quickpay\Response\Payment\Metadata;
@@ -17,6 +16,7 @@ use Setono\Quickpay\Response\Payment\Payment as QuickpayPayment;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudChecker;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
 
@@ -75,7 +75,7 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_fails_open_with_a_warning_when_the_quickpay_payment_cannot_be_read(\Throwable $error): void
     {
-        $logger = self::recordingLogger();
+        $logger = new RecordingLogger();
         $checker = $this->createChecker($error);
         $checker->setLogger($logger);
 
@@ -128,26 +128,5 @@ final class FraudCheckerTest extends TestCase
         $payment->setDetails(['quickpayPaymentId' => 501]);
 
         return $payment;
-    }
-
-    /**
-     * @return AbstractLogger&object{records: list<array{mixed, string, array<array-key, mixed>}>}
-     */
-    private static function recordingLogger(): AbstractLogger
-    {
-        return new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
     }
 }

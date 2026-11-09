@@ -70,8 +70,12 @@ Run any Symfony console command for the plugin from inside that directory, e.g.
 ### Test layout
 Each PHPUnit suite is one directory: `tests/Unit/` (no kernel, no database; paths mirror `src/`, namespace
 `Setono\SyliusQuickpayPlugin\Tests\Unit\…`) and `tests/Functional/` (below). Test support stays outside both, where
-either suite and the test application can reach it: the functional suite's Quickpay HTTP double
-`tests/Quickpay/ScriptedHttpClient` (unit tests at the HTTP seam use Symfony's `MockHttpClient` instead), `tests/GatewayConfiguration/GatewayConfigurations`,
+either suite and the test application can reach it: the Quickpay HTTP double `tests/Quickpay/ScriptedHttpClient` (the
+functional suite's, below; a unit test at the HTTP seam puts it in Symfony's `MockHttpClient` itself, as
+`GatewayChecksTest` does, or uses a `MockHttpClient` closure), `tests/Quickpay/TemporaryCacheDir` (a trait giving a
+unit test that builds the real client provider a fresh `$this->cacheDir` for the SDK's mapper cache),
+`tests/Log/RecordingLogger` (give it to a logger-aware service and assert on its `records`: level, message, context),
+`tests/GatewayConfiguration/GatewayConfigurations`,
 `tests/Payum/OfflineNotifyAction`, `tests/Application/` and `tests/PHPStan/`. `GatewayConfigurations` is the one shared
 helper for real gateway config objects: `of($config, $gatewayName)` and `encrypted()` give the module's
 `GatewayConfiguration`, `entity(...)` and `encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted
@@ -92,7 +96,8 @@ Only Quickpay's HTTP is substituted, below the plugin's scoped HTTP client: in t
 (`config/packages/test/setono_sylius_quickpay.yaml`), so every request to Quickpay, the gateways' and the plugin's own,
 runs through the real client provider, SDK clients and HTTP policy and arrives there with the options the scoped
 client gave it. Script every Quickpay call with `$this->quickpay()->respond('GET', '/payments/1', ...)` (a PSR-7
-response) and assert on `$this->quickpay()->sentRequests()` (`"METHOD /path"` each); `sentRequestOptions()` gives each
+response, or a `MockResponse` for what PSR-7 can't express: no answer, its `error` option, or a body that breaks off)
+and assert on `$this->quickpay()->sentRequests()` (`"METHOD /path"` each); `sentRequestOptions()` gives each
 request's options in the same order, as Symfony's HTTP client resolved them (`timeout` and `max_duration` as floats,
 `normalized_headers` keyed by lowercase name, e.g. `['authorization']`). An unscripted request throws a
 `LogicException`, whichever path sent it. The gateway,
@@ -258,8 +263,8 @@ exceptions or interpret Quickpay's status codes themselves.
   random hex digits): 401/403 → failed (may not create payments). Then puts a link on it (`PUT /payments/{id}/link`):
   401/403 → failed (may not create payment links), accepted → passed. Then deletes the link, best effort (its errors are
   ignored). Once the test payment exists, every verdict's note names it (id and order id): it stays on the account.
-- Tested at the HTTP seam in `tests/Unit/Quickpay/GatewayCheck/GatewayChecksTest` (the real provider over Symfony's
-  `MockHttpClient`). Callers' unit tests double `GatewayChecksInterface` and return verdicts.
+- Tested at the HTTP seam in `tests/Unit/Quickpay/GatewayCheck/GatewayChecksTest` (the real provider over
+  `ScriptedHttpClient` in Symfony's `MockHttpClient`). Callers' unit tests double `GatewayChecksInterface` and return verdicts.
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
