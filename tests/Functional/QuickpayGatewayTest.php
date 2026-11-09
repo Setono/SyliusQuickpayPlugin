@@ -37,4 +37,18 @@ final class QuickpayGatewayTest extends FunctionalTestCase
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());
     }
+
+    /**
+     * @test
+     */
+    public function it_fails_on_a_request_no_test_scripted(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+
+        $this->expectExceptionObject(new \LogicException('No response scripted for "GET /payments/501"'));
+
+        $this->gatewayOf($payment)->execute(new GetStatus($payment));
+    }
 }

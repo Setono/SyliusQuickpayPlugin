@@ -6,15 +6,11 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\StateMachine;
 
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
-use Setono\Quickpay\Client\Client;
-use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\QuickpayException;
-use Setono\SyliusQuickpayPlugin\Fraud\FraudChecker;
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
-use Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -307,7 +303,7 @@ final class PaymentProcessorTest extends FunctionalTestCase
 
     /**
      * The payment processor as the plugin wires it, with the operations and the fraud guard configured as
-     * given. Its fraud checker reads Quickpay through the scripted client, like the gateways
+     * given. Its fraud checker is the container's, reading Quickpay through the scripted client
      */
     private function processor(
         bool $capture = true,
@@ -315,19 +311,10 @@ final class PaymentProcessorTest extends FunctionalTestCase
         bool $cancel = true,
         bool $blockCaptureOnSuspectedFraud = false,
     ): PaymentProcessorInterface {
-        $quickpay = $this->quickpay();
-        $clientFactory = new class($quickpay) implements ClientFactoryInterface {
-            public function __construct(private readonly ScriptedHttpClient $httpClient)
-            {
-            }
+        $fraudChecker = self::getContainer()->get(FraudCheckerInterface::class);
+        self::assertInstanceOf(FraudCheckerInterface::class, $fraudChecker);
 
-            public function create(string $apiKey): ClientInterface
-            {
-                return new Client($apiKey, $this->httpClient);
-            }
-        };
-
-        return new PaymentProcessor($this->payum(), $this->reconciler(), new FraudChecker($clientFactory), $capture, $refund, $cancel, $blockCaptureOnSuspectedFraud);
+        return new PaymentProcessor($this->payum(), $this->reconciler(), $fraudChecker, $capture, $refund, $cancel, $blockCaptureOnSuspectedFraud);
     }
 
     /**
