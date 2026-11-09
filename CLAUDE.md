@@ -343,10 +343,17 @@ in that folder) and need `assets:install` in the host app.
   (16 locales in `Resources/translations/`). The **capture mode** field is Sylius core's `use_authorize`
   option rendered as a choice (`true` = authorize at checkout, capture on the payment's `complete`
   transition — the default; `false` = Sylius executes `Capture`, Quickpay captures at authorization);
-  the deprecated `auto_capture` gateway option is never written. A `PRE_SET_DATA` listener migrates
-  configs stored under the pre-2.0 option names (`apikey`/`privatekey`/`agreement` →
-  `api_key`/`private_key`/`agreement_id`, the last normalized to int/null for the integer field) and folds
-  a stored `auto_capture` into `use_authorize` (enabled → `false`). Reading the api key back out of a
+  the deprecated `auto_capture` gateway option is never written. Its `PRE_SET_DATA` listener shows what
+  checkout uses and keeps no alias, number or boolean rules of its own (ADR 0002): a new payment method (an
+  empty config) shows the defaults with capture mode on completion; a usable configuration
+  (`GatewayConfiguration::fromConfig()`) shows its typed `options()` and the effective `captureMode()`; one
+  payum-quickpay rejects still opens, under the current names (`GatewayOptions::withCurrentNames()`), each
+  value as stored where its field shows it exactly (empty where it can't) and the capture mode by Sylius'
+  rule alone (the module's `captureMode()` without `auto_capture`). The 1.x names and `auto_capture` are
+  dropped from the form data, so saving writes the current names with `auto_capture` folded into
+  `use_authorize`; options without a field (`language`) are kept as stored. A new gateway option starts in
+  payum-quickpay, and the form only adds its field.
+  Reading the api key back out of a
   stored config (old or new name) is `Quickpay/ApiKeyResolver`'s job — the one place that knows the
   pre-2.0 `apikey` spelling; use it instead of reading the config array directly. The `api_key` carries a `QuickpayCredentials` constraint
   (sylius group) whose validator verifies the key through `Quickpay/ApiKeyVerifier` (shared with the
