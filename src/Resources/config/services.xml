@@ -96,6 +96,7 @@
             <!-- the scoped HTTP client the plugin prepends onto framework.http_client: the HTTP policy of every request to Quickpay -->
             <argument type="service" id="setono_sylius_quickpay.http_client"/>
             <argument>%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk</argument>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
         </service>
 
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"

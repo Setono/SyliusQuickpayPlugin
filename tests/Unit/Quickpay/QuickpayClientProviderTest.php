@@ -4,16 +4,29 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Quickpay;
 
+use Payum\Core\Exception\LogicException;
 use PHPUnit\Framework\TestCase;
+use Prophecy\Argument;
+use Prophecy\PhpUnit\ProphecyTrait;
+use Setono\Quickpay\Exception\NotFoundException;
+use Setono\Quickpay\Exception\QuickpayException;
+use Setono\Quickpay\Exception\ServerErrorException;
+use Setono\Quickpay\Exception\UnauthorizedException;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Sylius\Component\Core\Model\Payment;
+use Sylius\Component\Payment\Model\PaymentInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class QuickpayClientProviderTest extends TestCase
 {
+    use ProphecyTrait;
+
     /**
      * The requests the HTTP client was sent, each as the method, the url and its options
      *
@@ -113,14 +126,153 @@ final class QuickpayClientProviderTest extends TestCase
         self::assertNotSame([], glob($this->cacheDir . '/*.php'), 'The SDK mapped the payment without its cache');
     }
 
-    private function provider(): QuickpayClientProvider
+    /**
+     * @test
+     */
+    public function it_reads_the_quickpay_payment_of_a_sylius_payment_with_its_gateway_configurations_api_key(): void
     {
-        return new QuickpayClientProvider(new MockHttpClient(function (string $method, string $url, array $options): MockResponse {
+        $provider = $this->provider(paymentsGatewayConfiguration: GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'api_key' => 'the-dk-api-key']));
+
+        $quickpayPayment = $provider->quickpayPaymentOf(self::syliusPayment(['quickpayPaymentId' => 501]));
+
+        self::assertNotNull($quickpayPayment);
+        self::assertSame(501, $quickpayPayment->id);
+        self::assertSame('qp_000000001', $quickpayPayment->orderId);
+
+        self::assertCount(1, $this->requests);
+        [$method, $url, $options] = $this->requests[0];
+        self::assertSame('GET', $method);
+        self::assertSame('https://api.quickpay.net/payments/501', $url);
+        self::assertContains('Authorization: Basic ' . base64_encode(':the-dk-api-key'), self::headersOf($options));
+    }
+
+    /**
+     * @test
+     */
+    public function it_answers_no_quickpay_payment_for_a_payment_without_a_quickpay_gateway_configuration(): void
+    {
+        self::assertNull($this->provider(paymentsGatewayConfiguration: null)->quickpayPaymentOf(self::syliusPayment(['quickpayPaymentId' => 501])));
+        self::assertSame([], $this->requests);
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider detailsWithoutAQuickpayPaymentId
+     */
+    public function it_answers_no_quickpay_payment_for_a_payment_whose_details_carry_no_quickpay_payment_id(array $details): void
+    {
+        self::assertNull($this->provider(paymentsGatewayConfiguration: GatewayConfigurations::of())->quickpayPaymentOf(self::syliusPayment($details)));
+        self::assertSame([], $this->requests);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function detailsWithoutAQuickpayPaymentId(): iterable
+    {
+        yield 'no details' => [[]];
+
+        // What a payment that never reached Quickpay may carry
+        yield 'a null id' => [['quickpayPaymentId' => null, 'order_id' => 'qp_000000001']];
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider unusableGatewayConfigurations
+     */
+    public function it_throws_reading_the_quickpay_payment_of_a_payment_whose_gateway_configuration_is_unusable(GatewayConfiguration $gatewayConfiguration): void
+    {
+        try {
+            $this->provider(paymentsGatewayConfiguration: $gatewayConfiguration)->quickpayPaymentOf(self::syliusPayment(['quickpayPaymentId' => 501]));
+            self::fail('No exception was thrown');
+        } catch (UnusableGatewayConfiguration $e) {
+            self::assertSame('quickpay_dk', $e->gatewayName);
+        }
+
+        self::assertSame([], $this->requests);
+    }
+
+    /**
+     * @return iterable<string, array{GatewayConfiguration}>
+     */
+    public static function unusableGatewayConfigurations(): iterable
+    {
+        yield 'invalid' => [GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand'], 'quickpay_dk')];
+
+        yield 'encrypted' => [GatewayConfigurations::encrypted('quickpay_dk')];
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider quickpayErrors
+     *
+     * @param class-string<QuickpayException> $expectedException
+     */
+    public function it_throws_the_sdks_exception_when_quickpay_does_not_answer_with_the_payment(MockResponse $response, string $expectedException): void
+    {
+        $this->expectException($expectedException);
+
+        $this->provider(paymentsGatewayConfiguration: GatewayConfigurations::of(), response: $response)->quickpayPaymentOf(self::syliusPayment(['quickpayPaymentId' => 501]));
+    }
+
+    /**
+     * @return iterable<string, array{MockResponse, class-string<QuickpayException>}>
+     */
+    public static function quickpayErrors(): iterable
+    {
+        yield 'unknown payment' => [self::quickpayError(404), NotFoundException::class];
+
+        yield 'api key refused' => [self::quickpayError(401), UnauthorizedException::class];
+
+        yield 'Quickpay failing' => [self::quickpayError(500), ServerErrorException::class];
+    }
+
+    /**
+     * An id payum-quickpay can't read is no proof the payment never reached Quickpay, so it is no reason to answer null
+     *
+     * @test
+     */
+    public function it_throws_for_details_carrying_an_unusable_quickpay_payment_id(): void
+    {
+        $this->expectException(LogicException::class);
+
+        try {
+            $this->provider(paymentsGatewayConfiguration: GatewayConfigurations::of())->quickpayPaymentOf(self::syliusPayment(['quickpayPaymentId' => 'foo']));
+        } finally {
+            self::assertSame([], $this->requests);
+        }
+    }
+
+    /**
+     * A provider whose HTTP client answers every request with the response, a Quickpay payment unless another is
+     * given, and whose gateway configuration module gives every Sylius payment the given gateway configuration
+     * (null: the payment isn't a Quickpay one)
+     */
+    private function provider(?GatewayConfiguration $paymentsGatewayConfiguration = null, ?MockResponse $response = null): QuickpayClientProvider
+    {
+        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $gatewayConfigurationProvider->forPayment(Argument::type(PaymentInterface::class))->willReturn($paymentsGatewayConfiguration);
+
+        return new QuickpayClientProvider(new MockHttpClient(function (string $method, string $url, array $options) use ($response): MockResponse {
             /** @var array<string, mixed> $options */
             $this->requests[] = [$method, $url, $options];
 
-            return new MockResponse(self::quickpayPayment(), ['response_headers' => ['Content-Type' => 'application/json']]);
-        }), $this->cacheDir);
+            return $response ?? new MockResponse(self::quickpayPayment(), ['response_headers' => ['Content-Type' => 'application/json']]);
+        }), $this->cacheDir, $gatewayConfigurationProvider->reveal());
+    }
+
+    /**
+     * @param array<string, mixed> $details
+     */
+    private static function syliusPayment(array $details): PaymentInterface
+    {
+        $payment = new Payment();
+        $payment->setDetails($details);
+
+        return $payment;
     }
 
     /**
@@ -134,6 +286,14 @@ final class QuickpayClientProviderTest extends TestCase
         self::assertIsArray($headers);
 
         return array_values(array_filter($headers, is_string(...)));
+    }
+
+    /**
+     * Quickpay's answer to a request it fails or refuses
+     */
+    private static function quickpayError(int $statusCode): MockResponse
+    {
+        return new MockResponse('{"message": "Not this time"}', ['http_code' => $statusCode, 'response_headers' => ['Content-Type' => 'application/json']]);
     }
 
     /**
