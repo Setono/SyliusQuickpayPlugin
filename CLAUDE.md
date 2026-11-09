@@ -204,7 +204,9 @@ Quickpay goes through one scoped HTTP client with one policy**, the gateway's an
 - `SetonoSyliusQuickpayExtension::prepend()` prepends the framework scoped client `setono_sylius_quickpay.http_client`:
   base URI `https://api.quickpay.net`, `timeout` 10, `max_duration` 10, no `retry_failed` (a retried capture or refund
   can move money twice). Apps override single options under the same name in their framework config (deep-merged; the
-  README shows a GET-only `retry_failed`). The 10 s ceiling is set against the reconcile lock's 60 s TTL (a callback
+  README shows a GET-only `retry_failed`). An app's `default_options.retry_failed` reaches the scoped client only when
+  the same `framework` config block also configures it, and is given as settings: Symfony's config normalization copies
+  it per block, onto the scoped clients listed there (the README warns about it). The 10 s ceiling is set against the reconcile lock's 60 s TTL (a callback
   makes up to four sequential reads). No per-method or per-caller policies.
 - **`QuickpayClientProviderInterface`** (service `QuickpayClientProvider`, args `setono_sylius_quickpay.http_client`,
   `%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk` and `GatewayConfigurationProviderInterface`):

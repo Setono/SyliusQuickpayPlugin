@@ -357,7 +357,7 @@ will surface persistent problems.
 ## HTTP policy
 
 Every request to Quickpay, the gateway's (checkout, capture, refund, cancel, callbacks, reconciling) and the plugin's
-own (the fraud check, the operation history, the fraud report, the doctor, verifying the api key on save), goes
+own (the fraud check, the operation history, the fraud report, the doctor, checking the api key and agreement on save), goes
 through one [scoped HTTP client](https://symfony.com/doc/current/http_client.html#scoping-client) that the plugin adds
 to your framework configuration: `setono_sylius_quickpay.http_client`. Its defaults:
 
@@ -407,6 +407,14 @@ framework:
 ```
 
 Each retry waits up to the full timeouts again, so keep `max_retries` low with the lock in mind.
+
+**Mind app-wide retries.** Your `framework.http_client.default_options.retry_failed` doesn't reach the plugin's client
+by itself: Symfony copies it onto a scoped client only when the same `framework:` block configures that scoped client
+too (the same file, and the same `when@<env>` section if it is in one), and only when it is given as settings rather
+than just `true`. So configuring `setono_sylius_quickpay.http_client` in the file that sets your app-wide retries, as in
+the examples above, turns them on for Quickpay, for `POST` requests too unless their `http_codes` say otherwise. Give
+the plugin's client a `retry_failed` of its own there: `false`, or the reads-only settings above. Include `http_codes`
+in it, because any setting it leaves out is taken from the app-wide one.
 
 ## Testing
 
