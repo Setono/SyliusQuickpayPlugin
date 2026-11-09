@@ -430,7 +430,8 @@ key's checksum computation, checks that a configured agreement id exists on the 
 the order prefix length — plus, across gateways, that no two share a prefix, and that the notify route
 is registered at all. With `--live` it also creates a money-less test payment and attempts the payment
 link `PUT` the checkout depends on, catching a missing *Create or update payment link* permission before
-a customer does (the test payment remains visible on the account; it never carries money). The command
+a customer does (the test payment remains visible on the account, and the check's line names its id and order id; it
+never carries money). The command
 exits non-zero when any check fails, so it can run in CI or cron.
 
 A check against Quickpay prints as passed (✔), failed (✖, failing the run) or, when Quickpay's answer proves neither
