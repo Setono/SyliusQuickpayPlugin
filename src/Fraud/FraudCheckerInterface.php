@@ -10,8 +10,8 @@ interface FraudCheckerInterface
 {
     /**
      * Whether Quickpay reports the payment as fraud suspected. Answers false whenever the question
-     * cannot be answered — no Quickpay payment, no api key, Quickpay unreachable — so a broken check
-     * never blocks the payment flow.
+     * cannot be answered — no Quickpay payment, no Quickpay gateway configuration or an unusable one,
+     * Quickpay unreachable — so a broken check never blocks the payment flow.
      */
     public function isFraudSuspected(PaymentInterface $payment): bool;
 }

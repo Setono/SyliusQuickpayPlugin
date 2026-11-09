@@ -169,6 +169,9 @@ from the gateway configuration's **Payment methods** field, so nothing is config
 MobilePay mark; a token without a bundled logo (e.g. `resurs`) renders as a small text label. Quickpay's token
 grammar is understood: exclusions (`!diners`) are skipped, forced 3-D Secure (`3d-creditcard`) is ignored, and
 regional/debit variants (`visa-dk`, `mastercard-debet-dk`, `mobilepay-subscriptions`) collapse onto their brand.
+The field is read the way the gateway reads it, so `payment_methods` stored as a list (by fixtures or the Admin API)
+gets logos too. A payment method whose gateway configuration is unusable shows no logos and a warning is logged; the
+checkout keeps working.
 
 Bundled logos cover cards (Visa, Visa Electron, Mastercard, Maestro, American Express, Diners Club, Discover, JCB,
 UnionPay, Dankort, Forbrugsforeningen) and MobilePay, Apple Pay, Google Pay, Klarna, Anyday, Vipps, Swish, PayPal,
@@ -214,8 +217,8 @@ is sent in the order's locale through Sylius' mailer and can be overridden like 
 Each Quickpay payment on the admin order view shows its **live operation history** — every
 authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
 captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
-so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, the panel shows an
-inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
+so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
+gateway configuration is unusable, the panel shows an inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
 
 ## Fraud signals
 
@@ -226,10 +229,11 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
   the automatic capture on the payment's `complete` transition is skipped when Quickpay reports the payment as
   fraud suspected — the completion itself is not blocked; the payment is logged and left for manual review, so
   you capture or cancel it in the Quickpay manager after looking at it. The check asks Quickpay at capture time
-  and fails open: an unreachable Quickpay never blocks the payment flow. It costs one extra API call per
+  and fails open: an unreachable Quickpay, or an unusable gateway configuration, never blocks the payment flow. It costs one extra API call per
   automatic capture, which is why it is off by default.
 - A **report mode** on the reconciliation command that asks Quickpay for every payment flagged in the period,
-  regardless of its local state — report only, nothing is transitioned:
+  regardless of its local state — report only, nothing is transitioned. A gateway it can't query, because Quickpay
+  fails or its gateway configuration is unusable, is reported by name and makes the run exit non-zero:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
