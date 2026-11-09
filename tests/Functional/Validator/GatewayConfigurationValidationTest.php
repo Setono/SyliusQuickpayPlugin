@@ -9,7 +9,10 @@ use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Sylius\Bundle\PayumBundle\Validator\GroupsGenerator\GatewayConfigGroupsGenerator;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
+use Symfony\Component\Translation\TranslatorBagInterface;
+use Symfony\Component\Validator\ConstraintViolationInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Contracts\Translation\LocaleAwareInterface;
 
 /**
  * Saving a payment method validates it with the groups Sylius picks for its gateway, in the admin form and the Admin
@@ -130,9 +133,55 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
-     * The violations saving the payment method meets, each message keyed by its path
+     * The plugin's own messages, unlike payum-quickpay's per-option ones, are shown in the admin's language
      *
-     * @return array<string, string>
+     * @test
+     *
+     * @dataProvider locales
+     */
+    public function it_words_its_own_refusals_in_every_locale(string $locale): void
+    {
+        self::bootKernel();
+
+        $translator = self::getContainer()->get('translator');
+        self::assertInstanceOf(TranslatorBagInterface::class, $translator);
+        self::assertInstanceOf(LocaleAwareInterface::class, $translator);
+        $translator->setLocale($locale);
+
+        $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+        $this->quickpay()->respond('GET', '/payments', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+
+        $rejectedApiKey = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
+        $unreadable = $this->createPaymentMethod('quickpay_se', GatewayConfigurations::USABLE);
+        $unreadable->setGatewayConfig(GatewayConfigurations::encryptedEntity('quickpay_se'));
+
+        $violations = [
+            ...array_values($this->violationsOf($rejectedApiKey)),
+            ...array_values($this->violationsOf($unreadable)),
+        ];
+        self::assertCount(2, $violations);
+
+        foreach ($violations as $violation) {
+            $catalogue = $translator->getCatalogue($locale);
+            self::assertTrue($catalogue->defines($violation->getMessageTemplate(), 'validators'), sprintf('"%s" is translated into "%s"', $violation->getMessageTemplate(), $locale));
+            self::assertSame($catalogue->get($violation->getMessageTemplate(), 'validators'), $violation->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function locales(): iterable
+    {
+        foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
+            yield $locale => [$locale];
+        }
+    }
+
+    /**
+     * The violations saving the payment method meets, keyed by their paths
+     *
+     * @return array<string, ConstraintViolationInterface>
      */
     private function violationsOf(PaymentMethodInterface $paymentMethod): array
     {
@@ -144,7 +193,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
         $violations = [];
         foreach ($validator->validate($paymentMethod, groups: $groupsGenerator($paymentMethod)) as $violation) {
-            $violations[$violation->getPropertyPath()] = (string) $violation->getMessage();
+            $violations[$violation->getPropertyPath()] = $violation;
         }
 
         return $violations;

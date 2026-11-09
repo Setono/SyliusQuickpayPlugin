@@ -36,14 +36,14 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator
         } catch (UnusableGatewayConfiguration $e) {
             // Unreadable as a whole, as an encrypted configuration is
             if ([] === $e->getViolations()) {
-                $this->context->buildViolation($e->getMessage())
-                    ->disableTranslation()
+                $this->context->buildViolation($constraint->unreadableMessage)
                     ->atPath('config')
                     ->addViolation()
                 ;
             }
 
-            // payum-quickpay's messages: what an option means, and so what is wrong with it, is the library's to say
+            // What an option means, and so what is wrong with it, is payum-quickpay's to say: its per-option messages
+            // pass through as the library's English, untranslated
             foreach ($e->getViolations() as $option => $message) {
                 $this->context->buildViolation($message)
                     ->disableTranslation()

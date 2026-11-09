@@ -16,6 +16,8 @@ final class UsableGatewayConfiguration extends Constraint
 {
     public string $apiKeyRejectedMessage = 'setono_sylius_quickpay.gateway_configuration.api_key.invalid';
 
+    public string $unreadableMessage = 'setono_sylius_quickpay.gateway_configuration.unreadable';
+
     public function getTargets(): string
     {
         return self::CLASS_CONSTRAINT;

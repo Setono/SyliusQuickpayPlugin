@@ -371,8 +371,10 @@ in that folder) and need `assets:install` in the host app.
   PayPal gateways use). The plugin's validation mapping (`Resources/config/validation/GatewayConfig.xml`) declares
   `Validator/Constraints/UsableGatewayConfiguration` (class constraint on Sylius' `GatewayConfig`, group
   `sylius_quickpay`): its validator reads the config through the gateway configuration module and adds payum-quickpay's
-  violations, untranslated, one per option at `config[<option>]` (lands on the form field; an option without a field,
-  like `language`, on the config form; an unreadable/encrypted config on `config`). Only on a usable configuration
+  violations, in the library's English, one per option at `config[<option>]` (lands on the form field; an option
+  without a field, like `language`, on the config form); an unreadable/encrypted config gets the plugin's
+  `unreadable` message on `config`. Every message the plugin owns is a `validators` key shipped in all 16 locales
+  (the functional test checks each locale). Only on a usable configuration
   does it then verify the api key through `Quickpay/ApiKeyVerifier` (shared with the doctor command; backed by
   `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first, falling back to a one-item `/payments` read
   because Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
