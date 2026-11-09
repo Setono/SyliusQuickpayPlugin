@@ -261,10 +261,24 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         // Reaching the limit isn't a failure
         $tester->assertCommandIsSuccessful();
         $display = (string) preg_replace('/\s+/', ' ', $tester->getDisplay());
-        self::assertStringContainsString('qp_000000001', $display);
-        self::assertStringContainsString('The report stopped at the limit of 1 payment(s) and didn\'t query the gateway(s) "quickpay_se".', $display);
         self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
-        self::assertSame(['Authorization: Basic ' . base64_encode(':the-dk-api-key')], self::authorizationOf($this->quickpay()->sentRequestOptions()[0]));
+
+        // Nothing orders the gateway configurations, so whichever gateway was queried, the other one is named
+        $gatewayByAuthorization = [
+            'Authorization: Basic ' . base64_encode(':the-dk-api-key') => 'quickpay_dk',
+            'Authorization: Basic ' . base64_encode(':the-se-api-key') => 'quickpay_se',
+        ];
+        $authorization = self::authorizationOf($this->quickpay()->sentRequestOptions()[0]);
+        self::assertIsArray($authorization);
+        self::assertCount(1, $authorization);
+        $authorization = $authorization[0] ?? null;
+        self::assertIsString($authorization);
+        $queried = $gatewayByAuthorization[$authorization] ?? null;
+        self::assertNotNull($queried, 'The report queried Quickpay with neither gateway\'s api key');
+        $unqueried = 'quickpay_dk' === $queried ? 'quickpay_se' : 'quickpay_dk';
+
+        self::assertStringContainsString(sprintf('%s 501 qp_000000001', $queried), $display);
+        self::assertStringContainsString(sprintf('The report stopped at the limit of 1 payment(s) and didn\'t query the gateway(s) "%s".', $unqueried), $display);
     }
 
     /**
