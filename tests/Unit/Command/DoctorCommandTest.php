@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Command;
 
-use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Prophecy\Prophecy\ObjectProphecy;
-use Setono\Quickpay\Client\Client;
 use Setono\SyliusQuickpayPlugin\Command\DoctorCommand;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
@@ -17,7 +15,6 @@ use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
-use Setono\SyliusQuickpayPlugin\Tests\Quickpay\QueuedResponsesHttpClient;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -28,6 +25,8 @@ use Symfony\Component\Routing\RouterInterface;
 final class DoctorCommandTest extends TestCase
 {
     use ProphecyTrait;
+
+    private const TEST_PAYMENT_NOTE = 'test payment 999 with order id "qp_dr1a2b3c" remains on the account — it never carries money';
 
     /** @var ObjectProphecy<GatewayChecksInterface> */
     private ObjectProphecy $gatewayChecks;
@@ -249,7 +248,8 @@ final class DoctorCommandTest extends TestCase
         $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'agreement_id' => 12345, 'use_authorize' => true]));
 
         $this->gatewayChecks->apiKey(Argument::any())->shouldNotBeCalled();
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->agreement(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--live' => true]);
 
@@ -425,41 +425,61 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
-    public function it_probes_the_payment_link_permission_in_live_mode_with_the_gateway_configurations_client(): void
+    public function it_prints_a_passed_payment_link_permission_check_with_its_note_in_live_mode(): void
     {
-        $configuration = GatewayConfigurations::of(self::healthyConfig());
+        $configuration = GatewayConfigurations::of(self::healthyConfig(), 'quickpay_dk');
         $this->configureGateways($configuration);
-
-        $this->clientProvider->forGatewayConfiguration($configuration)->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
-            new Response(201, [], (string) json_encode(self::payment())),   // create test payment
-            new Response(200, [], '{"url": "https://payment.quickpay.net/x"}'), // link PUT
-            new Response(204, [], ''),                                      // link cleanup
-        )));
+        $this->gatewayChecks->paymentLinkPermission($configuration)->shouldBeCalledOnce()->willReturn(Verdict::passed(self::TEST_PAYMENT_NOTE));
 
         $tester = $this->executeCommand(['--live' => true]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('may create payment links', $tester->getDisplay());
-        self::assertStringContainsString('Test payment 999', $tester->getDisplay());
+        self::assertDisplayHasLine(sprintf('✔ The api user may create payment links (%s)', self::TEST_PAYMENT_NOTE), $tester);
     }
 
     /**
      * @test
      */
-    public function it_fails_when_the_api_user_may_not_create_payment_links(): void
+    public function it_fails_on_a_failed_payment_link_permission_check(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
-            new Response(201, [], (string) json_encode(self::payment())),   // create test payment
-            new Response(403, [], '{"message": "Not authorized"}'),         // link PUT rejected
-            new Response(204, [], ''),                                      // link cleanup attempt
-        )));
+        $this->gatewayChecks->paymentLinkPermission(Argument::any())->willReturn(Verdict::failed('The api user may not create payment links', self::TEST_PAYMENT_NOTE));
 
         $tester = $this->executeCommand(['--live' => true]);
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('Create or update payment link', $tester->getDisplay());
+        self::assertDisplayHasLine(sprintf('✖ The api user may not create payment links (%s)', self::TEST_PAYMENT_NOTE), $tester);
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_without_failing_on_an_undetermined_payment_link_permission_check(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
+        $this->gatewayChecks->paymentLinkPermission(Argument::any())->willReturn(Verdict::undetermined('The request could not be sent [PUT https://api.quickpay.net/payments/999/link]: Idle timeout reached', self::TEST_PAYMENT_NOTE));
+
+        $tester = $this->executeCommand(['--live' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertDisplayHasLine(sprintf('! Could not verify the payment link permission: The request could not be sent [PUT https://api.quickpay.net/payments/999/link]: Idle timeout reached (%s)', self::TEST_PAYMENT_NOTE), $tester);
+    }
+
+    /**
+     * It writes to the Quickpay account, so only on request
+     *
+     * @test
+     */
+    public function it_probes_the_payment_link_permission_only_in_live_mode(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
+        $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertDisplayHasLine('! Run with --live to probe the payment link permission (creates a harmless test payment)', $tester);
     }
 
     /**
@@ -471,15 +491,20 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_skips_the_agreement_and_live_checks_unless_the_api_key_check_passed(Verdict $apiKeyVerdict): void
     {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345])));
+        $this->configureGateways(
+            GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345]), 'quickpay_a'),
+            GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_b_']), 'quickpay_b'),
+        );
         $this->gatewayChecks->apiKey(Argument::any())->willReturn($apiKeyVerdict);
 
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->agreement(Argument::any())->shouldNotBeCalled();
+        $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--live' => true]);
 
-        self::assertStringContainsString('Skipped verifying agreement 12345', $tester->getDisplay());
-        self::assertStringNotContainsString('payment link', $tester->getDisplay());
+        self::assertDisplayHasLine('! Skipped verifying agreement 12345 — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped verifying the agreement — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped probing the payment link permission — no usable api key', $tester);
     }
 
     /**
@@ -489,29 +514,6 @@ final class DoctorCommandTest extends TestCase
     {
         yield 'failed' => [Verdict::failed('Quickpay rejects the api key')];
         yield 'undetermined' => [Verdict::undetermined('The request could not be sent')];
-    }
-
-    /**
-     * Without an api key Quickpay accepts, Quickpay's answer about the agreement would prove nothing
-     *
-     * @test
-     *
-     * @dataProvider apiKeyVerdictsOtherThanPassed
-     */
-    public function it_skips_the_agreement_check_with_a_warning_unless_the_api_key_check_passed(Verdict $apiKeyVerdict): void
-    {
-        $this->configureGateways(
-            GatewayConfigurations::of(self::healthyConfig(['agreement_id' => 12345]), 'quickpay_a'),
-            GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_b_']), 'quickpay_b'),
-        );
-        $this->gatewayChecks->apiKey(Argument::any())->willReturn($apiKeyVerdict);
-
-        $this->gatewayChecks->agreement(Argument::any())->shouldNotBeCalled();
-
-        $tester = $this->executeCommand();
-
-        self::assertDisplayHasLine('! Skipped verifying agreement 12345 — no usable api key', $tester);
-        self::assertDisplayHasLine('! Skipped verifying the agreement — no usable api key', $tester);
     }
 
     /**
@@ -525,79 +527,6 @@ final class DoctorCommandTest extends TestCase
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         self::assertStringContainsString('No order prefix configured', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_fails_when_the_api_user_may_not_create_payments(): void
-    {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
-            new Response(403, [], '{"message": "Not authorized"}'),
-        )));
-
-        $tester = $this->executeCommand(['--live' => true]);
-
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('may not create payments', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_warns_when_the_test_payment_cannot_be_created(): void
-    {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
-            new Response(500, [], '{"message": "boom"}'),
-        )));
-
-        $tester = $this->executeCommand(['--live' => true]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('Could not create a test payment', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_warns_when_the_link_probe_errors(): void
-    {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
-            new Response(201, [], (string) json_encode(self::payment())),
-            new Response(500, [], '{"message": "boom"}'),
-            new Response(204, [], ''),
-        )));
-
-        $tester = $this->executeCommand(['--live' => true]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('Could not create a payment link', $tester->getDisplay());
-        self::assertStringContainsString('Test payment 999', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
-    public function it_ignores_a_failing_link_cleanup(): void
-    {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-
-        $this->clientProvider->forGatewayConfiguration(Argument::any())->willReturn(new Client('the-api-key', new QueuedResponsesHttpClient(
-            new Response(201, [], (string) json_encode(self::payment())),
-            new Response(200, [], '{"url": "https://payment.quickpay.net/x"}'),
-            new Response(500, [], '{"message": "boom"}'),
-        )));
-
-        $tester = $this->executeCommand(['--live' => true]);
-
-        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('may create payment links', $tester->getDisplay());
     }
 
     /**
@@ -634,20 +563,6 @@ final class DoctorCommandTest extends TestCase
         return $overrides + GatewayConfigurations::USABLE + [
             'order_prefix' => 'qp_',
             'use_authorize' => true,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function payment(): array
-    {
-        return [
-            'id' => 999,
-            'order_id' => 'qp_dr123456',
-            'currency' => 'DKK',
-            'state' => 'initial',
-            'merchant_id' => 1,
         ];
     }
 

@@ -272,7 +272,9 @@ mapping applies.
   null on a pass) and its `note` (a caveat), both English. `apiKey(GatewayConfiguration): Verdict` checks the api key:
   `/ping` accepted passes; a `/ping` refused with 401/403 is decided by a one-item `/payments` read, which passes with
   a note when accepted and fails when refused with 401/403; any other error is undetermined, with Quickpay's error as
-  the reason. Save validation and the doctor run it.
+  the reason. Save validation and the doctor run it. `paymentLinkPermission(GatewayConfiguration): Verdict`, the
+  doctor's `--live` probe, creates a money-less test payment and puts a link on it: either refused with 401/403 fails,
+  any other error is undetermined, and the note names the test payment left on the account.
 
 ### Changed constructors
 

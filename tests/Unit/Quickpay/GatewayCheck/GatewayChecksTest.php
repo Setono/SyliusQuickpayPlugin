@@ -33,6 +33,9 @@ final class GatewayChecksTest extends TestCase
     /** @var list<array<array-key, mixed>> each request's headers, in the order of the requests, as "Name: value" lines per lowercase name */
     private array $requestHeaders = [];
 
+    /** @var list<mixed> each request's body, in the order of the requests */
+    private array $requestBodies = [];
+
     private string $cacheDir;
 
     protected function setUp(): void
@@ -204,6 +207,158 @@ final class GatewayChecksTest extends TestCase
     }
 
     /**
+     * @test
+     */
+    public function it_passes_the_payment_link_permission_when_quickpay_puts_a_link_on_a_test_payment(): void
+    {
+        $this->respond('POST', '/payments', self::json(201, self::testPayment()));
+        $this->respond('PUT', '/payments/999/link', self::json(200, ['url' => 'https://payment.quickpay.net/payments/the-link']));
+        $this->respond('DELETE', '/payments/999/link', new MockResponse('', ['http_code' => 204]));
+
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_']));
+
+        self::assertSame(VerdictOutcome::Passed, $verdict->outcome);
+        self::assertNull($verdict->reason);
+        self::assertSame(['POST /payments', 'PUT /payments/999/link', 'DELETE /payments/999/link'], $this->requests);
+        self::assertSame(sprintf('test payment 999 with order id "%s" remains on the account — it never carries money', $this->sentTestOrderId()), $verdict->note);
+    }
+
+    /**
+     * The gateway's order prefix, "dr" and six random hex digits: unique per run, and told apart from orders by the
+     * prefix the account's orders carry
+     *
+     * @test
+     *
+     * @dataProvider orderPrefixes
+     */
+    public function it_creates_the_test_payment_with_an_order_id_of_the_gateways_order_prefix(?string $orderPrefix, string $orderIdPattern): void
+    {
+        $this->respond('POST', '/payments', self::json(201, self::testPayment()));
+        $this->respond('PUT', '/payments/999/link', self::json(200, ['url' => 'https://payment.quickpay.net/payments/the-link']));
+        $this->respond('DELETE', '/payments/999/link', new MockResponse('', ['http_code' => 204]));
+
+        $this->checks()->paymentLinkPermission(GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => $orderPrefix]));
+
+        self::assertMatchesRegularExpression($orderIdPattern, $this->sentTestOrderId());
+    }
+
+    /**
+     * @return iterable<string, array{string|null, string}>
+     */
+    public static function orderPrefixes(): iterable
+    {
+        yield 'an order prefix' => ['qp_', '/^qp_dr[0-9a-f]{6}$/'];
+        yield 'no order prefix' => [null, '/^dr[0-9a-f]{6}$/'];
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider refusals
+     */
+    public function it_fails_the_payment_link_permission_when_quickpay_refuses_to_create_the_test_payment(int $status): void
+    {
+        $this->respond('POST', '/payments', self::json($status, ['message' => 'Not authorized']));
+
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of());
+
+        self::assertSame(VerdictOutcome::Failed, $verdict->outcome);
+        self::assertSame('The api user may not create payments — check the POST permission for /payments (Settings → Users → User permissions)', $verdict->reason);
+        self::assertNull($verdict->note);
+        self::assertSame(['POST /payments'], $this->requests);
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider errors
+     */
+    public function it_leaves_the_payment_link_permission_undetermined_when_quickpay_answers_the_test_payment_with_another_error(MockResponse $error, string $quickpaysError): void
+    {
+        $this->respond('POST', '/payments', $error);
+
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of());
+
+        self::assertSame(VerdictOutcome::Undetermined, $verdict->outcome);
+        self::assertSame(str_replace('[GET https://api.quickpay.net/ping]', '[POST https://api.quickpay.net/payments]', $quickpaysError), $verdict->reason);
+        self::assertNull($verdict->note);
+        self::assertSame(['POST /payments'], $this->requests);
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider refusals
+     */
+    public function it_fails_the_payment_link_permission_when_quickpay_refuses_to_put_a_link_on_the_test_payment(int $status): void
+    {
+        $this->respond('POST', '/payments', self::json(201, self::testPayment()));
+        $this->respond('PUT', '/payments/999/link', self::json($status, ['message' => 'Not authorized to PUT /payments/:id/link']));
+        $this->respond('DELETE', '/payments/999/link', new MockResponse('', ['http_code' => 204]));
+
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of());
+
+        self::assertSame(VerdictOutcome::Failed, $verdict->outcome);
+        self::assertSame('The api user may not create payment links — check the PUT checkbox for "Create or update payment link" (Settings → Users → User permissions)', $verdict->reason);
+        self::assertSame(sprintf('test payment 999 with order id "%s" remains on the account — it never carries money', $this->sentTestOrderId()), $verdict->note);
+        self::assertSame(['POST /payments', 'PUT /payments/999/link', 'DELETE /payments/999/link'], $this->requests);
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider errors
+     */
+    public function it_leaves_the_payment_link_permission_undetermined_when_quickpay_answers_the_link_with_another_error(MockResponse $error, string $quickpaysError): void
+    {
+        $this->respond('POST', '/payments', self::json(201, self::testPayment()));
+        $this->respond('PUT', '/payments/999/link', $error);
+        $this->respond('DELETE', '/payments/999/link', new MockResponse('', ['http_code' => 204]));
+
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of());
+
+        self::assertSame(VerdictOutcome::Undetermined, $verdict->outcome);
+        self::assertSame(str_replace('[GET https://api.quickpay.net/ping]', '[PUT https://api.quickpay.net/payments/999/link]', $quickpaysError), $verdict->reason);
+        self::assertSame(sprintf('test payment 999 with order id "%s" remains on the account — it never carries money', $this->sentTestOrderId()), $verdict->note);
+        self::assertSame(['POST /payments', 'PUT /payments/999/link', 'DELETE /payments/999/link'], $this->requests);
+    }
+
+    /**
+     * Deleting the link only tidies up: the test payment stays either way
+     *
+     * @test
+     *
+     * @dataProvider errors
+     */
+    public function it_passes_the_payment_link_permission_when_quickpay_fails_to_delete_the_link_again(MockResponse $error): void
+    {
+        $this->respond('POST', '/payments', self::json(201, self::testPayment()));
+        $this->respond('PUT', '/payments/999/link', self::json(200, ['url' => 'https://payment.quickpay.net/payments/the-link']));
+        $this->respond('DELETE', '/payments/999/link', $error);
+
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of());
+
+        self::assertSame(VerdictOutcome::Passed, $verdict->outcome);
+        self::assertSame(sprintf('test payment 999 with order id "%s" remains on the account — it never carries money', $this->sentTestOrderId()), $verdict->note);
+        self::assertSame(['POST /payments', 'PUT /payments/999/link', 'DELETE /payments/999/link'], $this->requests);
+    }
+
+    /**
+     * @test
+     */
+    public function it_creates_no_test_payment_for_an_unusable_gateway_configuration(): void
+    {
+        try {
+            $this->checks()->paymentLinkPermission(GatewayConfigurations::of(['api_key' => 'the-api-key'], 'quickpay_dk'));
+            self::fail('No exception was thrown');
+        } catch (UnusableGatewayConfiguration $e) {
+            self::assertSame('quickpay_dk', $e->gatewayName);
+        }
+
+        self::assertSame([], $this->requests);
+    }
+
+    /**
      * The gateway then sends no agreement id, and Quickpay uses the account's default agreement
      *
      * @test
@@ -347,6 +502,7 @@ final class GatewayChecksTest extends TestCase
             $headers = $options['normalized_headers'] ?? [];
             self::assertIsArray($headers);
             $this->requestHeaders[] = $headers;
+            $this->requestBodies[] = $options['body'] ?? null;
 
             return $this->responses[$key] ?? throw new \LogicException(sprintf('No response scripted for "%s"', $key));
         }), $this->cacheDir, $this->prophesize(GatewayConfigurationProviderInterface::class)->reveal()));
@@ -366,5 +522,35 @@ final class GatewayChecksTest extends TestCase
             'http_code' => $status,
             'response_headers' => ['Content-Type' => 'application/json'],
         ]);
+    }
+
+    /**
+     * The order id of the test payment the check asked Quickpay to create
+     */
+    private function sentTestOrderId(): string
+    {
+        $body = $this->requestBodies[0] ?? null;
+        self::assertIsString($body);
+        $payment = json_decode($body, true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payment);
+        self::assertIsString($payment['order_id'] ?? null);
+
+        return $payment['order_id'];
+    }
+
+    /**
+     * Quickpay's answer to creating the test payment
+     *
+     * @return array<string, mixed>
+     */
+    private static function testPayment(): array
+    {
+        return [
+            'id' => 999,
+            'order_id' => 'qp_dr1a2b3c',
+            'currency' => 'DKK',
+            'state' => 'initial',
+            'merchant_id' => 1,
+        ];
     }
 }

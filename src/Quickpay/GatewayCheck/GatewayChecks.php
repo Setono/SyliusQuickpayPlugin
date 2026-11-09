@@ -8,6 +8,8 @@ use Setono\Quickpay\Exception\ForbiddenException;
 use Setono\Quickpay\Exception\NotFoundException;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Exception\UnauthorizedException;
+use Setono\Quickpay\Request\Payment\CreateLinkRequest;
+use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
@@ -67,5 +69,41 @@ final class GatewayChecks implements GatewayChecksInterface
         }
 
         return Verdict::passed();
+    }
+
+    public function paymentLinkPermission(GatewayConfiguration $gatewayConfiguration): Verdict
+    {
+        $client = $this->clientProvider->forGatewayConfiguration($gatewayConfiguration);
+
+        // The gateway's order prefix, like the store's orders on the account, and a random suffix unique per run
+        $orderId = $gatewayConfiguration->options()->orderPrefix . 'dr' . bin2hex(random_bytes(3));
+
+        try {
+            $payment = $client->payments()->create(new CreatePaymentRequest(orderId: $orderId, currency: 'DKK'));
+        } catch (UnauthorizedException|ForbiddenException) {
+            return Verdict::failed('The api user may not create payments — check the POST permission for /payments (Settings → Users → User permissions)');
+        } catch (QuickpayException $e) {
+            return Verdict::undetermined($e->getMessage());
+        }
+
+        $testPayment = sprintf('test payment %d with order id "%s" remains on the account — it never carries money', $payment->id, $orderId);
+
+        try {
+            // The link PUT checkout sends; a link needs an amount, and nobody ever pays through this one
+            $client->payments()->createLink($payment->id, new CreateLinkRequest(amount: 100));
+            $verdict = Verdict::passed($testPayment);
+        } catch (UnauthorizedException|ForbiddenException) {
+            $verdict = Verdict::failed('The api user may not create payment links — check the PUT checkbox for "Create or update payment link" (Settings → Users → User permissions)', $testPayment);
+        } catch (QuickpayException $e) {
+            $verdict = Verdict::undetermined($e->getMessage(), $testPayment);
+        }
+
+        try {
+            $client->payments()->deleteLink($payment->id);
+        } catch (QuickpayException) {
+            // Deleting the link only tidies up: the test payment stays on the account either way
+        }
+
+        return $verdict;
     }
 }

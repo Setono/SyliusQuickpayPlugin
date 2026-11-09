@@ -71,8 +71,7 @@ Run any Symfony console command for the plugin from inside that directory, e.g.
 Each PHPUnit suite is one directory: `tests/Unit/` (no kernel, no database; paths mirror `src/`, namespace
 `Setono\SyliusQuickpayPlugin\Tests\Unit\…`) and `tests/Functional/` (below). Test support stays outside both, where
 either suite and the test application can reach it: the Quickpay HTTP doubles in `tests/Quickpay/` (`ScriptedHttpClient`
-for the functional suite, the PSR-18 `FixedResponseHttpClient` and `QueuedResponsesHttpClient` for unit tests running a
-real SDK client), `tests/GatewayConfiguration/GatewayConfigurations`,
+for the functional suite, the PSR-18 `FixedResponseHttpClient` for unit tests running a real SDK client), `tests/GatewayConfiguration/GatewayConfigurations`,
 `tests/Payum/OfflineNotifyAction`, `tests/Application/` and `tests/PHPStan/`. `GatewayConfigurations` is the one shared
 helper for real gateway config objects: `of($config, $gatewayName)` and `encrypted()` give the module's
 `GatewayConfiguration`, `entity(...)` and `encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted
@@ -233,9 +232,9 @@ Read `GLOSSARY.md` (Gateway check, Verdict) first. A gateway check tests against
 configuration's credentials allow and returns a **verdict**; callers branch on its outcome and never catch SDK
 exceptions or interpret Quickpay's status codes themselves.
 - **`GatewayChecksInterface`** (service `GatewayChecks`, arg `QuickpayClientProviderInterface`, so every check follows
-  the HTTP policy): `apiKey(GatewayConfiguration): Verdict`. Each check takes a usable configuration: the provider
-  throws `UnusableGatewayConfiguration` for an unusable one, before any request. New checks (the agreement, the
-  payment link permission) are methods here, each returning a `Verdict`.
+  the HTTP policy): `apiKey(GatewayConfiguration): Verdict`, `paymentLinkPermission(GatewayConfiguration): Verdict`.
+  Each check takes a usable configuration: the provider throws `UnusableGatewayConfiguration` for an unusable one,
+  before any request. New checks (the agreement) are methods here, each returning a `Verdict`.
 - **`Verdict`**: `outcome` (`VerdictOutcome`: `Passed`, `Failed`, `Undetermined` when Quickpay's answer proves
   neither), `reason` (why it failed or proves nothing; null on a pass) and `note` (a caveat, on any outcome, e.g. how a
   pass was proven or what a check left on the account). Built with `Verdict::passed(?note)`, `failed(reason, ?note)`
@@ -246,6 +245,11 @@ exceptions or interpret Quickpay's status codes themselves.
 - **Api key**: `/ping` accepted → passed. `/ping` refused with 401/403 → a one-item `/payments` read decides, because
   Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
   permission (verified live): accepted → passed with the note that the api user lacks `/ping`; 401/403 → failed.
+- **Payment link permission** (`paymentLinkPermission()`, the doctor's `--live` probe; the one check that writes to the
+  account): creates a money-less test payment (`POST /payments`, DKK, order id = the gateway's order prefix + `dr` + 6
+  random hex digits): 401/403 → failed (may not create payments). Then puts a link on it (`PUT /payments/{id}/link`):
+  401/403 → failed (may not create payment links), accepted → passed. Then deletes the link, best effort (its errors are
+  ignored). Once the test payment exists, every verdict's note names it (id and order id): it stays on the account.
 - Tested at the HTTP seam in `tests/Unit/Quickpay/GatewayCheck/GatewayChecksTest` (the real provider over Symfony's
   `MockHttpClient`). Callers' unit tests double `GatewayChecksInterface` and return verdicts.
 
@@ -355,10 +359,10 @@ The order prefix checks need no gateway, so they run on every readable configura
 cross-gateway uniqueness among every readable configuration, usable or not. On a usable one it also runs, on the typed options:
 api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
 reason, counted as a failure, undetermined a warning with its reason; the agreement and `--live` checks run only when
-it passed, on a client from the provider), private key HMAC self-test (`CallbackValidator`), agreement
+it passed, the agreement on a client from the provider), private key HMAC self-test (`CallbackValidator`), agreement
 existence (`GET agreements/{id}` for the agreement id the gateway sends, none = the default agreement; failing open on
-permission errors), and notify-route registration; `--live` creates a money-less test payment and attempts the
-link PUT to surface the missing-permission 403. It warns, without failing, about a stored deprecated gateway option
+permission errors), and notify-route registration; `--live` prints the gateway checks' `paymentLinkPermission()`
+verdict with its note naming the test payment (skipped with a warning when the api key didn't pass). It warns, without failing, about a stored deprecated gateway option
 (`usesDeprecatedOptions()`: re-save the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout
 captures immediately), for a readable configuration even when it is invalid. Non-zero exit on any failed check;
 warnings don't fail. Its output is English console text, like the other commands', so it has no translations.

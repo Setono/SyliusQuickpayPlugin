@@ -6,11 +6,6 @@ namespace Setono\SyliusQuickpayPlugin\Command;
 
 use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\Quickpay\Callback\CallbackValidator;
-use Setono\Quickpay\Client\ClientInterface;
-use Setono\Quickpay\Exception\ForbiddenException;
-use Setono\Quickpay\Exception\UnauthorizedException;
-use Setono\Quickpay\Request\Payment\CreateLinkRequest;
-use Setono\Quickpay\Request\Payment\CreatePaymentRequest;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
@@ -107,12 +102,10 @@ final class DoctorCommand extends Command
             $this->checkAgreement($io, $gatewayConfiguration, $options->agreementId, $apiKeyAccepted);
             $this->checkOrderPrefix($io, $options->orderPrefix);
 
-            if ($apiKeyAccepted) {
-                if ($live) {
-                    $this->checkPaymentLinkPermission($io, $options->orderPrefix, $this->clientProvider->forGatewayConfiguration($gatewayConfiguration));
-                } else {
-                    $this->warn($io, 'Run with --live to probe the payment link permission (creates a harmless test payment)');
-                }
+            if ($live) {
+                $this->checkPaymentLinkPermission($io, $gatewayConfiguration, $apiKeyAccepted);
+            } elseif ($apiKeyAccepted) {
+                $this->warn($io, 'Run with --live to probe the payment link permission (creates a harmless test payment)');
             }
         }
 
@@ -291,42 +284,23 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * The one check that needs a write: create a money-less test payment and attempt the link PUT
-     * the checkout depends on, surfacing the "Not authorized to PUT /payments/:id/link" case
-     * before a customer does
+     * The one check that writes to the account (a money-less test payment, which the verdict's note names), surfacing
+     * the "Not authorized to PUT /payments/:id/link" case before a customer does
      */
-    private function checkPaymentLinkPermission(SymfonyStyle $io, string $orderPrefix, ClientInterface $client): void
+    private function checkPaymentLinkPermission(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, bool $apiKeyAccepted): void
     {
-        $orderId = $orderPrefix . 'dr' . bin2hex(random_bytes(3));
-
-        try {
-            $payment = $client->payments()->create(new CreatePaymentRequest(orderId: $orderId, currency: 'DKK'));
-        } catch (UnauthorizedException|ForbiddenException) {
-            $this->fail($io, 'The api user may not create payments — check the POST permission for /payments (Settings → Users → User permissions)');
-
-            return;
-        } catch (\Throwable $e) {
-            $this->warn($io, sprintf('Could not create a test payment: %s', $e->getMessage()));
+        if (!$apiKeyAccepted) {
+            $this->warn($io, 'Skipped probing the payment link permission — no usable api key');
 
             return;
         }
 
-        try {
-            $client->payments()->createLink($payment->id, new CreateLinkRequest(amount: 100));
-            $this->ok($io, 'The api user may create payment links (PUT /payments/:id/link)');
-        } catch (UnauthorizedException|ForbiddenException) {
-            $this->fail($io, 'The api user may not create payment links — check the PUT checkbox for "Create or update payment link" (Settings → Users → User permissions)');
-        } catch (\Throwable $e) {
-            $this->warn($io, sprintf('Could not create a payment link: %s', $e->getMessage()));
-        }
-
-        try {
-            $client->payments()->deleteLink($payment->id);
-        } catch (\Throwable) {
-            // Cleaning up the link is best effort; the test payment stays either way
-        }
-
-        $this->warn($io, sprintf('Test payment %d (order id "%s") remains on the account — it never carries money', $payment->id, $orderId));
+        $this->report(
+            $io,
+            $this->gatewayChecks->paymentLinkPermission($gatewayConfiguration),
+            'The api user may create payment links',
+            'Could not verify the payment link permission',
+        );
     }
 
     /**
