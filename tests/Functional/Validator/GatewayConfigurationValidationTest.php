@@ -103,24 +103,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     public function it_logs_payum_quickpays_reason_for_rejecting_an_option(): void
     {
         self::bootKernel();
-
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
-        $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
-        self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);
-        $validator->setLogger($logger);
+        $logger = $this->recordValidatorLogs();
 
         $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand']));
 
@@ -187,6 +170,23 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
 
         self::assertSame(['gatewayConfig.config[api_key]'], array_keys($this->violationsOf($paymentMethod)));
+        self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @test
+     */
+    public function it_accepts_an_api_key_whose_api_user_lacks_the_ping_permission(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+        $this->quickpay()->respond('GET', '/payments', new Response(200, ['Content-Type' => 'application/json'], '[]'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
+
+        self::assertSame([], $this->violationsOf($paymentMethod));
+        self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay()->sentRequests());
     }
 
     /**
@@ -207,19 +207,54 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
-     * Only an explicit rejection of the key counts: an unreachable Quickpay never makes a payment method unsaveable
+     * Only an explicit rejection of the key counts: an unreachable Quickpay never makes a payment method unsaveable.
+     * Why the key couldn't be verified is logged.
      *
      * @test
+     *
+     * @dataProvider unanswered
+     *
+     * @param array<string, Response> $responses
+     * @param list<string> $requests
      */
-    public function it_accepts_an_api_key_quickpay_could_not_verify(): void
+    public function it_accepts_an_api_key_quickpay_could_not_verify(array $responses, array $requests, string $quickpaysError): void
     {
         self::bootKernel();
+        $logger = $this->recordValidatorLogs();
 
-        $this->quickpay()->respond('GET', '/ping', new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}'));
+        foreach ($responses as $path => $response) {
+            $this->quickpay()->respond('GET', $path, $response);
+        }
 
         $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
 
         self::assertSame([], $this->violationsOf($paymentMethod));
+        self::assertSame($requests, $this->quickpay()->sentRequests());
+        self::assertSame([[
+            LogLevel::INFO,
+            sprintf('Could not verify the api key of the Quickpay gateway "quickpay_dk", so it was accepted unverified: %s', $quickpaysError),
+            ['gateway' => 'quickpay_dk'],
+        ]], $logger->records);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, Response>, list<string>, string}>
+     */
+    public static function unanswered(): iterable
+    {
+        yield 'an error on /ping' => [
+            ['/ping' => new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}')],
+            ['GET /ping'],
+            'The status code was: 500. [GET https://api.quickpay.net/ping] The body was: {"message":"Internal server error"}.',
+        ];
+        yield 'an error on the /payments read after /ping refused' => [
+            [
+                '/ping' => new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'),
+                '/payments' => new Response(502, ['Content-Type' => 'application/json'], '{"message":"Bad gateway"}'),
+            ],
+            ['GET /ping', 'GET /payments'],
+            'The status code was: 502. [GET https://api.quickpay.net/payments] The body was: {"message":"Bad gateway"}.',
+        ];
     }
 
     /**
@@ -289,6 +324,35 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
             yield $locale => [$locale];
         }
+    }
+
+    /**
+     * Gives the save validation's validator a logger recording what it logs
+     *
+     * @return object{records: list<array{mixed, string, array<array-key, mixed>}>}
+     */
+    private function recordValidatorLogs(): object
+    {
+        $logger = new class() extends AbstractLogger {
+            /** @var list<array{mixed, string, array<array-key, mixed>}> */
+            public array $records = [];
+
+            /**
+             * @param mixed $level
+             * @param string|\Stringable $message
+             * @param array<array-key, mixed> $context
+             */
+            public function log($level, $message, array $context = []): void
+            {
+                $this->records[] = [$level, (string) $message, $context];
+            }
+        };
+
+        $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
+        self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);
+        $validator->setLogger($logger);
+
+        return $logger;
     }
 
     /**

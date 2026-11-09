@@ -7,11 +7,10 @@ namespace Setono\SyliusQuickpayPlugin\Validator\Constraints;
 use Payum\Core\Model\GatewayConfigInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
-use Setono\Quickpay\Exception\ForbiddenException;
-use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 use Symfony\Component\Validator\Exception\UnexpectedTypeException;
@@ -21,7 +20,7 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
 {
     use LoggerAwareTrait;
 
-    public function __construct(private readonly ApiKeyVerifierInterface $apiKeyVerifier)
+    public function __construct(private readonly GatewayChecksInterface $gatewayChecks)
     {
     }
 
@@ -35,8 +34,10 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             throw new UnexpectedValueException($value, GatewayConfigInterface::class);
         }
 
+        $gatewayConfiguration = GatewayConfiguration::fromGatewayConfig($value);
+
         try {
-            $options = GatewayConfiguration::fromGatewayConfig($value)->options();
+            $gatewayConfiguration->options();
         } catch (UnusableGatewayConfiguration $e) {
             if ($e->isUnreadable()) {
                 $this->context->buildViolation($constraint->unreadableMessage)
@@ -59,21 +60,26 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
                 ]);
             }
 
-            // The api key is verified once the gateway would be built: a key the library rejects already has its
+            // The api key is checked once the gateway would be built: a key the library rejects already has its
             // violation, and a configuration refused anyway isn't worth a round trip to Quickpay
             return;
         }
 
-        try {
-            $this->apiKeyVerifier->verify($options->apiKey);
-        } catch (UnauthorizedException|ForbiddenException) {
+        $verdict = $this->gatewayChecks->apiKey($gatewayConfiguration);
+
+        if (VerdictOutcome::Failed === $verdict->outcome) {
             $this->context->buildViolation($constraint->apiKeyRejectedMessage)
                 ->atPath('config[api_key]')
                 ->addViolation()
             ;
-        } catch (\Throwable) {
-            // Fail open: an unreachable Quickpay must not make the payment method unsaveable, only an explicit
-            // rejection of the key counts as a rejected api key
+        } elseif (VerdictOutcome::Undetermined === $verdict->outcome) {
+            // Fail open: Quickpay's answer proves nothing, and an unreachable Quickpay must not make the payment method
+            // unsaveable
+            $this->logger?->info(sprintf(
+                'Could not verify the api key of the Quickpay gateway "%s", so it was accepted unverified: %s',
+                $gatewayConfiguration->gatewayName,
+                (string) $verdict->reason,
+            ), ['gateway' => $gatewayConfiguration->gatewayName]);
         }
     }
 }
