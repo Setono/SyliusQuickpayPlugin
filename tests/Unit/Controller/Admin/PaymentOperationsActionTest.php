@@ -15,10 +15,12 @@ use Setono\Quickpay\Client\Endpoint\PaymentsEndpoint;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Response\Payment\Payment as QuickpayPayment;
 use Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Twig\Environment;
@@ -91,21 +93,45 @@ final class PaymentOperationsActionTest extends TestCase
 
     /**
      * @test
+     *
+     * @dataProvider unusableGatewayConfigurations
+     */
+    public function it_renders_an_error_when_the_payment_s_gateway_configuration_is_unusable(GatewayConfiguration $gatewayConfiguration): void
+    {
+        $sdkClient = $this->prophesize(ClientInterface::class);
+        $sdkClient->get(Argument::cetera())->shouldNotBeCalled();
+
+        $twig = $this->prophesize(Environment::class);
+        $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations_error.html.twig')
+            ->willReturn('<div>error</div>');
+
+        $response = ($this->createAction($sdkClient, $twig, $gatewayConfiguration))(1);
+
+        self::assertSame(502, $response->getStatusCode());
+        self::assertSame('<div>error</div>', $response->getContent());
+    }
+
+    /**
+     * @return iterable<string, array{GatewayConfiguration}>
+     */
+    public static function unusableGatewayConfigurations(): iterable
+    {
+        yield 'invalid' => [GatewayConfigurations::of(['api_key' => 'the-api-key', 'private_key' => 'the-private-key', 'branding_id' => 'my branding'])];
+
+        yield 'encrypted' => [GatewayConfigurations::encrypted()];
+    }
+
+    /**
+     * @test
      */
     public function it_throws_a_not_found_exception_for_an_unknown_payment(): void
     {
         $paymentRepository = $this->prophesize(PaymentRepositoryInterface::class);
         $paymentRepository->find(1)->willReturn(null);
 
-        $action = new PaymentOperationsAction(
-            $paymentRepository->reveal(),
-            $this->prophesize(ClientFactoryInterface::class)->reveal(),
-            $this->prophesize(Environment::class)->reveal(),
-        );
-
         $this->expectException(NotFoundHttpException::class);
 
-        $action(1);
+        $this->createActionFor($paymentRepository->reveal(), GatewayConfigurations::of())(1);
     }
 
     /**
@@ -113,54 +139,81 @@ final class PaymentOperationsActionTest extends TestCase
      */
     public function it_throws_a_not_found_exception_for_a_payment_without_a_quickpay_payment_id(): void
     {
-        $paymentRepository = $this->prophesize(PaymentRepositoryInterface::class);
-        $paymentRepository->find(1)->willReturn($this->createPayment(details: []));
-
-        $action = new PaymentOperationsAction(
-            $paymentRepository->reveal(),
-            $this->prophesize(ClientFactoryInterface::class)->reveal(),
-            $this->prophesize(Environment::class)->reveal(),
-        );
-
         $this->expectException(NotFoundHttpException::class);
 
-        $action(1);
+        $this->createActionFor($this->createPaymentRepository(details: []), GatewayConfigurations::of())(1);
+    }
+
+    /**
+     * @test
+     */
+    public function it_throws_a_not_found_exception_for_a_payment_without_a_quickpay_gateway_configuration(): void
+    {
+        $this->expectException(NotFoundHttpException::class);
+
+        $this->createActionFor($this->createPaymentRepository(['quickpayPaymentId' => 999999]), null)(1);
     }
 
     /**
      * @param \Prophecy\Prophecy\ObjectProphecy<ClientInterface> $sdkClient
      * @param \Prophecy\Prophecy\ObjectProphecy<Environment> $twig
      */
-    private function createAction(object $sdkClient, object $twig): PaymentOperationsAction
-    {
-        $paymentRepository = $this->prophesize(PaymentRepositoryInterface::class);
-        $paymentRepository->find(1)->willReturn($this->createPayment(['quickpayPaymentId' => 999999]));
-
+    private function createAction(
+        object $sdkClient,
+        object $twig,
+        ?GatewayConfiguration $gatewayConfiguration = null,
+    ): PaymentOperationsAction {
         $clientFactory = $this->prophesize(ClientFactoryInterface::class);
         $clientFactory->create('the-api-key')->willReturn($sdkClient);
 
         return new PaymentOperationsAction(
-            $paymentRepository->reveal(),
+            $this->createPaymentRepository(['quickpayPaymentId' => 999999]),
+            // A usable gateway configuration unless another is given
+            $this->createGatewayConfigurationProvider($gatewayConfiguration ?? GatewayConfigurations::of()),
             $clientFactory->reveal(),
             $twig->reveal(),
         );
     }
 
     /**
-     * @param array<string, mixed> $details
+     * An action that must not reach Quickpay or render anything
+     *
+     * @param PaymentRepositoryInterface<PaymentInterface> $paymentRepository
      */
-    private function createPayment(array $details): PaymentInterface
+    private function createActionFor(PaymentRepositoryInterface $paymentRepository, ?GatewayConfiguration $gatewayConfiguration): PaymentOperationsAction
     {
-        $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-        $gatewayConfig->getConfig()->willReturn(['api_key' => 'the-api-key']);
+        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
+        $clientFactory->create(Argument::any())->shouldNotBeCalled();
 
-        $method = $this->prophesize(PaymentMethodInterface::class);
-        $method->getGatewayConfig()->willReturn($gatewayConfig);
+        return new PaymentOperationsAction(
+            $paymentRepository,
+            $this->createGatewayConfigurationProvider($gatewayConfiguration),
+            $clientFactory->reveal(),
+            $this->prophesize(Environment::class)->reveal(),
+        );
+    }
 
-        $payment = $this->prophesize(PaymentInterface::class);
-        $payment->getDetails()->willReturn($details);
-        $payment->getMethod()->willReturn($method);
+    private function createGatewayConfigurationProvider(?GatewayConfiguration $gatewayConfiguration): GatewayConfigurationProviderInterface
+    {
+        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $gatewayConfigurationProvider->forPayment(Argument::type(PaymentInterface::class))->willReturn($gatewayConfiguration);
 
-        return $payment->reveal();
+        return $gatewayConfigurationProvider->reveal();
+    }
+
+    /**
+     * @param array<string, mixed> $details
+     *
+     * @return PaymentRepositoryInterface<PaymentInterface>
+     */
+    private function createPaymentRepository(array $details): PaymentRepositoryInterface
+    {
+        $payment = new Payment();
+        $payment->setDetails($details);
+
+        $paymentRepository = $this->prophesize(PaymentRepositoryInterface::class);
+        $paymentRepository->find(1)->willReturn($payment);
+
+        return $paymentRepository->reveal();
     }
 }

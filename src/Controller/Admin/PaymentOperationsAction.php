@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Controller\Admin;
 
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
@@ -24,6 +24,7 @@ final class PaymentOperationsAction
      */
     public function __construct(
         private readonly PaymentRepositoryInterface $paymentRepository,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly ClientFactoryInterface $clientFactory,
         private readonly Environment $twig,
     ) {
@@ -41,14 +42,15 @@ final class PaymentOperationsAction
             throw new NotFoundHttpException(sprintf('Payment %d has no Quickpay payment id', $id));
         }
 
-        $apiKey = ApiKeyResolver::fromPayment($payment);
-        if (null === $apiKey) {
-            throw new NotFoundHttpException('The payment\'s gateway carries no api key');
+        $gatewayConfiguration = $this->gatewayConfigurationProvider->forPayment($payment);
+        if (null === $gatewayConfiguration) {
+            throw new NotFoundHttpException(sprintf('Payment %d is not paid through a Quickpay gateway', $id));
         }
 
         try {
+            // An unusable gateway configuration renders the same inline notice as an unreachable Quickpay
             $quickpayPayment = $this->clientFactory
-                ->create($apiKey)
+                ->create($gatewayConfiguration->options()->apiKey)
                 ->payments()
                 ->getById((int) $quickpayPaymentId)
             ;

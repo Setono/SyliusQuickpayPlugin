@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Fraud;
 
 use Nyholm\Psr7\Response;
-use Payum\Core\Model\GatewayConfigInterface;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
+use Psr\Log\LoggerInterface;
 use Setono\Quickpay\Client\Client;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudChecker;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\FixedResponseHttpClient;
+use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 
 final class FraudCheckerTest extends TestCase
 {
@@ -25,9 +28,9 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_fraud_when_quickpay_flags_the_payment(): void
     {
-        $checker = new FraudChecker($this->createClientFactory($this->paymentResponse(['fraud_suspected' => true])));
+        $checker = $this->createChecker($this->createClientFactory($this->paymentResponse(['fraud_suspected' => true])), GatewayConfigurations::of());
 
-        self::assertTrue($checker->isFraudSuspected($this->createPayment()));
+        self::assertTrue($checker->isFraudSuspected(self::createPayment()));
     }
 
     /**
@@ -35,9 +38,9 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_clean_when_quickpay_does_not_flag_the_payment(): void
     {
-        $checker = new FraudChecker($this->createClientFactory($this->paymentResponse(['fraud_suspected' => false])));
+        $checker = $this->createChecker($this->createClientFactory($this->paymentResponse(['fraud_suspected' => false])), GatewayConfigurations::of());
 
-        self::assertFalse($checker->isFraudSuspected($this->createPayment()));
+        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
     }
 
     /**
@@ -45,9 +48,9 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_clean_when_the_payment_carries_no_fraud_metadata(): void
     {
-        $checker = new FraudChecker($this->createClientFactory($this->paymentResponse(null)));
+        $checker = $this->createChecker($this->createClientFactory($this->paymentResponse(null)), GatewayConfigurations::of());
 
-        self::assertFalse($checker->isFraudSuspected($this->createPayment()));
+        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
     }
 
     /**
@@ -55,42 +58,44 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_reports_clean_when_the_payment_has_no_quickpay_payment_id(): void
     {
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory->create(Argument::any())->shouldNotBeCalled();
+        $checker = $this->createChecker($this->createUnusedClientFactory(), GatewayConfigurations::of());
 
-        $checker = new FraudChecker($clientFactory->reveal());
-
-        self::assertFalse($checker->isFraudSuspected($this->createPayment(details: [])));
+        self::assertFalse($checker->isFraudSuspected(self::createPayment(details: [])));
     }
 
     /**
      * @test
      */
-    public function it_reports_clean_when_the_gateway_carries_no_api_key(): void
+    public function it_reports_clean_when_the_payment_has_no_quickpay_gateway_configuration(): void
     {
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory->create(Argument::any())->shouldNotBeCalled();
+        $checker = $this->createChecker($this->createUnusedClientFactory(), null);
 
-        $checker = new FraudChecker($clientFactory->reveal());
-
-        self::assertFalse($checker->isFraudSuspected($this->createPayment(gatewayConfig: [])));
+        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
     }
 
     /**
      * @test
+     *
+     * @dataProvider unusableGatewayConfigurations
      */
-    public function it_reports_clean_when_the_payment_has_no_method(): void
+    public function it_fails_open_with_a_warning_when_the_payment_s_gateway_configuration_is_unusable(GatewayConfiguration $gatewayConfiguration): void
     {
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory->create(Argument::any())->shouldNotBeCalled();
+        $logger = $this->prophesize(LoggerInterface::class);
+        $logger->warning(Argument::containingString('"quickpay_credit_card"'), Argument::any())->shouldBeCalledOnce();
 
-        $payment = $this->prophesize(PaymentInterface::class);
-        $payment->getDetails()->willReturn(['quickpayPaymentId' => 501]);
-        $payment->getMethod()->willReturn(null);
+        $checker = $this->createChecker($this->createUnusedClientFactory(), $gatewayConfiguration, $logger->reveal());
 
-        $checker = new FraudChecker($clientFactory->reveal());
+        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
+    }
 
-        self::assertFalse($checker->isFraudSuspected($payment->reveal()));
+    /**
+     * @return iterable<string, array{GatewayConfiguration}>
+     */
+    public static function unusableGatewayConfigurations(): iterable
+    {
+        yield 'invalid' => [GatewayConfigurations::of(['api_key' => 'the-api-key'], 'quickpay_credit_card')];
+
+        yield 'encrypted' => [GatewayConfigurations::encrypted('quickpay_credit_card')];
     }
 
     /**
@@ -98,12 +103,9 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_fails_open_when_the_details_carry_an_unusable_quickpay_payment_id(): void
     {
-        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
-        $clientFactory->create(Argument::any())->shouldNotBeCalled();
+        $checker = $this->createChecker($this->createUnusedClientFactory(), GatewayConfigurations::of());
 
-        $checker = new FraudChecker($clientFactory->reveal());
-
-        self::assertFalse($checker->isFraudSuspected($this->createPayment(details: ['quickpayPaymentId' => 'foo'])));
+        self::assertFalse($checker->isFraudSuspected(self::createPayment(details: ['quickpayPaymentId' => 'foo'])));
     }
 
     /**
@@ -111,9 +113,29 @@ final class FraudCheckerTest extends TestCase
      */
     public function it_fails_open_when_quickpay_cannot_be_reached(): void
     {
-        $checker = new FraudChecker($this->createClientFactory(new Response(500, [], '{"message": "boom"}')));
+        $checker = $this->createChecker($this->createClientFactory(new Response(500, [], '{"message": "boom"}')), GatewayConfigurations::of());
 
-        self::assertFalse($checker->isFraudSuspected($this->createPayment()));
+        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
+    }
+
+    /**
+     * A fraud checker for payments whose gateway configuration is the given one, null meaning the payment has
+     * no Quickpay gateway configuration
+     */
+    private function createChecker(
+        ClientFactoryInterface $clientFactory,
+        ?GatewayConfiguration $gatewayConfiguration,
+        ?LoggerInterface $logger = null,
+    ): FraudChecker {
+        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $gatewayConfigurationProvider->forPayment(Argument::type(PaymentInterface::class))->willReturn($gatewayConfiguration);
+
+        $checker = new FraudChecker($gatewayConfigurationProvider->reveal(), $clientFactory);
+        if (null !== $logger) {
+            $checker->setLogger($logger);
+        }
+
+        return $checker;
     }
 
     private function createClientFactory(Response $response): ClientFactoryInterface
@@ -123,6 +145,14 @@ final class FraudCheckerTest extends TestCase
             ->create('the-api-key')
             ->willReturn(new Client('the-api-key', new FixedResponseHttpClient($response)))
         ;
+
+        return $clientFactory->reveal();
+    }
+
+    private function createUnusedClientFactory(): ClientFactoryInterface
+    {
+        $clientFactory = $this->prophesize(ClientFactoryInterface::class);
+        $clientFactory->create(Argument::any())->shouldNotBeCalled();
 
         return $clientFactory->reveal();
     }
@@ -149,23 +179,12 @@ final class FraudCheckerTest extends TestCase
 
     /**
      * @param array<string, mixed> $details
-     * @param array<string, mixed> $gatewayConfig
      */
-    private function createPayment(
-        array $details = ['quickpayPaymentId' => 501],
-        array $gatewayConfig = ['api_key' => 'the-api-key'],
-    ): PaymentInterface {
-        $config = $this->prophesize(GatewayConfigInterface::class);
-        $config->getConfig()->willReturn($gatewayConfig);
+    private static function createPayment(array $details = ['quickpayPaymentId' => 501]): PaymentInterface
+    {
+        $payment = new Payment();
+        $payment->setDetails($details);
 
-        $method = $this->prophesize(PaymentMethodInterface::class);
-        $method->getGatewayConfig()->willReturn($config->reveal());
-
-        $payment = $this->prophesize(PaymentInterface::class);
-        $payment->getDetails()->willReturn($details);
-        $payment->getMethod()->willReturn($method->reveal());
-        $payment->getId()->willReturn(1);
-
-        return $payment->reveal();
+        return $payment;
     }
 }
