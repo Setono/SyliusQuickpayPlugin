@@ -325,11 +325,21 @@ transition is applied, so an exception aborts it identically). Only the adapter 
 transition dispatches its events, so the dual registration never double-processes. The processor
 implements `PaymentProcessorInterface` and is `LoggerAwareInterface` (wired via a `setLogger()` call with
 `on-invalid="ignore"`). It translates each transition into the corresponding Payum request
-(`Capture`/`Refund`/`Cancel`) against the gateway, but only when the payment actually has a `quickpayPaymentId`,
-and it guards each operation with the status check (`PaymentReconcilerInterface::checkStatus()`, the processor's 2nd
-constructor argument; never a status request on the Sylius payment, which would make Sylius' extension apply the
-transition again from inside the one being applied), skipping operations that already happened at Quickpay. A failed cancel
-(`Payum\Core\Exception\ExceptionInterface` or the SDK's `Setono\Quickpay\Exception\QuickpayException`) is logged
+(`Capture`/`Refund`/`Cancel`) against the gateway, but only when the operation is switched on and the payment actually
+has a `quickpayPaymentId`. A switched-off operation returns first: no gateway is built and no status checked, so not
+even an unusable gateway configuration stops its transition. Each operation is guarded with the status check
+(`PaymentReconcilerInterface::checkStatus()`, the processor's 2nd constructor argument; never a status request on the
+Sylius payment, which would make Sylius' extension apply the transition again from inside the one being applied),
+skipping operations that already happened at Quickpay, and builds the gateway only after it. `complete` runs, in
+order: the status check (target state `completed` → skip); any other target state but `authorized` → throw
+`StateMachine\NoAuthorizationToCapture` (carries the Sylius payment, its Quickpay payment id and the target state),
+aborting the transition with nothing else sent to Quickpay (a `Capture` without an authorization makes Sylius'
+capture action create a payment link: a token-less Convert for a never-paid payment, a replaced link for a declined
+one); the opt-in fraud guard (below); `Capture`. An unusable gateway configuration is the error of the operation that
+needs it, whichever exception it surfaces as (payum-quickpay's `InvalidGatewayOptions`, a Payum exception, or the
+plugin's `UnusableGatewayConfiguration`): capture and refund propagate it and abort the transition. A failed cancel
+(`Payum\Core\Exception\ExceptionInterface`, the SDK's `Setono\Quickpay\Exception\QuickpayException` or
+`UnusableGatewayConfiguration`, from the status check, building the gateway or the `Cancel`) is logged
 but does not block the transition. Operations execute with the Sylius payment through Sylius' Payum bridge, so
 gateway-updated details persist (`Capture`/`Refund`/`Cancel` aren't status requests, so the extension leaves them
 alone); an unqualified `Refund` refunds the remaining `balance` the library's `RefundAction` fetches from Quickpay
