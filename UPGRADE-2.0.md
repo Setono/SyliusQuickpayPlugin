@@ -349,10 +349,10 @@ The service definitions changed accordingly; only a redefinition or decoration o
   account is named on that line, in parentheses, instead of in a warning of its own. When Quickpay didn't accept the
   api key, `--live` now prints `Skipped probing the payment link permission — no usable api key`; before, it printed
   nothing.
-- **The doctor skips its agreement check with a warning whenever Quickpay didn't accept the api key**, also without an
-  agreement id: `Skipped verifying the agreement — no usable api key`. Without an agreement id it now prints `No
-  agreement id configured (Quickpay uses the account's default Payment Window agreement)`, and for an api user that
-  may not read agreements `Could not verify agreement N: the api user may lack the /agreements permission`.
+- **The doctor words an agreement the api user may not read like its other undetermined checks**: `Could not verify
+  agreement N: the api user may lack the /agreements permission`, where it printed `Could not verify agreement N — the
+  api user may not have the /agreements permission`. Without an agreement id it prints ✔ `No agreement id configured —
+  Quickpay uses the account's default Payment Window agreement` as before, whatever the api key's verdict.
 - **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
   payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
   retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its

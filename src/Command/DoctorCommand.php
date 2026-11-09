@@ -97,7 +97,7 @@ final class DoctorCommand extends Command
                 'Could not verify the api key',
             );
             $this->checkPrivateKey($io, $options->privateKey);
-            $this->checkAgreement($io, $gatewayConfiguration, $options->agreementId, $apiKeyAccepted);
+            $this->checkAgreement($io, $gatewayConfiguration, $apiKeyAccepted);
             $this->checkOrderPrefix($io, $options->orderPrefix);
 
             if ($live) {
@@ -243,14 +243,21 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * @param int|null $agreementId the agreement id the gateway sends, null for none
+     * The agreement the gateway sends. Without one there is nothing to ask Quickpay, so that passes whatever the api
+     * key's verdict.
      */
-    private function checkAgreement(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, ?int $agreementId, bool $apiKeyAccepted): void
+    private function checkAgreement(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, bool $apiKeyAccepted): void
     {
-        $agreement = null === $agreementId ? 'the agreement' : sprintf('agreement %d', $agreementId);
+        $agreementId = $gatewayConfiguration->options()->agreementId;
+
+        if (null === $agreementId) {
+            $this->ok($io, 'No agreement id configured — Quickpay uses the account\'s default Payment Window agreement');
+
+            return;
+        }
 
         if (!$apiKeyAccepted) {
-            $this->warn($io, sprintf('Skipped verifying %s — no usable api key', $agreement));
+            $this->warn($io, sprintf('Skipped verifying agreement %d — no usable api key', $agreementId));
 
             return;
         }
@@ -258,8 +265,8 @@ final class DoctorCommand extends Command
         $this->report(
             $io,
             $this->gatewayChecks->agreement($gatewayConfiguration),
-            null === $agreementId ? 'No agreement id configured' : sprintf('Agreement %d exists on the account', $agreementId),
-            sprintf('Could not verify %s', $agreement),
+            sprintf('Agreement %d exists on the account', $agreementId),
+            sprintf('Could not verify agreement %d', $agreementId),
         );
     }
 

@@ -375,10 +375,12 @@ The order prefix checks need no gateway, so they run on every readable configura
 `optionsWithRejectedAsStored()` gives (none when the library rejects the order prefix itself): length per gateway, and
 cross-gateway uniqueness among every readable configuration, usable or not. On a usable one it also runs, on the typed options:
 api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
-reason, counted as a failure, undetermined a warning with its reason; the agreement and `--live` checks run only when
-it passed, each skipped with a warning otherwise, also without an agreement id), private key HMAC self-test
-(`CallbackValidator`), the agreement (the gateway checks' `agreement()` verdict, printed by `report()` as `Agreement N
-exists on the account`, or `No agreement id configured` with the default-agreement note), and notify-route
+reason, counted as a failure, undetermined a warning with its reason; the agreement check of an agreement id and the
+`--live` check run only when it passed, each skipped with a warning otherwise), private key HMAC self-test
+(`CallbackValidator`), the agreement (`checkAgreement()` reads the agreement id from the typed options: none prints ✔
+`No agreement id configured — Quickpay uses the account's default Payment Window agreement` whatever the api key's
+verdict, since there is nothing to ask; an id gets the gateway checks' `agreement()` verdict, printed by `report()` as
+`Agreement N exists on the account`), and notify-route
 registration; `--live` prints the gateway checks' `paymentLinkPermission()`
 verdict with its note naming the test payment (skipped with a warning when the api key didn't pass). It warns, without failing, about a stored deprecated gateway option
 (`usesDeprecatedOptions()`: re-save the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout
