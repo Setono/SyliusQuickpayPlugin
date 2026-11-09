@@ -96,12 +96,12 @@ final class DoctorCommandTest extends TestCase
     public function it_prints_a_passed_api_key_check_with_its_note(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
-        $this->gatewayChecks->apiKey(Argument::any())->willReturn(Verdict::passed('verified through /payments: the api user lacks the /ping permission, which is harmless'));
+        $this->gatewayChecks->apiKey(Argument::any())->willReturn(Verdict::passed('checked through /payments: the api user lacks the /ping permission, which is harmless'));
 
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('✔ The api key is accepted by Quickpay (verified through /payments: the api user lacks the /ping permission, which is harmless)', $tester);
+        self::assertDisplayHasLine('✔ The api key is accepted by Quickpay (checked through /payments: the api user lacks the /ping permission, which is harmless)', $tester);
     }
 
     /**
@@ -132,7 +132,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('! Could not verify the api key: The request could not be sent [GET https://api.quickpay.net/ping]: Idle timeout reached', $tester);
+        self::assertDisplayHasLine('! Could not check the api key: The request could not be sent [GET https://api.quickpay.net/ping]: Idle timeout reached', $tester);
     }
 
     /**
@@ -385,7 +385,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('! Could not verify agreement 12345: the api user may lack the /agreements permission', $tester);
+        self::assertDisplayHasLine('! Could not check agreement 12345: the api user may lack the /agreements permission', $tester);
     }
 
     /**
@@ -471,7 +471,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand(['--live' => true]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine(sprintf('! Could not verify the payment link permission: The request could not be sent [PUT https://api.quickpay.net/payments/999/link]: Idle timeout reached (%s)', self::TEST_PAYMENT_NOTE), $tester);
+        self::assertDisplayHasLine(sprintf('! Could not check the payment link permission: The request could not be sent [PUT https://api.quickpay.net/payments/999/link]: Idle timeout reached (%s)', self::TEST_PAYMENT_NOTE), $tester);
     }
 
     /**
@@ -479,7 +479,7 @@ final class DoctorCommandTest extends TestCase
      *
      * @test
      */
-    public function it_probes_the_payment_link_permission_only_in_live_mode(): void
+    public function it_checks_the_payment_link_permission_only_in_live_mode(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
         $this->gatewayChecks->paymentLinkPermission(Argument::any())->shouldNotBeCalled();
@@ -487,7 +487,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertDisplayHasLine('! Run with --live to probe the payment link permission (creates a harmless test payment)', $tester);
+        self::assertDisplayHasLine('! Run with --live to check the payment link permission (creates a harmless test payment)', $tester);
     }
 
     /**
@@ -507,8 +507,8 @@ final class DoctorCommandTest extends TestCase
 
         $tester = $this->executeCommand(['--live' => true]);
 
-        self::assertDisplayHasLine('! Skipped verifying agreement 12345 — no usable api key', $tester);
-        self::assertDisplayHasLine('! Skipped probing the payment link permission — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped checking agreement 12345 — no usable api key', $tester);
+        self::assertDisplayHasLine('! Skipped checking the payment link permission — no usable api key', $tester);
     }
 
     /**

@@ -205,7 +205,7 @@ one HTTP policy, and the api key, agreement and payment link checks are gateway 
 | `Quickpay\ApiKeyResolver` | none | the gateway configuration module: `GatewayConfigurationProviderInterface::forPayment()` (or `all()`, `forGatewayName()`, `forPaymentMethod()`), then `options()->apiKey`, which reads the 1.x `apikey` name like the gateway does |
 | `Validator\Constraints\QuickpayCredentials`, `Validator\Constraints\QuickpayCredentialsValidator` | `Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator`, tagged `validator.constraint_validator` | `Validator\Constraints\UsableGatewayConfiguration`, which verifies the api key on save, also through the Admin API |
 | `Quickpay\ApiKeyVerifierInterface`, `Quickpay\ApiKeyVerifier` | `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface` | the gateway checks: `Quickpay\GatewayCheck\GatewayChecksInterface::apiKey(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and returns a `Verdict` instead of throwing Quickpay's errors |
-| `Quickpay\ApiKeyVerification` | none | the `Verdict`: a key Quickpay accepts is `VerdictOutcome::Passed`, and one verified through `/payments` (`ViaPayments`) carries a note saying so |
+| `Quickpay\ApiKeyVerification` | none | the `Verdict`: a key Quickpay accepts is `VerdictOutcome::Passed`, and one accepted only through the `/payments` read (`ViaPayments`) carries a note saying so |
 | `Quickpay\ClientFactoryInterface`, `Quickpay\ClientFactory` | `Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface` | the client provider: `Quickpay\QuickpayClientProviderInterface::forGatewayConfiguration(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and builds the client on the plugin's HTTP policy, or `quickpayPaymentOf(PaymentInterface)` to read a Sylius payment's Quickpay payment |
 
 The reconciliation command's private Quickpay status → transition mapping is gone as well: Sylius' own
@@ -284,7 +284,7 @@ mapping applies.
   that Quickpay uses the default Payment Window agreement; a 404 fails; a 401/403 (the api user may lack the
   `/agreements` permission) and any other error are undetermined. Save validation and the doctor run it too.
   `paymentLinkPermission(GatewayConfiguration): Verdict`, the
-  doctor's `--live` probe, creates a money-less test payment and puts a link on it: either refused with 401/403 fails,
+  doctor's `--live` check, creates a money-less test payment and puts a link on it: either refused with 401/403 fails,
   any other error is undetermined, and the note names the test payment left on the account.
 
 ### Changed constructors
@@ -333,10 +333,10 @@ The service definitions changed accordingly; only a redefinition or decoration o
   credentials constraint; the order prefix keeps its length constraint. Each message says, in the admin's language, what
   the option accepts; payum-quickpay's own reason is logged at info level. Fixtures, the console and direct database
   writes are still not validated.
-- **Saving logs why an api key couldn't be verified.** When Quickpay neither accepts nor refuses the api key (it
+- **Saving logs why an api key check is undetermined.** When Quickpay neither accepts nor refuses the api key (it
   doesn't answer, or answers `/ping` or the `/payments` read with an error other than 401/403), the payment method is
   still saved, and the reason, Quickpay's error, is logged at info level. Before, it was dropped silently. The doctor
-  prints the same case as a warning, `Could not verify the api key: <Quickpay's error>`.
+  prints the same case as a warning, `Could not check the api key: <Quickpay's error>`.
 - **Saving refuses an agreement id the Quickpay account doesn't have.** Once Quickpay accepts the api key, saving a
   Quickpay payment method with an agreement id reads that agreement from Quickpay, and a 404 refuses the save with an
   error on the agreement field in the admin's language. Before, only the doctor found it, and checkout failed when it
@@ -344,15 +344,17 @@ The service definitions changed accordingly; only a redefinition or decoration o
   answers with another error, the payment method is saved and the reason is logged at info level. Without an agreement
   id, Quickpay isn't asked. Fixtures, the console and direct database writes are still not validated.
 - **`doctor --live` prints the payment link permission check as one line.** It passes (✔), fails (✖) or, when
-  Quickpay's answer proves neither, warns `Could not verify the payment link permission: <Quickpay's error>`, where it
+  Quickpay's answer proves neither, warns `Could not check the payment link permission: <Quickpay's error>`, where it
   printed `Could not create a test payment: …` or `Could not create a payment link: …`. The test payment left on the
   account is named on that line, in parentheses, instead of in a warning of its own. When Quickpay didn't accept the
-  api key, `--live` now prints `Skipped probing the payment link permission — no usable api key`; before, it printed
+  api key, `--live` now prints `Skipped checking the payment link permission — no usable api key`; before, it printed
   nothing.
-- **The doctor words an agreement the api user may not read like its other undetermined checks**: `Could not verify
-  agreement N: the api user may lack the /agreements permission`, where it printed `Could not verify agreement N — the
-  api user may not have the /agreements permission`. Without an agreement id it prints ✔ `No agreement id configured —
-  Quickpay uses the account's default Payment Window agreement` as before, whatever the api key's verdict.
+- **The doctor's agreement warnings say "check"**, as its other gateway checks do: `Skipped checking agreement N — no
+  usable api key` and `Could not check agreement N: <Quickpay's error>`, where they said `verify`. An api user that may
+  not read agreements now gets `Could not check agreement N: the api user may lack the /agreements permission`, where
+  it got `Could not verify agreement N — the api user may not have the /agreements permission`. Without an agreement
+  id the doctor prints ✔ `No agreement id configured — Quickpay uses the account's default Payment Window agreement`
+  as before, whatever the api key's verdict.
 - **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
   payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
   retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its

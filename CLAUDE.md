@@ -262,7 +262,7 @@ exceptions or interpret Quickpay's status codes themselves.
   id count as payum-quickpay reads them). None → passed without a request, with the note that Quickpay uses the
   account's default Payment Window agreement. Otherwise `GET /agreements/{id}`: accepted → passed; 404 → failed;
   401/403 → undetermined (the api user may lack the `/agreements` permission); any other error → undetermined.
-- **Payment link permission** (`paymentLinkPermission()`, the doctor's `--live` probe; the one check that writes to the
+- **Payment link permission** (`paymentLinkPermission()`, the doctor's `--live` check; the one check that writes to the
   account): creates a money-less test payment (`POST /payments`, DKK, order id = the gateway's order prefix + `dr` + 6
   random hex digits): 401/403 → failed (may not create payments). Then puts a link on it (`PUT /payments/{id}/link`):
   401/403 → failed (may not create payment links), accepted → passed. Then deletes the link, best effort (its errors are

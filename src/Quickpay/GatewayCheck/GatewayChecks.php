@@ -38,7 +38,7 @@ final class GatewayChecks implements GatewayChecksInterface
             // permission (verified live), so a one-item /payments read, a permission every integration needs, decides
             refused: static fn (): Verdict => self::ask(
                 static fn () => $client->payments()->getPage(new PaymentsQuery(pageSize: 1)),
-                accepted: static fn (): Verdict => Verdict::passed('verified through /payments: the api user lacks the /ping permission, which is harmless'),
+                accepted: static fn (): Verdict => Verdict::passed('checked through /payments: the api user lacks the /ping permission, which is harmless'),
                 refused: static fn (): Verdict => Verdict::failed('Quickpay rejects the api key — use the API user\'s key (Settings → Users in the Quickpay manager), not a Payment Window agreement\'s'),
             ),
         );

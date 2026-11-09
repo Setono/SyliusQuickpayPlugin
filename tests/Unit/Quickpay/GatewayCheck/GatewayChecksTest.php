@@ -67,7 +67,7 @@ final class GatewayChecksTest extends TestCase
 
         self::assertSame(VerdictOutcome::Passed, $verdict->outcome);
         self::assertNull($verdict->reason);
-        self::assertSame('verified through /payments: the api user lacks the /ping permission, which is harmless', $verdict->note);
+        self::assertSame('checked through /payments: the api user lacks the /ping permission, which is harmless', $verdict->note);
         self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay->sentRequests());
     }
 

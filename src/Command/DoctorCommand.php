@@ -55,7 +55,7 @@ final class DoctorCommand extends Command
             'live',
             null,
             InputOption::VALUE_NONE,
-            'Also probe the payment link permission by creating a test payment (leaves a harmless, money-less test payment on the account)',
+            'Also check the payment link permission by creating a test payment (leaves a harmless, money-less test payment on the account)',
         );
     }
 
@@ -94,7 +94,7 @@ final class DoctorCommand extends Command
                 $io,
                 $this->gatewayChecks->apiKey($gatewayConfiguration),
                 'The api key is accepted by Quickpay',
-                'Could not verify the api key',
+                'Could not check the api key',
             );
             $this->checkPrivateKey($io, $options->privateKey);
             $this->checkAgreement($io, $gatewayConfiguration, $apiKeyAccepted);
@@ -103,7 +103,7 @@ final class DoctorCommand extends Command
             if ($live) {
                 $this->checkPaymentLinkPermission($io, $gatewayConfiguration, $apiKeyAccepted);
             } elseif ($apiKeyAccepted) {
-                $this->warn($io, 'Run with --live to probe the payment link permission (creates a harmless test payment)');
+                $this->warn($io, 'Run with --live to check the payment link permission (creates a harmless test payment)');
             }
         }
 
@@ -257,7 +257,7 @@ final class DoctorCommand extends Command
         }
 
         if (!$apiKeyAccepted) {
-            $this->warn($io, sprintf('Skipped verifying agreement %d — no usable api key', $agreementId));
+            $this->warn($io, sprintf('Skipped checking agreement %d — no usable api key', $agreementId));
 
             return;
         }
@@ -266,7 +266,7 @@ final class DoctorCommand extends Command
             $io,
             $this->gatewayChecks->agreement($gatewayConfiguration),
             sprintf('Agreement %d exists on the account', $agreementId),
-            sprintf('Could not verify agreement %d', $agreementId),
+            sprintf('Could not check agreement %d', $agreementId),
         );
     }
 
@@ -295,7 +295,7 @@ final class DoctorCommand extends Command
     private function checkPaymentLinkPermission(SymfonyStyle $io, GatewayConfiguration $gatewayConfiguration, bool $apiKeyAccepted): void
     {
         if (!$apiKeyAccepted) {
-            $this->warn($io, 'Skipped probing the payment link permission — no usable api key');
+            $this->warn($io, 'Skipped checking the payment link permission — no usable api key');
 
             return;
         }
@@ -304,7 +304,7 @@ final class DoctorCommand extends Command
             $io,
             $this->gatewayChecks->paymentLinkPermission($gatewayConfiguration),
             'The api user may create payment links',
-            'Could not verify the payment link permission',
+            'Could not check the payment link permission',
         );
     }
 

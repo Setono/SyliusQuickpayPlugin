@@ -71,7 +71,7 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             $apiKeyVerdict,
             $constraint->apiKeyRejectedMessage,
             'config[api_key]',
-            sprintf('Could not verify the api key of the Quickpay gateway "%s", so it was accepted unverified', $gatewayConfiguration->gatewayName),
+            sprintf('Accepted the api key of the Quickpay gateway "%s", whose check is undetermined', $gatewayConfiguration->gatewayName),
             $gatewayConfiguration->gatewayName,
         );
 
@@ -85,7 +85,7 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             $this->gatewayChecks->agreement($gatewayConfiguration),
             $constraint->agreementNotFoundMessage,
             'config[agreement_id]',
-            sprintf('Could not verify agreement %d of the Quickpay gateway "%s", so it was accepted unverified', $options->agreementId, $gatewayConfiguration->gatewayName),
+            sprintf('Accepted agreement %d of the Quickpay gateway "%s", whose check is undetermined', $options->agreementId, $gatewayConfiguration->gatewayName),
             $gatewayConfiguration->gatewayName,
         );
     }

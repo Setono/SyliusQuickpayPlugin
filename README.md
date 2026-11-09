@@ -434,7 +434,7 @@ when something misbehaves, and after every configuration change:
 
 ```bash
 bin/console setono:sylius-quickpay:doctor          # read-only
-bin/console setono:sylius-quickpay:doctor --live   # also probes the payment link permission
+bin/console setono:sylius-quickpay:doctor --live   # also checks the payment link permission
 ```
 
 For every configured Quickpay gateway it verifies the api key against Quickpay, self-tests the private
