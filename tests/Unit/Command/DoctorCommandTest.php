@@ -13,7 +13,6 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
-use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
@@ -31,9 +30,6 @@ final class DoctorCommandTest extends TestCase
     /** @var ObjectProphecy<GatewayChecksInterface> */
     private ObjectProphecy $gatewayChecks;
 
-    /** @var ObjectProphecy<QuickpayClientProviderInterface> */
-    private ObjectProphecy $clientProvider;
-
     /** @var ObjectProphecy<GatewayConfigurationProviderInterface> */
     private ObjectProphecy $gatewayConfigurationProvider;
 
@@ -45,8 +41,6 @@ final class DoctorCommandTest extends TestCase
         $this->gatewayChecks = $this->prophesize(GatewayChecksInterface::class);
         $this->gatewayChecks->apiKey(Argument::any())->willReturn(Verdict::passed());
         $this->gatewayChecks->agreement(Argument::any())->willReturn(Verdict::passed());
-
-        $this->clientProvider = $this->prophesize(QuickpayClientProviderInterface::class);
 
         $this->gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
         $this->gatewayConfigurationProvider->all()->willReturn([]);
@@ -584,7 +578,6 @@ final class DoctorCommandTest extends TestCase
     {
         $application = new Application();
         $application->add(new DoctorCommand(
-            $this->clientProvider->reveal(),
             $this->gatewayChecks->reveal(),
             $this->gatewayConfigurationProvider->reveal(),
             $this->router->reveal(),

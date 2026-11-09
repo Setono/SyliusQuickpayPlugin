@@ -12,7 +12,6 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguratio
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
-use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -43,7 +42,6 @@ final class DoctorCommand extends Command
     private int $failures = 0;
 
     public function __construct(
-        private readonly QuickpayClientProviderInterface $clientProvider,
         private readonly GatewayChecksInterface $gatewayChecks,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly RouterInterface $router,

@@ -349,8 +349,8 @@ payment's method's gateway) and the error under `exception`. `tests/Functional/C
 requests the route as a logged-in administrator (a `TestBrowserToken` stored in a session, as Symfony's test browser
 does; browser-kit isn't installed).
 
-`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `QuickpayClientProviderInterface`,
-`GatewayChecksInterface`, `GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
+`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `GatewayChecksInterface`,
+`GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
 section per Quickpay gateway configuration from the module's `all()`. It checks what the gateway checks: each
 violation payum-quickpay finds is a failed check, an unreadable (encrypted) configuration is one failed check
 printing `UnusableGatewayConfiguration`'s message, and an unusable configuration's checks against Quickpay are skipped.
