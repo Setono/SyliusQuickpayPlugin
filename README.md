@@ -368,6 +368,24 @@ link `PUT` the checkout depends on, catching a missing *Create or update payment
 a customer does (the test payment remains visible on the account; it never carries money). The command
 exits non-zero when any check fails, so it can run in CI or cron.
 
+First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
+means the gateway can be built:
+
+- every gateway option the gateway would reject is a failed check of its own, e.g. a missing api key or private key,
+  an agreement or branding id that isn't a positive whole number, or a `synchronized` that isn't a yes/no value. The
+  checks against Quickpay are then skipped for that gateway, since their errors would only follow from these;
+- an encrypted gateway configuration is a failed check saying encryption isn't supported (see
+  [Configuration](#configuration));
+- the agreement it looks up is the one the gateway sends: an empty agreement id means the account's default
+  agreement, and an agreement id stored under its 1.x name `agreement` is used like the gateway uses it.
+
+It also warns, without failing the run, about two things that work but surprise people:
+
+- a gateway option still stored under its 1.x name (`apikey`, `privatekey`, `agreement`), or the deprecated
+  `auto_capture` switched on: re-save the payment method in the admin to replace them;
+- no capture mode stored (`use_authorize`), as fixtures and the Admin API may leave it: checkout then captures
+  immediately, whatever you expected.
+
 ## Upgrading from 1.x
 
 See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the full list of changes an upgrading store has to make —
@@ -400,6 +418,31 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
 - `Validation error: order_id must have length between 4 and 20`
 
   Shorten the *Order prefix* of your Quickpay payment method to 11 characters or less.
+
+- `The "branding_id" option must be a positive integer (or an integer string), got 'Our brand'` from the doctor, or
+  any other `The "<option>" option ...` failure
+
+  The gateway is built from that gateway configuration on every checkout, callback, capture, refund and reconcile,
+  and it rejects the option, so each of them fails for that payment method. Open the payment method in the admin and
+  correct the field named in the message: an agreement or branding id is the number from the Quickpay manager, not
+  its name.
+
+- `The gateway configuration reads as empty, as an encrypted one does` from the doctor
+
+  PayumBundle's encryption of gateway configurations is switched on, which this plugin doesn't support. Switch it off
+  (see [Configuration](#configuration)).
+
+- `The gateway configuration uses a deprecated gateway option` (a doctor warning)
+
+  The payment method's gateway configuration still has a 1.x option name (`apikey`, `privatekey`, `agreement`) or
+  `auto_capture` switched on. It works, but 3.0 stops reading them. Open the payment method in the admin and save it:
+  that stores the current names, with `auto_capture` folded into the capture mode.
+
+- `The capture mode is not set, so checkout captures immediately` (a doctor warning)
+
+  The gateway configuration has no `use_authorize`, as fixtures and the Admin API can leave it, and Sylius' checkout
+  then lets Quickpay capture the money at authorization. If you want to capture on completion, choose that capture
+  mode on the payment method in the admin and save it.
 
 - `Payment 42: skipped, it is locked by a callback being handled or another run`
 
