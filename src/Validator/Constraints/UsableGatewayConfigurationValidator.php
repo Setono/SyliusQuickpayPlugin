@@ -37,7 +37,7 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
         $gatewayConfiguration = GatewayConfiguration::fromGatewayConfig($value);
 
         try {
-            $gatewayConfiguration->options();
+            $options = $gatewayConfiguration->options();
         } catch (UnusableGatewayConfiguration $e) {
             if ($e->isUnreadable()) {
                 $this->context->buildViolation($constraint->unreadableMessage)
@@ -77,6 +77,29 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             // unsaveable
             $this->logger?->info(sprintf(
                 'Could not verify the api key of the Quickpay gateway "%s", so it was accepted unverified: %s',
+                $gatewayConfiguration->gatewayName,
+                (string) $verdict->reason,
+            ), ['gateway' => $gatewayConfiguration->gatewayName]);
+        }
+
+        // Quickpay's answer about the agreement proves something only with an api key it accepts, and a rejected key
+        // is one error, not two. Without an agreement id the account's default agreement is used, which needs no check.
+        if (VerdictOutcome::Passed !== $verdict->outcome || null === $options->agreementId) {
+            return;
+        }
+
+        $verdict = $this->gatewayChecks->agreement($gatewayConfiguration);
+
+        if (VerdictOutcome::Failed === $verdict->outcome) {
+            $this->context->buildViolation($constraint->agreementNotFoundMessage)
+                ->atPath('config[agreement_id]')
+                ->addViolation()
+            ;
+        } elseif (VerdictOutcome::Undetermined === $verdict->outcome) {
+            // Fail open, as for the api key: an api user that may not read agreements must not block saving
+            $this->logger?->info(sprintf(
+                'Could not verify agreement %d of the Quickpay gateway "%s", so it was accepted unverified: %s',
+                $options->agreementId,
                 $gatewayConfiguration->gatewayName,
                 (string) $verdict->reason,
             ), ['gateway' => $gatewayConfiguration->gatewayName]);
