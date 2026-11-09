@@ -59,6 +59,35 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * Building the gateway of a payment whose gateway configuration is unusable throws, and the run counts that
+     * payment as errored and goes on
+     *
+     * @test
+     */
+    public function a_payment_on_an_unusable_gateway_configuration_is_counted_as_errored(): void
+    {
+        self::bootKernel();
+
+        $unusable = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501, orderNumber: '000000001');
+        // A branding name where the branding id belongs, stored by fixtures or the database directly
+        $unusable->setMethod($this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'branding_id' => 'Our brand']));
+        $this->entityManager()->flush();
+        $transitioning = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 502, orderNumber: '000000002');
+        $this->quickpay()->respond('GET', '/payments/502', self::quickpayPayment(502, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $tester = $this->executeCommand([]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $display = $tester->getDisplay();
+        self::assertStringContainsString(sprintf('Payment %s:', (string) $unusable->getId()), $display);
+        self::assertStringContainsString('The gateway configuration of a Quickpay gateway is invalid: The "branding_id" option', (string) preg_replace('/\s+/', ' ', $display));
+        self::assertStringContainsString('2 checked, 1 transitioned, 0 unchanged, 0 skipped, 1 errored', $display);
+        self::assertNotContains('GET /payments/501', $this->quickpay()->sentRequests());
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $this->reload($unusable)->getState());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($transitioning)->getState());
+    }
+
+    /**
      * @test
      *
      * @dataProvider stateMachineAdapters

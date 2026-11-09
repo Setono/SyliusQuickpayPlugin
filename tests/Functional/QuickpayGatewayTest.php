@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional;
 
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Sylius\Bundle\PayumBundle\Request\GetStatus;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -50,5 +51,29 @@ final class QuickpayGatewayTest extends FunctionalTestCase
         $this->expectExceptionObject(new \LogicException('No response scripted for "GET /payments/501"'));
 
         $this->gatewayOf($payment)->execute(new GetStatus($payment));
+    }
+
+    /**
+     * The gateway gets its client from the client provider, which reads the gateway configuration first, so building
+     * the gateway of an unusable one throws the plugin's exception, before payum-quickpay reads it
+     *
+     * @test
+     */
+    public function building_the_gateway_of_an_unusable_gateway_configuration_throws(): void
+    {
+        self::bootKernel();
+
+        // A branding name where the branding id belongs, stored by fixtures or the database directly
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'branding_id' => 'Our brand']);
+
+        try {
+            $this->payum()->getGateway('quickpay_se');
+            self::fail('No exception was thrown');
+        } catch (UnusableGatewayConfiguration $e) {
+            self::assertSame(['branding_id'], array_keys($e->getViolations()));
+            self::assertStringStartsWith('The gateway configuration of a Quickpay gateway is invalid: The "branding_id" option', $e->getMessage());
+        }
+
+        self::assertSame([], $this->quickpay()->sentRequests());
     }
 }

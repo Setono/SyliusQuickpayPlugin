@@ -4,22 +4,22 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Quickpay;
 
-use Psr\Http\Client\ClientInterface;
-use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 /**
- * A PSR-18 client standing in for Quickpay's API: a test scripts the response per method and path,
- * and asserts on the requests sent. In the test application every Quickpay gateway and the plugin's
- * client factory send their requests here (see {@see ScriptedGatewayFactoryBuilder} and
- * {@see ScriptedClientFactory}).
+ * Stands in for Quickpay's API in the test application: a test scripts the response per method and path, and
+ * asserts on the requests sent. It is the framework's `http_client.mock_response_factory` there, so it answers
+ * below the plugin's scoped HTTP client `setono_sylius_quickpay.http_client`: every request to Quickpay, the
+ * gateways' and the plugin's own, reaches it through the real client provider, SDK clients and HTTP policy, and
+ * arrives with the options the scoped client gave it.
  */
-final class ScriptedHttpClient implements ClientInterface
+final class ScriptedHttpClient
 {
     /** @var array<string, ResponseInterface> */
     private array $responses = [];
 
-    /** @var list<RequestInterface> */
+    /** @var list<array{key: string, options: array<string, mixed>}> */
     private array $requests = [];
 
     /**
@@ -30,11 +30,16 @@ final class ScriptedHttpClient implements ClientInterface
         $this->responses[self::key($method, $path)] = $response;
     }
 
-    public function sendRequest(RequestInterface $request): ResponseInterface
+    /**
+     * Symfony's mock HTTP client calls this with each request, its options resolved as the HTTP client sends them
+     *
+     * @param array<string, mixed> $options
+     */
+    public function __invoke(string $method, string $url, array $options): MockResponse
     {
-        $this->requests[] = $request;
+        $key = self::key($method, (string) parse_url($url, \PHP_URL_PATH));
+        $this->requests[] = ['key' => $key, 'options' => $options];
 
-        $key = self::key($request->getMethod(), $request->getUri()->getPath());
         if (!isset($this->responses[$key])) {
             throw new \LogicException(sprintf('No response scripted for "%s"', $key));
         }
@@ -47,7 +52,10 @@ final class ScriptedHttpClient implements ClientInterface
             $body->rewind();
         }
 
-        return $response;
+        return new MockResponse($body->getContents(), [
+            'http_code' => $response->getStatusCode(),
+            'response_headers' => $response->getHeaders(),
+        ]);
     }
 
     /**
@@ -55,10 +63,19 @@ final class ScriptedHttpClient implements ClientInterface
      */
     public function sentRequests(): array
     {
-        return array_map(
-            static fn (RequestInterface $request): string => self::key($request->getMethod(), $request->getUri()->getPath()),
-            $this->requests,
-        );
+        return array_column($this->requests, 'key');
+    }
+
+    /**
+     * The options each request was sent with, in the order of {@see self::sentRequests()}, as the HTTP client
+     * resolved them: e.g. `timeout` and `max_duration` (floats), and `normalized_headers` (lowercase header name =>
+     * list of "Name: value" lines)
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function sentRequestOptions(): array
+    {
+        return array_column($this->requests, 'options');
     }
 
     private static function key(string $method, string $path): string

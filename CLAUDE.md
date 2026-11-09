@@ -70,8 +70,9 @@ Run any Symfony console command for the plugin from inside that directory, e.g.
 ### Test layout
 Each PHPUnit suite is one directory: `tests/Unit/` (no kernel, no database; paths mirror `src/`, namespace
 `Setono\SyliusQuickpayPlugin\Tests\Unit\…`) and `tests/Functional/` (below). Test support stays outside both, where
-either suite and the test application can reach it: the Quickpay HTTP client doubles, `ScriptedGatewayFactoryBuilder` and
-`ScriptedClientFactory` in `tests/Quickpay/`, `tests/GatewayConfiguration/GatewayConfigurations`,
+either suite and the test application can reach it: the Quickpay HTTP doubles in `tests/Quickpay/` (`ScriptedHttpClient`
+for the functional suite, the PSR-18 `FixedResponseHttpClient` and `QueuedResponsesHttpClient` for unit tests running a
+real SDK client), `tests/GatewayConfiguration/GatewayConfigurations`,
 `tests/Payum/OfflineNotifyAction`, `tests/Application/` and `tests/PHPStan/`. `GatewayConfigurations` is the one shared
 helper for real gateway config objects: `of($config, $gatewayName)` and `encrypted()` give the module's
 `GatewayConfiguration`, `entity(...)` and `encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted
@@ -84,13 +85,15 @@ helper.
 `(cd tests/Application && bin/console doctrine:database:create --env=test && bin/console doctrine:schema:create --env=test)`).
 Extend `tests/Functional/FunctionalTestCase`. dama/doctrine-test-bundle (registered in `phpunit.xml.dist`) rolls
 each test back, so a test builds its own entities from Sylius' factories (`createSyliusPayment()`); no fixtures.
-Only Quickpay's HTTP is substituted: in the `test` env, `tests/Quickpay/ScriptedGatewayFactoryBuilder` decorates the
-plugin's gateway factory builder and gives every Quickpay gateway an SDK client (library option `quickpay.client`)
-on `tests/Quickpay/ScriptedHttpClient`. The plugin's own client factory (`Quickpay/ClientFactory`, behind the fraud
-check, the operations panel, api key verification, the doctor and the fraud report) is scripted as well:
-`tests/Quickpay/ScriptedClientFactory` decorates it, next to the builder, and builds its SDK clients on the same
-`ScriptedHttpClient`. Script every Quickpay call with `$this->quickpay()->respond('GET', '/payments/1', ...)` and
-assert on `$this->quickpay()->sentRequests()`; an unscripted request throws, whichever path sent it. The gateway,
+Only Quickpay's HTTP is substituted, below the plugin's scoped HTTP client: in the `test` env,
+`tests/Quickpay/ScriptedHttpClient` is the framework's `http_client.mock_response_factory`
+(`config/packages/test/setono_sylius_quickpay.yaml`), so every request to Quickpay, the gateways' and the plugin's own,
+runs through the real client provider, SDK clients and HTTP policy and arrives there with the options the scoped
+client gave it. Script every Quickpay call with `$this->quickpay()->respond('GET', '/payments/1', ...)` (a PSR-7
+response) and assert on `$this->quickpay()->sentRequests()` (`"METHOD /path"` each); `sentRequestOptions()` gives each
+request's options in the same order, as Symfony's HTTP client resolved them (`timeout` and `max_duration` as floats,
+`normalized_headers` keyed by lowercase name, e.g. `['authorization']`). An unscripted request throws a
+`LogicException`, whichever path sent it. The gateway,
 Sylius' payment-state extension, the state machine, the
 lock and the database are real. `$this->holdLockOf($quickpayPaymentId)` holds a payment's lock (as a callback
 being handled would) until you release it. To count how often a payment transition (and so its callbacks) ran, under either
@@ -182,12 +185,36 @@ selects the Quickpay payments inside the database query, which the module's look
   `PaymentMethodLogoProvider` (`forPaymentMethod()`; unusable → no logos and a warning log), `FraudChecker`
   (`forPayment()`; none → no fraud, unusable → fails open with a warning log), `PaymentOperationsAction`
   (`forPayment()`; none → 404, unusable → the inline error, 502) and the reconcile command's fraud report (`all()`;
-  unusable → a warning naming the gateway and a non-zero exit, the other gateways are still queried). The test env's
-  `ScriptedGatewayFactoryBuilder` reads the api key and `synchronized` through `GatewayOptions`.
+  unusable → a warning naming the gateway and a non-zero exit, the other gateways are still queried). The gateway
+  factory builder's `quickpay.client` closure reads each gateway's own config through `fromConfig()` and the client
+  provider (*Quickpay client and HTTP policy* below), so building the gateway of an unusable configuration throws
+  `UnusableGatewayConfiguration` (not payum-quickpay's `InvalidGatewayOptions`, a Payum `ExceptionInterface`; the
+  message names "a Quickpay gateway", since Payum passes no gateway name with the config).
 - The doctor (`all()`): an unusable configuration is one failed check per violation (an unreadable one is a single
   failed check with the exception's message) and its checks against Quickpay are skipped, while a readable one's
   order prefix (from `optionsWithRejectedAsStored()`) is still checked; a usable one's checks run on the typed
   `GatewayOptions` (see *Command/DoctorCommand* below).
+
+### Quickpay client and HTTP policy (`src/Quickpay/`)
+Read `docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md` first. The rule from the ADR: **every request to
+Quickpay goes through one scoped HTTP client with one policy**, the gateway's and the plugin's own alike.
+- `SetonoSyliusQuickpayExtension::prepend()` prepends the framework scoped client `setono_sylius_quickpay.http_client`:
+  base URI `https://api.quickpay.net`, `timeout` 10, `max_duration` 10, no `retry_failed` (a retried capture or refund
+  can move money twice). Apps override single options under the same name in their framework config (deep-merged; the
+  README shows a GET-only `retry_failed`). The 10 s ceiling is set against the reconcile lock's 60 s TTL (a callback
+  makes up to four sequential reads). No per-method or per-caller policies.
+- **`QuickpayClientProviderInterface`** (service `QuickpayClientProvider`, args `setono_sylius_quickpay.http_client`
+  and `%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk`): `forGatewayConfiguration(GatewayConfiguration)` builds
+  a new SDK client on every call (no caching: a changed api key needs no invalidation) from `options()` (api key,
+  `synchronized`), on a `Psr18Client` over the scoped client, with the SDK's Valinor mapper cache (`FileSystemCache`)
+  in that directory. It throws `UnusableGatewayConfiguration` for an unusable configuration.
+- The gateway gets its client from the provider: `QuickpayGatewayFactoryBuilder` sets payum-quickpay's `quickpay.client`
+  gateway option to a closure Payum resolves with the gateway's own config (builder defaults come before
+  `payum.api`, and Payum resolves closures in order). payum-quickpay's check that the client agrees with
+  `synchronized` still runs on that client (`QuickpayGatewayFactoryBuilderTest`).
+- `Quickpay/ClientFactory` (the plugin's own calls, until they move onto the provider) builds its clients on the
+  same scoped client, so the whole plugin follows the one policy. `tests/Functional/QuickpayHttpPolicyTest` asserts
+  `timeout` and `max_duration` on a gateway operation's request and on a client factory request.
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
@@ -426,14 +453,15 @@ in that folder) and need `assets:install` in the host app.
   all 16 locales (the functional test checks each locale). The doctor still prints the library's text: console output is
   English. Only on a usable configuration
   does it then verify the api key through `Quickpay/ApiKeyVerifier` (shared with the doctor command; backed by
-  `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first, falling back to a one-item `/payments` read
+  `Quickpay/ClientFactory`, on the scoped HTTP client): ping first, falling back to a one-item `/payments` read
   because Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
   permission (verified live) — an explicit 401/403 is a violation at `config[api_key]` (translated
   `validators` message), anything else fails open. Tested functionally in `tests/Functional/Validator/` (the
   container's validator with the generator's groups) and `tests/Functional/Form/PaymentMethodFormTest` (the real
   payment method form type).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
-  build time; `Guesser/LanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`).
+  build time; `Guesser/LanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`). It also
+  sets the `quickpay.client` gateway option (*Quickpay client and HTTP policy*).
 
 ## Conventions specific to this repo
 

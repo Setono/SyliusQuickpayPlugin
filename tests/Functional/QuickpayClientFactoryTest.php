@@ -8,8 +8,8 @@ use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 
 /**
  * Proves the harness: the plugin's own Quickpay client factory, behind the fraud check, the operations panel,
- * api key verification, the doctor and the fraud report, sends its HTTP to the same scripted client as the
- * Quickpay gateways
+ * api key verification, the doctor and the fraud report, sends its HTTP through the same scoped HTTP client as the
+ * Quickpay gateways, to the scripted Quickpay below it
  */
 final class QuickpayClientFactoryTest extends FunctionalTestCase
 {

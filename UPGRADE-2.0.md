@@ -244,6 +244,17 @@ mapping applies.
   constructor `(ApiKeyVerifierInterface $apiKeyVerifier)`). An application that sets
   `sylius_payum.gateway_config.validation_groups.quickpay` itself replaces the plugin's entry, so it must list
   `sylius_quickpay` too.
+- **One HTTP policy for every request to Quickpay** ([ADR 0003](docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md)).
+  The extension prepends a scoped HTTP client onto `framework.http_client`, `setono_sylius_quickpay.http_client`:
+  base URI `https://api.quickpay.net`, `timeout` 10, `max_duration` 10, no `retry_failed`. Override single options
+  under the same name in your framework configuration (see the README's *HTTP policy*).
+- **`Quickpay\QuickpayClientProviderInterface`**, service `Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider`
+  (constructor `(HttpClientInterface $httpClient, string $cacheDir)`: the scoped client and the SDK's mapper cache
+  directory, `%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk`), aliased by the interface.
+  `forGatewayConfiguration(GatewayConfiguration): ClientInterface` builds a new SDK client on the scoped client from
+  the gateway configuration's api key and `synchronized`, with the SDK's mapper cache, and throws
+  `UnusableGatewayConfiguration` for an unusable configuration. Every Quickpay gateway gets its client from it,
+  through payum-quickpay's `quickpay.client` gateway option.
 
 ### Changed constructors
 
@@ -257,6 +268,8 @@ mapping applies.
 | `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory, Environment $twig)` |
 | `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
+| `FactoryBuilder\QuickpayGatewayFactoryBuilder` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser)` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser, QuickpayClientProviderInterface $clientProvider)` |
+| `Quickpay\ClientFactory` | `()` | `(HttpClientInterface $httpClient)`, the scoped client `setono_sylius_quickpay.http_client` |
 
 The service definitions changed accordingly; only a redefinition or decoration of these services needs updating.
 
@@ -264,6 +277,19 @@ The service definitions changed accordingly; only a redefinition or decoration o
 
 - **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.2`**, the release whose public `GatewayOptions` the plugin
   reads gateway configurations with. A root `composer.json` allowing `^2.0@RC` picks it up with `composer update`.
+- **Every request to Quickpay gives up after 10 seconds**, the gateway's and the plugin's own alike, and none is
+  retried. Before, the gateway built its own HTTP client through PSR-18 discovery: a request could wait 60 seconds
+  (PHP's `default_socket_timeout`) for each idle stretch, with no limit in total, so a slow Quickpay could hang the
+  admin's complete, refund or cancel, checkout or a callback for minutes. The plugin's own calls (the fraud check, the
+  operation history, the fraud report, the doctor, the api key check on save) gave up after 5 seconds and now wait up
+  to 10. Neither used your `framework.http_client` configuration; both do now, and the requests show in the profiler.
+  The SDK now also maps Quickpay's responses with its mapper cache, in the kernel cache directory.
+- **Building the gateway of an unusable gateway configuration throws the plugin's `UnusableGatewayConfiguration`**
+  (a `RuntimeException`) instead of payum-quickpay's `InvalidGatewayOptions` (a Payum `LogicException`), since the
+  gateway reads its configuration through the client provider first. Both carry the same violations. Code catching
+  Payum's `ExceptionInterface` around building or running a Quickpay gateway no longer catches it. The callers that
+  build gateways behave as before: a callback for such a payment is answered 500 and the reconciliation command counts
+  the payment as errored.
 - **A gateway configuration the gateway would reject is refused on save, also through the Admin API.** Saving a
   Quickpay payment method validates its gateway configuration by payum-quickpay's rules, the ones the gateway is built
   from, and reports every invalid option at once, each on its field (an option the form has no field for, such as
