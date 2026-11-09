@@ -154,10 +154,12 @@ final class GatewayConfigurationType extends AbstractType
     }
 
     /**
-     * A configuration the gateway rejects still opens, so it can be fixed here: each value is shown as
-     * stored where its field shows it exactly (text, or an integer, in a text field; an integer in the
-     * agreement id field; a boolean in the checkbox) and empty where it can't, and the capture mode is
-     * Sylius' rule alone, as checkout reads it
+     * A configuration the gateway rejects still opens, so it can be fixed here, and fixing one option
+     * keeps the others: each value is shown as stored where its field holds it exactly, and empty where it
+     * can't. That is the fields' display, not a reading of the gateway options: a text field holds text or
+     * an integer; the agreement id field an integer, or a string of digits as that integer; the checkbox a
+     * boolean, or its own checked and unchecked values (1 and 0, as integers or strings). The capture mode
+     * is Sylius' rule alone, as checkout reads it.
      *
      * @param array<array-key, mixed> $config under the current names, without `auto_capture`
      *
@@ -172,13 +174,17 @@ final class GatewayConfigurationType extends AbstractType
             }
         }
 
-        if (!is_int($config['agreement_id'] ?? null)) {
-            $config['agreement_id'] = null;
+        $agreementId = $config['agreement_id'] ?? null;
+        if (is_string($agreementId) && 1 === preg_match('/\A\d+\z/', $agreementId)) {
+            $agreementId = (int) $agreementId;
         }
+        $config['agreement_id'] = is_int($agreementId) ? $agreementId : null;
 
-        if (!is_bool($config['synchronized'] ?? null)) {
-            $config['synchronized'] = null;
-        }
+        $config['synchronized'] = match ($config['synchronized'] ?? null) {
+            true, 1, '1' => true,
+            false, 0, '0' => false,
+            default => null,
+        };
 
         // Without `auto_capture`, the module's capture mode reads `use_authorize` alone and never the options
         $config['use_authorize'] = CaptureMode::OnCompletion === GatewayConfiguration::fromConfig($config)->captureMode();

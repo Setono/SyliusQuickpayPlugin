@@ -268,6 +268,43 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     /**
      * @test
      *
+     * @dataProvider provideValuesTheFieldsHold
+     */
+    public function it_keeps_a_value_its_field_holds_when_a_configuration_the_gateway_rejects_is_fixed(string $option, mixed $stored, ?string $expectedShown, mixed $expectedSaved): void
+    {
+        // the branding id makes the gateway reject the configuration
+        $form = $this->factory->create(GatewayConfigurationType::class, [
+            ...GatewayConfigurations::USABLE,
+            $option => $stored,
+            'branding_id' => 'abc',
+        ]);
+
+        $shown = self::shownValues($form);
+        self::assertSame($expectedShown, $shown[$option]);
+
+        // the admin fixes the branding id and saves
+        $form->submit(['branding_id' => '7'] + $shown);
+
+        $saved = $form->getData();
+        self::assertIsArray($saved);
+        self::assertSame($expectedSaved, $saved[$option]);
+    }
+
+    /**
+     * @return iterable<string, array{string, mixed, ?string, mixed}>
+     */
+    public static function provideValuesTheFieldsHold(): iterable
+    {
+        yield 'an agreement id stored as a string of digits' => ['agreement_id', '5', '5', 5];
+        yield 'an agreement id stored as an int' => ['agreement_id', 5, '5', 5];
+        yield 'synchronized stored as 1' => ['synchronized', 1, '1', true];
+        yield "synchronized stored as '1'" => ['synchronized', '1', '1', true];
+        yield "synchronized stored as '0'" => ['synchronized', '0', null, false];
+    }
+
+    /**
+     * @test
+     *
      * @dataProvider provideRejectedCaptureModes
      *
      * @param array<string, mixed> $stored

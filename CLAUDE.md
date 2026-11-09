@@ -358,7 +358,9 @@ in that folder) and need `assets:install` in the host app.
   empty config) shows the defaults with capture mode on completion; a usable configuration
   (`GatewayConfiguration::fromConfig()`) shows its typed `options()` and the effective `captureMode()`; one
   payum-quickpay rejects still opens, under the current names (`GatewayOptions::withCurrentNames()`), each
-  value as stored where its field shows it exactly (empty where it can't) and the capture mode by Sylius'
+  value as stored where its field holds it exactly (the fields' display coercion, not an option rule: a digit
+  string in the agreement id field as its int, 1/0 in the checkbox as a bool; empty where it can't), so
+  fixing one option keeps the others, and the capture mode by Sylius'
   rule alone (the module's `captureMode()` without `auto_capture`). The 1.x names and `auto_capture` are
   dropped from the form data, so saving writes the current names with `auto_capture` folded into
   `use_authorize`; options without a field (`language`) are kept as stored. A new gateway option starts in
