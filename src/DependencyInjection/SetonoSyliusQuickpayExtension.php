@@ -71,6 +71,19 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
             ]);
         }
 
+        if ($container->hasExtension('sylius_payum')) {
+            // Sylius validates a payment method's gateway config in the groups listed for its gateway factory, in the
+            // admin form and the Admin API alike: a Quickpay one in sylius_quickpay as well, the group of the plugin's
+            // UsableGatewayConfiguration constraint
+            $container->prependExtensionConfig('sylius_payum', [
+                'gateway_config' => [
+                    'validation_groups' => [
+                        'quickpay' => ['sylius', 'sylius_quickpay'],
+                    ],
+                ],
+            ]);
+        }
+
         if ($container->hasExtension('framework')) {
             // A named lock resource for the per-payment lock reconciling a Sylius payment takes, so callbacks
             // and the reconcile command never reconcile the same payment at once. The application overrides

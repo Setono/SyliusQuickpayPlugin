@@ -2,3 +2,4 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay a respins această cheie API. Verifică dacă este cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori).'
+        unreadable: 'Configurația gateway-ului nu poate fi citită, așa cum se întâmplă când este criptată. Criptarea configurațiilor gateway-ului nu este acceptată.'
