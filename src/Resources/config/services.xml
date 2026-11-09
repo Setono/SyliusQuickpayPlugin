@@ -10,7 +10,7 @@
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
             <argument type="service" id="sylius.repository.order"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
-            <argument type="service" id="sylius.repository.gateway_config"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
         </service>
 
         <!-- Payum's per-payment notify url, the callback url Quickpay normally calls -->
@@ -19,8 +19,16 @@
             <argument type="service" id=".inner"/>
             <argument type="service" id="payum"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
+        </service>
+
+        <!-- Gateway configuration -->
+        <service id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider">
             <argument type="service" id="sylius.repository.gateway_config"/>
         </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider"/>
 
         <!-- Provider -->
         <service id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
@@ -61,6 +69,7 @@
 
         <!-- Payment link -->
         <service id="Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
             <argument type="service" id="router"/>
             <argument type="service" id="url_helper"/>
             <argument>%sylius.unsecured_urls%</argument>

@@ -22,7 +22,7 @@
     "payum/payum-bundle": "^2.5 !=2.7.0",
     "psr/log": "^1.1 || ^2.0 || ^3.0",
     "setono/doctrine-orm-trait": "^1.4",
-    "setono/payum-quickpay": "^2.0@RC",
+    "setono/payum-quickpay": "^2.0.0-rc.2",
     "setono/quickpay-php-sdk": "^1.2",
     "sylius/core": "^1.0",
     "sylius/core-bundle": "^1.0",

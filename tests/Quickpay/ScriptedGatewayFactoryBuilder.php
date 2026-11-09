@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Quickpay;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Bridge\Symfony\Builder\GatewayFactoryBuilder;
 use Payum\Core\GatewayFactoryInterface;
+use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\Quickpay\Client\Client;
 
 /**
@@ -30,18 +31,12 @@ final class ScriptedGatewayFactoryBuilder
         $httpClient = $this->httpClient;
 
         // Payum resolves a closure option with the gateway's own config, so the SDK client carries
-        // the gateway's api key and the synchronized flag the library insists it agrees with
+        // the gateway's api key and the synchronized flag the library insists it agrees with, read
+        // by the library's own rules
         $defaultConfig['quickpay.client'] = static function (ArrayObject $config) use ($httpClient): Client {
-            $apiKey = $config['api_key'];
-            if (!\is_string($apiKey)) {
-                throw new \LogicException('The Quickpay gateway is configured without an api key');
-            }
+            $options = GatewayOptions::fromConfig($config->getArrayCopy());
 
-            return new Client(
-                $apiKey,
-                $httpClient,
-                synchronized: true === filter_var($config['synchronized'], \FILTER_VALIDATE_BOOL),
-            );
+            return new Client($options->apiKey, $httpClient, synchronized: $options->synchronized);
         };
 
         return $this->inner->build($defaultConfig, $coreGatewayFactory);

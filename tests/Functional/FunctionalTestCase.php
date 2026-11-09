@@ -385,6 +385,31 @@ abstract class FunctionalTestCase extends KernelTestCase
         $requestStack->push($callback);
     }
 
+    /**
+     * A payment method on the gateway of the given factory, a Quickpay one unless another is given, with the
+     * gateway configuration stored as given, all persisted. Its gateway is named after its code.
+     *
+     * @param array<array-key, mixed> $config
+     */
+    protected function createPaymentMethod(string $code, array $config, string $factoryName = 'quickpay'): PaymentMethodInterface
+    {
+        $paymentMethodFactory = self::getContainer()->get('sylius.factory.payment_method');
+        self::assertInstanceOf(PaymentMethodFactoryInterface::class, $paymentMethodFactory);
+
+        $paymentMethod = $paymentMethodFactory->createWithGateway($factoryName);
+        $paymentMethod->setCode($code);
+
+        $gatewayConfig = $paymentMethod->getGatewayConfig();
+        self::assertNotNull($gatewayConfig);
+        $gatewayConfig->setGatewayName($code);
+        $gatewayConfig->setConfig($config);
+
+        $this->entityManager()->persist($paymentMethod);
+        $this->entityManager()->flush();
+
+        return $paymentMethod;
+    }
+
     protected function entityManager(): EntityManagerInterface
     {
         $entityManager = self::getContainer()->get('doctrine.orm.entity_manager');

@@ -221,12 +221,26 @@ mapping applies.
 - **`payum/payum-bundle` (`^2.5 !=2.7.0`) and `doctrine/orm` (`^2.13`) are direct dependencies.** Sylius already
   requires them, so nothing new is installed. PayumBundle 2.7.0 is excluded: it shipped its routing as YAML only,
   without the XML files Sylius 1.14's shop routing imports (2.7.1 restored them).
+- **The gateway configuration module, `GatewayConfiguration\GatewayConfigurationProviderInterface`**, service
+  `Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider` (constructor
+  `(RepositoryInterface $gatewayConfigRepository)`, Sylius' gateway config repository), aliased by the interface. The
+  plugin reads a stored Quickpay gateway configuration only through it, and payum-quickpay's `GatewayOptions` decides
+  what each gateway option means (terms in [GLOSSARY.md](GLOSSARY.md), the decision in
+  [ADR 0002](docs/adr/0002-payum-quickpay-owns-gateway-option-rules.md)):
+  - `all()`, `forGatewayName(string)`, `forPaymentMethod(PaymentMethodInterface)` and `forPayment(PaymentInterface)`
+    list and find Quickpay gateway configurations, a lookup answering null for a missing or non-Quickpay one;
+  - each is a `GatewayConfiguration`: its `gatewayName`, `options()` (the library's typed, normalized
+    `GatewayOptions`), `captureMode()` (a `CaptureMode`, `OnCompletion` or `Immediately`: the one checkout uses),
+    `isCaptureModeSet()` and `usesDeprecatedOptions()`;
+  - reading an unusable configuration (invalid by the library's rules, or encrypted) throws
+    `UnusableGatewayConfiguration`, which carries the library's violations. Listing and finding never throw.
 
 ### Changed constructors
 
 | Class | `v2.0.0-alpha.2` | Now |
 |---|---|---|
-| `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` |
+| `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
+| `PaymentLink\PaymentLinkProvider` | `(UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` |
 | `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 
@@ -234,6 +248,15 @@ The service definitions changed accordingly; only a redefinition or decoration o
 
 ### Behavioural changes
 
+- **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.2`**, the release whose public `GatewayOptions` the plugin
+  reads gateway configurations with. A root `composer.json` allowing `^2.0@RC` picks it up with `composer update`.
+- **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
+  payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
+  retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its
+  order might be that gateway's. Before, a gateway configuration whose order prefix wasn't a string was skipped, and a
+  callback for that gateway's payments found no order and was dropped with a 204. An order prefix stored as a number
+  is now stripped like the gateway reads it, as a string. A callback on a payment's own callback url is unaffected by
+  another gateway's configuration.
 - **`reconcile-payments --dry-run` writes nothing.** It runs a status check per payment: no state change, no
   state-machine callbacks (the order isn't marked paid, inventory isn't sold) and nothing persisted, not even
   refreshed payment details. Before, Sylius applied the transitions during the dry run and they were saved. Each

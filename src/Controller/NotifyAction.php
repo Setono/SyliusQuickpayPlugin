@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Controller;
 
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -26,13 +25,12 @@ final class NotifyAction
 {
     /**
      * @param OrderRepositoryInterface<OrderInterface> $orderRepository
-     * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
      */
     public function __construct(
         private readonly PaymentReconcilerInterface $reconciler,
         private readonly OrderRepositoryInterface $orderRepository,
         private readonly PaymentProviderInterface $paymentProvider,
-        private readonly RepositoryInterface $gatewayConfigRepository,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
     ) {
     }
 
@@ -94,16 +92,20 @@ final class NotifyAction
      * gateway's prefix — the values actually used at creation time, not an env var that may have
      * drifted since.
      *
+     * A gateway configuration whose order prefix can't be read fails the callback, so Quickpay retries
+     * it: the order might be that gateway's.
+     *
      * @return list<string>
+     *
+     * @throws UnusableGatewayConfiguration
      */
     private function resolveOrderNumberCandidates(string $orderId): array
     {
         $candidates = [];
 
-        /** @var GatewayConfigInterface $gatewayConfig */
-        foreach ($this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME]) as $gatewayConfig) {
-            $prefix = $gatewayConfig->getConfig()['order_prefix'] ?? null;
-            if (is_string($prefix) && '' !== $prefix && str_starts_with($orderId, $prefix)) {
+        foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
+            $prefix = $gatewayConfiguration->options()->orderPrefix;
+            if ('' !== $prefix && str_starts_with($orderId, $prefix)) {
                 $candidates[] = substr($orderId, \strlen($prefix));
             }
         }

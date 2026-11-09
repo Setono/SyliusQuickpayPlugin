@@ -7,13 +7,12 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Controller;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Provider\PaymentProvider;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 final class NotifyActionTest extends TestCase
@@ -33,7 +32,7 @@ final class NotifyActionTest extends TestCase
      *
      * @dataProvider orderIdProvider
      *
-     * @param list<string> $configuredPrefixes
+     * @param list<mixed> $configuredPrefixes
      * @param list<string> $expectedCandidates
      */
     public function it_resolves_the_order_number_from_the_configured_gateway_prefixes(
@@ -45,7 +44,7 @@ final class NotifyActionTest extends TestCase
             $this->prophesize(PaymentReconcilerInterface::class)->reveal(),
             $this->createOrderRepository(),
             new PaymentProvider(),
-            $this->createGatewayConfigRepository($configuredPrefixes),
+            $this->createGatewayConfigurationProvider($configuredPrefixes),
         );
 
         $response = $action($this->createRequest($orderId));
@@ -55,7 +54,7 @@ final class NotifyActionTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{list<string>, string, list<string>}>
+     * @return iterable<string, array{list<mixed>, string, list<string>}>
      */
     public static function orderIdProvider(): iterable
     {
@@ -68,6 +67,9 @@ final class NotifyActionTest extends TestCase
         yield 'the matching prefix among several gateways is used' => [['qp1_', 'qp2_'], 'qp2_000000123', ['000000123', 'qp2_000000123']];
 
         yield 'a prefix that also appears inside the order id is only stripped from the start' => [['1'], '100121', ['00121', '100121']];
+
+        // The gateway reads the prefix as a string, so the order id it created carries it as one
+        yield 'a prefix stored as a number is stripped' => [[42], '42000000123', ['000000123', '42000000123']];
     }
 
     /**
@@ -91,23 +93,19 @@ final class NotifyActionTest extends TestCase
     }
 
     /**
-     * @param list<string> $prefixes
-     *
-     * @return RepositoryInterface<GatewayConfigInterface>
+     * @param list<mixed> $prefixes
      */
-    private function createGatewayConfigRepository(array $prefixes): RepositoryInterface
+    private function createGatewayConfigurationProvider(array $prefixes): GatewayConfigurationProviderInterface
     {
-        $gatewayConfigs = [];
-        foreach ($prefixes as $prefix) {
-            $gatewayConfig = $this->prophesize(GatewayConfigInterface::class);
-            $gatewayConfig->getConfig()->willReturn(['order_prefix' => $prefix]);
-            $gatewayConfigs[] = $gatewayConfig->reveal();
+        $gatewayConfigurations = [];
+        foreach ($prefixes as $i => $prefix) {
+            $gatewayConfigurations[] = GatewayConfigurations::of(GatewayConfigurations::USABLE + ['order_prefix' => $prefix], gatewayName: 'quickpay_' . $i);
         }
 
-        $repository = $this->prophesize(RepositoryInterface::class);
-        $repository->findBy(['factoryName' => QuickpayGatewayFactory::NAME])->willReturn($gatewayConfigs);
+        $provider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $provider->all()->willReturn($gatewayConfigurations);
 
-        return $repository->reveal();
+        return $provider->reveal();
     }
 
     private function createRequest(string $orderId): Request
