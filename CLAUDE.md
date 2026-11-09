@@ -167,6 +167,9 @@ being moved by spec #156); a new gateway option starts in the library and only g
   unusable → fails open with a warning log), `PaymentOperationsAction` (`forPayment()`; none → 404, unusable → the
   inline error, 502) and the reconcile command's fraud report (`all()`; unusable → a warning naming the gateway and a
   non-zero exit, the other gateways are still queried).
+- The doctor (`all()`): an unusable configuration is one failed check per violation (one saying encrypting gateway
+  configurations is not supported for an unreadable one) and its checks against Quickpay are skipped; a usable one's
+  checks run on the typed `GatewayOptions` (see *Command/DoctorCommand* below).
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
@@ -260,12 +263,20 @@ inline retry notice (HTTP 502). The controller reads the api key from the paymen
 (the module's `forPayment()`: a payment that isn't a Quickpay one → 404, an unusable configuration → the same
 inline notice, 502) and fetches via `Quickpay/ClientFactory`.
 
-`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`) machine-checks the README's Troubleshooting
-section per configured gateway: api key (via the shared `Quickpay/ApiKeyVerifier` ping-then-payments
+`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `ClientFactoryInterface`, `ApiKeyVerifierInterface`,
+`GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
+section per Quickpay gateway configuration from the module's `all()`. It checks what the gateway checks: each
+violation payum-quickpay finds is a failed check, an encrypted configuration is one failed check (encryption isn't
+supported), and an unusable configuration's other checks are skipped. On a usable one it runs, on the typed options:
+api key (via the shared `Quickpay/ApiKeyVerifier` ping-then-payments
 probe), private key HMAC self-test (`CallbackValidator`), agreement
-existence (`GET agreements/{id}`, failing open on permission errors), order prefix length + cross-gateway
-uniqueness, and notify-route registration; `--live` creates a money-less test payment and attempts the
-link PUT to surface the missing-permission 403. Non-zero exit on any failed check; warnings don't fail.
+existence (`GET agreements/{id}` for the agreement id the gateway sends, none = the default agreement; failing open on
+permission errors), order prefix length + cross-gateway
+uniqueness (among usable configurations), and notify-route registration; `--live` creates a money-less test payment and attempts the
+link PUT to surface the missing-permission 403. It warns, without failing, about a stored deprecated gateway option
+(`usesDeprecatedOptions()`: re-save the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout
+captures immediately), for a readable configuration even when it is invalid. Non-zero exit on any failed check;
+warnings don't fail. Its output is English console text, like the other commands', so it has no translations.
 
 `Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args
 `PendingPaymentProviderInterface`, `PaymentReconcilerInterface`, `ClientFactoryInterface`,
@@ -365,9 +376,6 @@ in that folder) and need `assets:install` in the host app.
   dropped from the form data, so saving writes the current names with `auto_capture` folded into
   `use_authorize`; options without a field (`language`) are kept as stored. A new gateway option starts in
   payum-quickpay, and the form only adds its field.
-  Reading the api key back out of a
-  stored config (old or new name) is `Quickpay/ApiKeyResolver`'s job — the one place that knows the
-  pre-2.0 `apikey` spelling; use it instead of reading the config array directly.
   Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/form/theme.html.twig`, scoped to that field's block prefix and registered by

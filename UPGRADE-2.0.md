@@ -196,6 +196,7 @@ changed. Every callback and the reconciliation command go through the module.
 |---|---|---|
 | `Payum\Extension\NotifyIdempotencyExtension` | `Setono\SyliusQuickpayPlugin\Payum\Extension\NotifyIdempotencyExtension`, tagged `payum.extension` (alias `setono_sylius_quickpay.notify_idempotency`) | the payment's lock, taken by `PaymentReconcilerInterface::reconcileFromCallback()` |
 | `Payum\Extension\AcknowledgeNotifyAction` | none | the callback endpoints answer a duplicate callback themselves |
+| `Quickpay\ApiKeyResolver` | none | the gateway configuration module: `GatewayConfigurationProviderInterface::forPayment()` (or `all()`, `forGatewayName()`, `forPaymentMethod()`), then `options()->apiKey`, which reads the 1.x `apikey` name like the gateway does |
 | `Validator\Constraints\QuickpayCredentials`, `Validator\Constraints\QuickpayCredentialsValidator` | `Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator`, tagged `validator.constraint_validator` | `Validator\Constraints\UsableGatewayConfiguration`, which verifies the api key on save, also through the Admin API |
 
 The reconciliation command's private Quickpay status → transition mapping is gone as well: Sylius' own
@@ -254,6 +255,7 @@ mapping applies.
 | `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
 | `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory)` |
 | `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory, Environment $twig)` |
+| `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 
 The service definitions changed accordingly; only a redefinition or decoration of these services needs updating.
@@ -302,6 +304,17 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **`reconcile-payments --fraud-suspected` reports a gateway whose configuration is unusable** with a warning naming
   the gateway, goes on with the other gateways and exits non-zero. Before, a gateway without an api key was skipped
   silently, and an encrypted configuration crashed the report.
+- **The doctor checks what the gateway checks.** It reads each Quickpay gateway configuration by payum-quickpay's
+  rules, the ones the gateway is built from, and reports every gateway option the gateway rejects as a failed check,
+  the branding id, `synchronized`, `auto_capture` and the payment methods included. An encrypted configuration is one
+  failed check saying encryption isn't supported. For such a gateway the checks against Quickpay are skipped. The
+  agreement it looks up is the one the gateway sends. Before, it applied rules of its own: an agreement id of `'1e3'`,
+  `0` or `12.0` passed (looked up as 1000, 0 and 12), a blank one failed as "not a number", an encrypted
+  configuration crashed it, and it printed "All checks passed" for configurations the gateway rejects. It now also
+  warns, without failing, when a deprecated gateway option is stored (a 1.x option name, or `auto_capture` switched
+  on: re-save the payment method) and when no capture mode (`use_authorize`) is stored, so checkout captures
+  immediately. The messages "No api key is configured", "No private key is configured ..." and "The configured
+  agreement id is not a number ..." are gone; payum-quickpay's own message for the option replaces each.
 - **`reconcile-payments --dry-run` writes nothing.** It runs a status check per payment: no state change, no
   state-machine callbacks (the order isn't marked paid, inventory isn't sold) and nothing persisted, not even
   refreshed payment details. Before, Sylius applied the transitions during the dry run and they were saved. Each
