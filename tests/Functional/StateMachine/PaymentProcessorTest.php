@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\StateMachine;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LogLevel;
-use Setono\Payum\Quickpay\Exception\InvalidGatewayOptions;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
@@ -306,9 +305,9 @@ final class PaymentProcessorTest extends FunctionalTestCase
         try {
             $this->applyTransition($payment, $transition);
             self::fail('Capturing or refunding with an unusable gateway configuration must fail');
-        } catch (InvalidGatewayOptions|UnusableGatewayConfiguration $e) {
-            // Which of the two surfaces depends on what reads the configuration first
-            self::assertStringContainsString('branding_id', $e->getMessage());
+        } catch (UnusableGatewayConfiguration $e) {
+            // Building the gateway reads the configuration through the client provider first
+            self::assertSame(['branding_id'], array_keys($e->getViolations()));
         }
 
         self::assertSame([], $transitions->getArrayCopy());
