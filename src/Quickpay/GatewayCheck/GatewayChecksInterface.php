@@ -19,4 +19,13 @@ interface GatewayChecksInterface
      * @throws UnusableGatewayConfiguration
      */
     public function apiKey(GatewayConfiguration $gatewayConfiguration): Verdict;
+
+    /**
+     * Whether the api user may put a link on a payment, as checkout does. The one check that writes to the Quickpay
+     * account: it creates a money-less test payment, which stays on the account (the verdict's note names it), and puts
+     * a link on it.
+     *
+     * @throws UnusableGatewayConfiguration
+     */
+    public function paymentLinkPermission(GatewayConfiguration $gatewayConfiguration): Verdict;
 }
