@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Anna API-käyttäjän API-avain Quickpay-hallinnasta (Asetukset → Käyttäjät).'
             auto_capture: 'Vanhentuneen "auto_capture"-asetuksen on oltava true tai false. Jätä se pois ja valitse sen sijaan veloitusajankohta.'
             branding_id: 'Anna positiivinen kokonaisluku tai jätä kenttä tyhjäksi.'
-            language: '"language"-asetuksen on oltava kielikoodi, esimerkiksi "en" tai "da".'
+            language: '"language"-asetuksen on oltava tekstiä, esimerkiksi kielikoodi kuten "en" tai "da".'
             order_prefix: 'Anna tekstiä tai jätä kenttä tyhjäksi.'
             payment_methods: 'Anna maksutavat pilkuilla erotettuina tai jätä kenttä tyhjäksi.'
             private_key: 'Anna tilisi yksityinen avain (Asetukset → Integraatio Quickpay-hallinnassa).'

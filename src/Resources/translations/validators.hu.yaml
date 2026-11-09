@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Add meg az API-felhasználó API-kulcsát a Quickpay managerből (Beállítások → Felhasználók).'
             auto_capture: 'Az elavult "auto_capture" beállítás értéke csak true vagy false lehet. Hagyd el, és helyette válaszd ki a terhelés időpontját.'
             branding_id: 'Adj meg egy pozitív egész számot, vagy hagyd üresen a mezőt.'
-            language: 'A "language" beállításnak nyelvkódnak kell lennie, például "en" vagy "da".'
+            language: 'A "language" beállításnak szövegnek kell lennie, például egy nyelvkódnak, mint az "en" vagy a "da".'
             order_prefix: 'Adj meg szöveget, vagy hagyd üresen a mezőt.'
             payment_methods: 'Add meg a fizetési módokat vesszővel elválasztva, vagy hagyd üresen a mezőt.'
             private_key: 'Add meg a fiókod privát kulcsát (Beállítások → Integráció a Quickpay managerben).'

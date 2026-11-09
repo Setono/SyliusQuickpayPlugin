@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Ange API-användarens API-nyckel från din Quickpay-manager (Inställningar → Användare).'
             auto_capture: 'Den föråldrade inställningen "auto_capture" måste vara true eller false. Utelämna den och välj tidpunkt för debitering i stället.'
             branding_id: 'Ange ett positivt heltal, eller lämna fältet tomt.'
-            language: 'Inställningen "language" måste vara en språkkod, till exempel "en" eller "da".'
+            language: 'Inställningen "language" måste vara text, till exempel en språkkod som "en" eller "da".'
             order_prefix: 'Ange text, eller lämna fältet tomt.'
             payment_methods: 'Ange betalningsmetoder separerade med kommatecken, eller lämna fältet tomt.'
             private_key: 'Ange ditt kontos privata nyckel (Inställningar → Integration i Quickpay-managern).'

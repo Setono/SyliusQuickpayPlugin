@@ -375,8 +375,9 @@ First, it reads each gateway configuration by the same rules the gateway is buil
 means the gateway can be built:
 
 - every gateway option the gateway would reject is a failed check of its own, e.g. a missing api key or private key,
-  an agreement or branding id that isn't a positive whole number, or a `synchronized` that isn't a yes/no value. The
-  checks against Quickpay are then skipped for that gateway, since their errors would only follow from these;
+  an agreement or branding id that isn't a positive whole number, or a `synchronized` that isn't a yes/no value. Only
+  the checks against Quickpay are then skipped for that gateway, since their errors would only follow from these: its
+  order prefix is still checked for length and compared with the other gateways' prefixes;
 - an encrypted gateway configuration is a failed check saying encryption isn't supported (see
   [Configuration](#configuration));
 - the agreement it looks up is the one the gateway sends: an empty agreement id means the account's default

@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Enter the API key of the API user in your Quickpay manager (Settings → Users).'
             auto_capture: 'The deprecated "auto_capture" option must be true or false. Leave it out and choose the capture mode instead.'
             branding_id: 'Enter a positive whole number, or leave the field empty.'
-            language: 'The "language" option must be a language code, such as "en" or "da".'
+            language: 'The "language" option must be text, for example a language code such as "en" or "da".'
             order_prefix: 'Enter text, or leave the field empty.'
             payment_methods: 'Enter payment methods separated by commas, or leave the field empty.'
             private_key: 'Enter the private key of your account (Settings → Integration in the Quickpay manager).'

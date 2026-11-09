@@ -141,7 +141,8 @@ Read `GLOSSARY.md` (Gateway configuration, Gateway option, Capture mode) and
 gateway option means** (1.x names, defaults, normalization, validation: `Setono\Payum\Quickpay\GatewayOptions`, the
 code the gateway itself is built from), and the plugin reads a stored gateway configuration only through this module.
 Don't add a reader of `getConfig()` keys or a filter on the factory name anywhere else; a new gateway option starts in
-the library and only gets a form field here. The one factory-name filter left outside the module is
+the library and only gets a form field and its translated save message here (ADR 0002). The one factory-name filter
+left outside the module is
 `Provider/PendingPaymentProvider`'s DQL join (`gatewayConfig.factoryName = quickpay`), a deliberate exception: it
 selects the Quickpay payments inside the database query, which the module's lookups can't do.
 - **`GatewayConfigurationProviderInterface`** (service `GatewayConfigurationProvider`, arg
@@ -157,6 +158,18 @@ selects the Quickpay payments inside the database query, which the module's look
   stored `auto_capture` as true); `isCaptureModeSet()` (`use_authorize` stored and not null);
   `usesDeprecatedOptions()` (the library's check). `CaptureMode` owns the mapping to and from `use_authorize`
   (`fromUseAuthorize()`, `useAuthorize()`); don't write a `use_authorize` ternary elsewhere.
+- **Reading a configuration the library rejects**, for whoever shows or checks one that may still need fixing (the
+  admin form, the doctor's order prefix checks): `optionsWithRejectedAsStored(): GatewayOptionValues` never throws for
+  a readable configuration (an unreadable one throws as `options()` does). `values` holds every option the library
+  reads (the keys of `GatewayOptions::DEFAULTS`, each read from the `GatewayOptions` property named after it in
+  camelCase), by current name: the library's normalized value where it accepts the option, the stored value (null when
+  not stored) where it rejects it; `rejected`/`isRejected()` say which are as stored; `captureMode` is the effective
+  mode, with `auto_capture` folded in unless it is rejected. The plugin holds no list of the library's required options:
+  the accepted options are re-read without the rejected ones, and only when that re-read still reports options (only
+  required ones can be, now missing) does a placeholder stand in for exactly those; should the library still reject
+  it, every option is as stored. `withoutDeprecatedOptions()` is the stored configuration as re-saving the payment
+  method stores it before any change: current names, `auto_capture` dropped and the capture mode written as
+  `use_authorize`, everything else as stored.
 - **Unusable** = invalid by the library's rules, or read as no configuration at all (an encrypted configuration
   nothing decrypted: Payum's model then returns null). Reading one, `options()` (and `captureMode()` only when it needs
   a stored `auto_capture`) throws `UnusableGatewayConfiguration`: `gatewayName`, `isUnreadable()` (no configuration
@@ -172,8 +185,9 @@ selects the Quickpay payments inside the database query, which the module's look
   unusable → a warning naming the gateway and a non-zero exit, the other gateways are still queried). The test env's
   `ScriptedGatewayFactoryBuilder` reads the api key and `synchronized` through `GatewayOptions`.
 - The doctor (`all()`): an unusable configuration is one failed check per violation (an unreadable one is a single
-  failed check with the exception's message) and its checks against Quickpay are skipped; a usable one's checks run
-  on the typed `GatewayOptions` (see *Command/DoctorCommand* below).
+  failed check with the exception's message) and its checks against Quickpay are skipped, while a readable one's
+  order prefix (from `optionsWithRejectedAsStored()`) is still checked; a usable one's checks run on the typed
+  `GatewayOptions` (see *Command/DoctorCommand* below).
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
@@ -271,12 +285,14 @@ inline notice, 502) and fetches via `Quickpay/ClientFactory`.
 `GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
 section per Quickpay gateway configuration from the module's `all()`. It checks what the gateway checks: each
 violation payum-quickpay finds is a failed check, an unreadable (encrypted) configuration is one failed check
-printing `UnusableGatewayConfiguration`'s message, and an unusable configuration's other checks are skipped. On a usable one it runs, on the typed options:
+printing `UnusableGatewayConfiguration`'s message, and an unusable configuration's checks against Quickpay are skipped.
+The order prefix checks need no gateway, so they run on every readable configuration, on the order prefix
+`optionsWithRejectedAsStored()` gives (none when the library rejects the order prefix itself): length per gateway, and
+cross-gateway uniqueness among every readable configuration, usable or not. On a usable one it also runs, on the typed options:
 api key (via the shared `Quickpay/ApiKeyVerifier` ping-then-payments
 probe), private key HMAC self-test (`CallbackValidator`), agreement
 existence (`GET agreements/{id}` for the agreement id the gateway sends, none = the default agreement; failing open on
-permission errors), order prefix length + cross-gateway
-uniqueness (among usable configurations), and notify-route registration; `--live` creates a money-less test payment and attempts the
+permission errors), and notify-route registration; `--live` creates a money-less test payment and attempts the
 link PUT to surface the missing-permission 403. It warns, without failing, about a stored deprecated gateway option
 (`usesDeprecatedOptions()`: re-save the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout
 captures immediately), for a readable configuration even when it is invalid. Non-zero exit on any failed check;
@@ -331,7 +347,7 @@ can't be queried, an unusable gateway configuration included, prints a warning n
 ### Payment link (admin)
 `PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel
 hostname, like Sylius' `sylius_channel_url`; `%sylius.unsecured_urls%` picks the scheme) for a Quickpay payment
-(its method has a Quickpay gateway configuration: the module's `forPaymentMethod()`) that is the order's last payment in state `new` on a non-cancelled order — null otherwise, also when the shop
+(its method has a Quickpay gateway configuration: the module's `forPayment()`) that is the order's last payment in state `new` on a non-cancelled order — null otherwise, also when the shop
 route is absent (headless). It is deliberately *not* a raw Quickpay window url: opening it mints a fresh Payum
 token and runs the normal Convert → payment-window flow, so nothing happens at Quickpay until the customer
 clicks and a payment without a `quickpayPaymentId` works too. Exposed to Twig as
@@ -369,17 +385,15 @@ in that folder) and need `assets:install` in the host app.
   option rendered as a choice (`true` = authorize at checkout, capture on the payment's `complete`
   transition — the default; `false` = Sylius executes `Capture`, Quickpay captures at authorization);
   the deprecated `auto_capture` gateway option is never written. Its `PRE_SET_DATA` listener (`formDataOf()`) shows
-  what checkout uses and keeps no value rules of its own (ADR 0002): a new payment method (an empty config) shows the
-  defaults with capture mode on completion; a usable configuration (`GatewayConfiguration::fromConfig()`) shows its
-  typed `options()` and the effective `captureMode()` (`fieldValuesOf()`). One payum-quickpay rejects still opens,
-  under the current names (`GatewayOptions::withCurrentNames()`), and fixing one option keeps the others: the
-  options in `getViolations()` are dropped (a rejected required credential, `api_key`/`private_key`, is replaced by
-  a placeholder that is never shown), the rest are read and shown exactly as on the usable path (capture mode
-  included, so an accepted `auto_capture` folds in), and each rejected option is shown as stored where its field
-  holds that type unchanged (`FIELD_TYPES`: a string in a text field, an int in the agreement id field, a bool in
-  the checkbox), empty otherwise. The 1.x names and `auto_capture` are dropped from the form data, so saving writes
-  the current names with `auto_capture` folded into `use_authorize`; options without a field (`language`) are kept
-  as stored. A new gateway option starts in payum-quickpay, and the form only adds its field.
+  what checkout uses and keeps no value rules or raw config keys of its own (ADR 0002): a new payment method (an empty
+  config) shows the defaults with capture mode on completion; otherwise it reads the config through the module
+  (`GatewayConfiguration::fromConfig()`): `withoutDeprecatedOptions()` is the form data (current names, `auto_capture`
+  folded into `use_authorize`, options without a field such as `language` kept as stored), and each field named after
+  a gateway option gets that option's value from `optionsWithRejectedAsStored()`. So a configuration payum-quickpay
+  rejects still opens, and fixing one option keeps the others: each accepted option is shown as the library reads it,
+  each rejected one as stored where its field holds it unchanged, empty otherwise (`holds()`, decided by the field's
+  own type: a string in a text field, an int in an integer field, a bool in a checkbox). A new gateway option starts in
+  payum-quickpay, and the plugin only adds its field and its translated save message (below).
   Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/form/theme.html.twig`, scoped to that field's block prefix and registered by

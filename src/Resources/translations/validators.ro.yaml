@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Introdu cheia API a utilizatorului API din managerul tău Quickpay (Setări → Utilizatori).'
             auto_capture: 'Opțiunea învechită "auto_capture" trebuie să fie true sau false. Omite-o și alege în schimb momentul încasării.'
             branding_id: 'Introdu un număr întreg pozitiv sau lasă câmpul gol.'
-            language: 'Opțiunea "language" trebuie să fie un cod de limbă, de exemplu "en" sau "da".'
+            language: 'Opțiunea "language" trebuie să fie text, de exemplu un cod de limbă precum "en" sau "da".'
             order_prefix: 'Introdu text sau lasă câmpul gol.'
             payment_methods: 'Introdu metodele de plată separate prin virgulă sau lasă câmpul gol.'
             private_key: 'Introdu cheia privată a contului tău (Setări → Integrare în managerul Quickpay).'

@@ -309,7 +309,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **The doctor checks what the gateway checks.** It reads each Quickpay gateway configuration by payum-quickpay's
   rules, the ones the gateway is built from, and reports every gateway option the gateway rejects as a failed check,
   the branding id, `synchronized`, `auto_capture` and the payment methods included. An encrypted configuration is one
-  failed check saying encryption isn't supported. For such a gateway the checks against Quickpay are skipped. The
+  failed check saying encryption isn't supported. For such a gateway the checks against Quickpay are skipped, while
+  the order prefix of one that can be read is still checked and compared with the other gateways'. The
   agreement it looks up is the one the gateway sends. Before, it applied rules of its own: an agreement id of `'1e3'`,
   `0` or `12.0` passed (looked up as 1000, 0 and 12), a blank one failed as "not a number", an encrypted
   configuration crashed it, and it printed "All checks passed" for configurations the gateway rejects. It now also

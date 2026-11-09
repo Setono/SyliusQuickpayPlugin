@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
-use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\CaptureMode;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -16,6 +14,7 @@ use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Validator\Constraints\Length;
 
 /**
@@ -29,30 +28,6 @@ use Symfony\Component\Validator\Constraints\Length;
 final class GatewayConfigurationType extends AbstractType
 {
     private const TRANSLATION_PREFIX = 'setono_sylius_quickpay.form.gateway_configuration.quickpay.';
-
-    /**
-     * The type of value each gateway option's field holds unchanged. An option the gateway rejects is shown as
-     * stored only when its field holds it: the field would show or save any other value changed, a list as
-     * text or a string as a number, so it is shown empty instead.
-     */
-    private const FIELD_TYPES = [
-        'api_key' => 'string',
-        'private_key' => 'string',
-        'agreement_id' => 'int',
-        'payment_methods' => 'string',
-        'synchronized' => 'bool',
-        'order_prefix' => 'string',
-        'branding_id' => 'string',
-    ];
-
-    /**
-     * The gateway options the gateway can't be built without, each with a placeholder that stands in for a
-     * rejected one while the other options are read. The placeholder is never shown.
-     */
-    private const REQUIRED_CREDENTIALS = [
-        'api_key' => 'rejected',
-        'private_key' => 'rejected',
-    ];
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
@@ -125,82 +100,65 @@ final class GatewayConfigurationType extends AbstractType
             ->addEventListener(FormEvents::PRE_SET_DATA, static function (FormEvent $event): void {
                 $config = $event->getData();
                 if (is_array($config)) {
-                    $event->setData(self::formDataOf($config));
+                    $event->setData(self::formDataOf($event->getForm(), $config));
                 }
             })
         ;
     }
 
     /**
-     * The form's data for a stored gateway configuration: what checkout uses, under the current option names.
-     * Submitting it saves those names without the deprecated ones, and with the deprecated `auto_capture`
-     * folded into the capture mode, so re-saving an unchanged form never changes how a working gateway
-     * behaves. The form has no rules of its own: payum-quickpay decides what each gateway option means, and
-     * the gateway configuration module what the capture mode is (ADR 0002). Options without a field, such as
-     * `language`, are kept as stored.
+     * The form's data for a stored gateway configuration, as the gateway configuration module reads it (ADR 0002): the
+     * form only puts each gateway option's value on the field of the same name. Saving it stores the current option
+     * names, with the deprecated `auto_capture` folded into the capture mode, so re-saving an unchanged form never
+     * changes how a working gateway behaves. Options without a field, such as `language`, are kept as stored.
      *
-     * A configuration the gateway rejects still opens, so it can be fixed here, and fixing one option keeps
-     * the others: each option the gateway accepts is shown as the gateway reads it, and each rejected one as
-     * stored where its field holds it.
+     * A configuration the gateway rejects still opens, so it can be fixed here, and fixing one option keeps the
+     * others: each option the gateway accepts is shown as the gateway reads it, and each rejected one as stored where
+     * its field holds it.
      *
+     * @param FormInterface<mixed> $form
      * @param array<array-key, mixed> $config
      *
      * @return array<array-key, mixed>
      */
-    private static function formDataOf(array $config): array
+    private static function formDataOf(FormInterface $form, array $config): array
     {
         // A new payment method: the defaults, holding the money until the payment completes
         if ([] === $config) {
             return ['use_authorize' => CaptureMode::OnCompletion->useAuthorize()];
         }
 
-        $config = GatewayOptions::withCurrentNames($config);
+        $configuration = GatewayConfiguration::fromConfig($config);
+        $options = $configuration->optionsWithRejectedAsStored();
+        $data = $configuration->withoutDeprecatedOptions();
 
-        $stored = $config;
-        unset($stored['auto_capture']);
+        foreach ($form as $option => $field) {
+            if (!array_key_exists($option, $options->values)) {
+                continue;
+            }
 
-        try {
-            return array_replace($stored, self::fieldValuesOf(GatewayConfiguration::fromConfig($config)));
-        } catch (UnusableGatewayConfiguration $e) {
-            $rejected = $e->getViolations();
+            $value = $options->values[$option];
+            $data[$option] = !$options->isRejected($option) || self::holds($field, $value) ? $value : null;
         }
 
-        // The options the gateway accepts, read without the rejected ones
-        $accepted = array_replace(
-            array_diff_key($config, $rejected),
-            array_intersect_key(self::REQUIRED_CREDENTIALS, $rejected),
-        );
-        $values = self::fieldValuesOf(GatewayConfiguration::fromConfig($accepted));
-
-        foreach (array_intersect_key(self::FIELD_TYPES, $rejected) as $option => $type) {
-            $value = $config[$option] ?? null;
-            $values[$option] = get_debug_type($value) === $type ? $value : null;
-        }
-
-        return array_replace($stored, $values);
+        return $data;
     }
 
     /**
-     * What the fields show of a gateway configuration: the gateway options as the gateway reads them, and the
-     * capture mode checkout uses
+     * Whether the field shows and saves the value unchanged, so a rejected value can be shown as stored. Any other
+     * value the field would show or save changed, a list as text or a string as a number, so it is shown empty.
      *
-     * @return array<string, mixed>
-     *
-     * @throws UnusableGatewayConfiguration
+     * @param FormInterface<mixed> $field
      */
-    private static function fieldValuesOf(GatewayConfiguration $configuration): array
+    private static function holds(FormInterface $field, mixed $value): bool
     {
-        $options = $configuration->options();
+        $type = $field->getConfig()->getType()->getInnerType();
 
-        return [
-            'api_key' => $options->apiKey,
-            'private_key' => $options->privateKey,
-            'agreement_id' => $options->agreementId,
-            'payment_methods' => $options->paymentMethods,
-            'use_authorize' => $configuration->captureMode()->useAuthorize(),
-            'synchronized' => $options->synchronized,
-            'order_prefix' => $options->orderPrefix,
-            'branding_id' => $options->brandingId,
-        ];
+        return match (true) {
+            $type instanceof CheckboxType => is_bool($value),
+            $type instanceof IntegerType => is_int($value),
+            $type instanceof TextType => is_string($value),
+            default => false,
+        };
     }
 }

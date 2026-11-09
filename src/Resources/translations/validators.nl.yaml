@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Voer de API-sleutel van de API-gebruiker uit je Quickpay-manager in (Instellingen → Gebruikers).'
             auto_capture: 'De verouderde optie "auto_capture" moet true of false zijn. Laat deze weg en kies in plaats daarvan het moment van incasso.'
             branding_id: 'Voer een positief geheel getal in, of laat het veld leeg.'
-            language: 'De optie "language" moet een taalcode zijn, bijvoorbeeld "en" of "da".'
+            language: 'De optie "language" moet tekst zijn, bijvoorbeeld een taalcode zoals "en" of "da".'
             order_prefix: 'Voer tekst in, of laat het veld leeg.'
             payment_methods: 'Voer betaalmethoden in, gescheiden door komma''s, of laat het veld leeg.'
             private_key: 'Voer de privésleutel van je account in (Instellingen → Integratie in de Quickpay-manager).'

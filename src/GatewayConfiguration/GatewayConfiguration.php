@@ -16,6 +16,11 @@ use Setono\Payum\Quickpay\GatewayOptions;
 final class GatewayConfiguration
 {
     /**
+     * Stands in for a gateway option payum-quickpay requires while the options it accepts are read
+     */
+    private const PLACEHOLDER = 'placeholder';
+
+    /**
      * @param array<array-key, mixed>|null $config null when the stored configuration reads as none
      */
     private function __construct(
@@ -51,15 +56,68 @@ final class GatewayConfiguration
      */
     public function options(): GatewayOptions
     {
-        if (null === $this->config) {
-            throw UnusableGatewayConfiguration::unreadable($this->gatewayName);
+        $options = self::optionsOrViolationsOf($this->readableConfig());
+
+        if ($options instanceof InvalidGatewayOptions) {
+            throw UnusableGatewayConfiguration::invalid($this->gatewayName, $options);
         }
 
-        try {
-            return GatewayOptions::fromConfig($this->config);
-        } catch (InvalidGatewayOptions $e) {
-            throw UnusableGatewayConfiguration::invalid($this->gatewayName, $e);
+        return $options;
+    }
+
+    /**
+     * The gateway options even when payum-quickpay rejects some of them, for showing or checking a configuration
+     * that may still need fixing: each option it accepts as it reads it, and each one it rejects as stored, under
+     * the option's current name. Never throws for a readable configuration.
+     *
+     * The options it accepts are read again without the rejected ones, so its defaults apply to those. Only an
+     * option it requires has no default it accepts: a placeholder stands in for each one that read reports, and is
+     * never among the values. Should payum-quickpay reject even that, every option is as stored.
+     *
+     * @throws UnusableGatewayConfiguration only when the configuration is unreadable
+     */
+    public function optionsWithRejectedAsStored(): GatewayOptionValues
+    {
+        $stored = GatewayOptions::withCurrentNames($this->readableConfig());
+
+        $rejected = [];
+        $options = self::optionsOrViolationsOf($stored);
+
+        if ($options instanceof InvalidGatewayOptions) {
+            $rejected = $options->getViolations();
+            $accepted = array_diff_key($stored, $rejected);
+
+            $options = self::optionsOrViolationsOf($accepted);
+            if ($options instanceof InvalidGatewayOptions) {
+                $options = self::optionsOrViolationsOf(
+                    $accepted + array_fill_keys(array_keys($options->getViolations()), self::PLACEHOLDER),
+                );
+            }
         }
+
+        $captureMode = CaptureMode::fromUseAuthorize($stored['use_authorize'] ?? null);
+        // A rejected auto_capture was left out of the read, so it is off there
+        if (CaptureMode::OnCompletion === $captureMode && $options instanceof GatewayOptions && $options->autoCapture) {
+            $captureMode = CaptureMode::Immediately;
+        }
+
+        // Each option is a GatewayOptions property, named in camelCase
+        $read = $options instanceof GatewayOptions ? get_object_vars($options) : [];
+
+        $values = [];
+        $asStored = [];
+        foreach (array_keys(GatewayOptions::DEFAULTS) as $option) {
+            $property = lcfirst(str_replace('_', '', ucwords($option, '_')));
+
+            if (!isset($rejected[$option]) && array_key_exists($property, $read)) {
+                $values[$option] = $read[$property];
+            } else {
+                $values[$option] = $stored[$option] ?? null;
+                $asStored[] = $option;
+            }
+        }
+
+        return new GatewayOptionValues($values, $asStored, $captureMode);
     }
 
     /**
@@ -99,5 +157,52 @@ final class GatewayConfiguration
     public function usesDeprecatedOptions(): bool
     {
         return GatewayOptions::usesDeprecatedOptions($this->config ?? []);
+    }
+
+    /**
+     * The stored configuration as saving the payment method in the admin again stores it, before any option is
+     * changed: the 1.x option names replaced by the current ones, and the capture mode stored as `use_authorize`, with
+     * the deprecated `auto_capture` folded in ({@see GatewayOptionValues::$captureMode}). Every other option is as
+     * stored, also one the gateway rejects. Never throws for a readable configuration.
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws UnusableGatewayConfiguration only when the configuration is unreadable
+     */
+    public function withoutDeprecatedOptions(): array
+    {
+        $captureMode = $this->optionsWithRejectedAsStored()->captureMode;
+
+        $config = GatewayOptions::withCurrentNames($this->readableConfig());
+        unset($config['auto_capture']);
+        $config['use_authorize'] = $captureMode->useAuthorize();
+
+        return $config;
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     *
+     * @throws UnusableGatewayConfiguration when the stored configuration reads as none
+     */
+    private function readableConfig(): array
+    {
+        if (null === $this->config) {
+            throw UnusableGatewayConfiguration::unreadable($this->gatewayName);
+        }
+
+        return $this->config;
+    }
+
+    /**
+     * @param array<array-key, mixed> $config
+     */
+    private static function optionsOrViolationsOf(array $config): GatewayOptions|InvalidGatewayOptions
+    {
+        try {
+            return GatewayOptions::fromConfig($config);
+        } catch (InvalidGatewayOptions $e) {
+            return $e;
+        }
     }
 }

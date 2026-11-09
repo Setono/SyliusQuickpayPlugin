@@ -38,6 +38,7 @@ final class PaymentLinkProvider implements PaymentLinkProviderInterface
             return null;
         }
 
+        // No gateway configuration found: the payment has no Quickpay payment method, so it isn't a Quickpay payment
         if (null === $this->gatewayConfigurationProvider->forPayment($payment)) {
             return null;
         }

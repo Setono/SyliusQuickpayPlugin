@@ -230,8 +230,45 @@ final class DoctorCommandTest extends TestCase
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         self::assertStringContainsString('The "private_key" option is required', $tester->getDisplay());
-        self::assertStringContainsString('Skipped the other checks of this gateway', $tester->getDisplay());
+        self::assertStringContainsString('Skipped the checks against Quickpay of this gateway', $tester->getDisplay());
         self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * The order prefix checks need no gateway, only the order prefix
+     *
+     * @test
+     */
+    public function it_checks_the_order_prefix_of_an_unusable_gateway_configuration(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_way_too_long_', 'use_authorize' => true]));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('The "private_key" option is required', $tester->getDisplay());
+        self::assertStringContainsString('The order prefix "qp_way_too_long_" is 16 characters', $tester->getDisplay());
+        self::assertStringContainsString('2 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_warns_when_a_usable_and_an_unusable_gateway_configuration_share_an_order_prefix(): void
+    {
+        $this->configureGateways(
+            GatewayConfigurations::of(self::healthyConfig(), 'quickpay_a'),
+            GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_', 'use_authorize' => true], 'quickpay_b'),
+            GatewayConfigurations::encrypted('quickpay_c'),
+        );
+
+        $client = $this->prophesize(ClientInterface::class);
+        $client->ping()->willReturn(true);
+        $this->clientFactory->create('the-api-key')->willReturn($client->reveal());
+
+        $tester = $this->executeCommand();
+
+        self::assertStringContainsString('Gateways "quickpay_a", "quickpay_b" share the order prefix "qp_"', $tester->getDisplay());
     }
 
     /**

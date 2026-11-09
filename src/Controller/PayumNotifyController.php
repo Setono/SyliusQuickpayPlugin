@@ -39,7 +39,7 @@ final class PayumNotifyController
         // As Payum's controller does: an unknown token, or one for another url, is answered with an error
         $token = $this->payum->getHttpRequestVerifier()->verify($request);
 
-        // Not a Quickpay gateway's token
+        // No gateway configuration found: the token's gateway is not a Quickpay gateway, so Payum's controller handles it
         if (null === $this->gatewayConfigurationProvider->forGatewayName($token->getGatewayName())) {
             return $this->decorated->doAction($request);
         }

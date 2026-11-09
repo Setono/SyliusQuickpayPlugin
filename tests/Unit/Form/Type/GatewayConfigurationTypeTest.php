@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Form\Type;
 
 use Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\CaptureMode;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Symfony\Component\Form\ChoiceList\View\ChoiceView;
@@ -264,6 +265,39 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         self::assertTrue($options->synchronized);
         self::assertSame(5, $options->agreementId);
         self::assertSame(7, $options->brandingId);
+    }
+
+    /**
+     * Which options the gateway requires is payum-quickpay's to say: the form knows only that the api key's field is
+     * empty
+     *
+     * @test
+     */
+    public function it_keeps_every_option_the_gateway_accepts_when_a_missing_api_key_is_added(): void
+    {
+        $form = $this->factory->create(GatewayConfigurationType::class, [
+            'private_key' => 'the-private-key',
+            'payment_methods' => ['creditcard', ' mobilepay'],
+            'synchronized' => 'yes',
+            'use_authorize' => true,
+        ]);
+
+        $shown = self::shownValues($form);
+        self::assertSame('', $shown['api_key']);
+        self::assertSame('creditcard,mobilepay', $shown['payment_methods']);
+        self::assertSame('1', $shown['synchronized']);
+
+        // the admin adds the api key and saves
+        $form->submit(['api_key' => 'the-api-key'] + $shown);
+
+        $saved = $form->getData();
+        self::assertIsArray($saved);
+        $configuration = GatewayConfiguration::fromConfig($saved);
+        self::assertSame('the-api-key', $configuration->options()->apiKey);
+        self::assertSame('the-private-key', $configuration->options()->privateKey);
+        self::assertSame('creditcard,mobilepay', $configuration->options()->paymentMethods);
+        self::assertTrue($configuration->options()->synchronized);
+        self::assertSame(CaptureMode::OnCompletion, $configuration->captureMode());
     }
 
     /**

@@ -147,8 +147,9 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * One failed check per gateway option the gateway rejects. The checks against Quickpay are skipped: the
-     * gateway can't be built, and their errors would only follow from the configuration's.
+     * One failed check per gateway option the gateway rejects, and the order prefix checks, which need no gateway.
+     * The checks against Quickpay are skipped: the gateway can't be built, and their errors would only follow from
+     * the configuration's.
      */
     private function reportUnusable(
         SymfonyStyle $io,
@@ -164,9 +165,31 @@ final class DoctorCommand extends Command
             }
 
             $this->checkStoredOptions($io, $gatewayConfiguration);
+
+            $orderPrefix = self::orderPrefixOf($gatewayConfiguration);
+            if (null !== $orderPrefix) {
+                $this->checkOrderPrefix($io, $orderPrefix);
+            }
         }
 
-        $this->warn($io, 'Skipped the other checks of this gateway — they need a gateway configuration the gateway can be built from');
+        $this->warn($io, 'Skipped the checks against Quickpay of this gateway — they need a gateway configuration the gateway can be built from');
+    }
+
+    /**
+     * The order prefix the gateway sends, read even from a configuration the gateway rejects. Null when the
+     * configuration is unreadable, or the gateway rejects the order prefix itself, which its violation reports.
+     */
+    private static function orderPrefixOf(GatewayConfiguration $gatewayConfiguration): ?string
+    {
+        try {
+            $options = $gatewayConfiguration->optionsWithRejectedAsStored();
+        } catch (UnusableGatewayConfiguration) {
+            return null;
+        }
+
+        $orderPrefix = $options->values['order_prefix'] ?? null;
+
+        return !$options->isRejected('order_prefix') && is_string($orderPrefix) ? $orderPrefix : null;
     }
 
     /**
@@ -185,16 +208,18 @@ final class DoctorCommand extends Command
 
     /**
      * Two gateways sharing a prefix on the same account produce the same Quickpay order id for the
-     * same order, and "order_id already exists" for whichever payment reaches Quickpay second
+     * same order, and "order_id already exists" for whichever payment reaches Quickpay second. Compared across every
+     * readable configuration, usable or not: an unusable one keeps its order prefix once it is fixed.
      *
      * @param list<array{GatewayConfiguration, GatewayOptions|UnusableGatewayConfiguration}> $gateways
      */
     private function checkDuplicateOrderPrefixes(SymfonyStyle $io, array $gateways): void
     {
         $byPrefix = [];
-        foreach ($gateways as [$gatewayConfiguration, $options]) {
-            if ($options instanceof GatewayOptions && '' !== $options->orderPrefix) {
-                $byPrefix[$options->orderPrefix][] = $gatewayConfiguration->gatewayName;
+        foreach ($gateways as [$gatewayConfiguration]) {
+            $orderPrefix = self::orderPrefixOf($gatewayConfiguration);
+            if (null !== $orderPrefix && '' !== $orderPrefix) {
+                $byPrefix[$orderPrefix][] = $gatewayConfiguration->gatewayName;
             }
         }
 

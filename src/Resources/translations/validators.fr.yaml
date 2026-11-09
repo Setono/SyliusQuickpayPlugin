@@ -7,7 +7,7 @@ setono_sylius_quickpay:
             api_key: 'Saisissez la clé API de l''utilisateur API de votre manager Quickpay (Paramètres → Utilisateurs).'
             auto_capture: 'L''option obsolète "auto_capture" doit valoir true ou false. Omettez-la et choisissez plutôt le moment de la capture.'
             branding_id: 'Saisissez un nombre entier positif, ou laissez le champ vide.'
-            language: 'L''option "language" doit être un code de langue, par exemple "en" ou "da".'
+            language: 'L''option "language" doit être du texte, par exemple un code de langue comme "en" ou "da".'
             order_prefix: 'Saisissez du texte, ou laissez le champ vide.'
             payment_methods: 'Saisissez les méthodes de paiement séparées par des virgules, ou laissez le champ vide.'
             private_key: 'Saisissez la clé privée de votre compte (Paramètres → Intégration dans le manager Quickpay).'
