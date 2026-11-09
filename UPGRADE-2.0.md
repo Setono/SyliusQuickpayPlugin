@@ -274,7 +274,7 @@ mapping applies.
 |---|---|---|
 | `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `PaymentLink\PaymentLinkProvider` | `(UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` |
-| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, ClientFactoryInterface $clientFactory, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
+| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, QuickpayClientProviderInterface $clientProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
 | `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory)` |
 | `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory, Environment $twig)` |
@@ -348,6 +348,11 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **`reconcile-payments --fraud-suspected` reports a gateway whose configuration is unusable** with a warning naming
   the gateway, goes on with the other gateways and exits non-zero. Before, a gateway without an api key was skipped
   silently, and an encrypted configuration crashed the report.
+- **`reconcile-payments --fraud-suspected` says when `--limit` stopped it.** `--limit` is still the number of payments
+  reported across all gateways. Once the report holds that many, it prints `The report stopped at the limit of N
+  payment(s) and didn't query the gateway(s) "…", "…". Raise --limit to see more.`, or `… and may be incomplete. …`
+  when every gateway was queried. Before, the gateways after the limit were skipped silently. Reaching the limit
+  doesn't fail the run.
 - **The doctor checks what the gateway checks.** It reads each Quickpay gateway configuration by payum-quickpay's
   rules, the ones the gateway is built from, and reports every gateway option the gateway rejects as a failed check,
   the branding id, `synchronized`, `auto_capture` and the payment methods included. An encrypted configuration is one
