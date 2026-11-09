@@ -260,6 +260,18 @@ The service definitions changed accordingly; only a redefinition or decoration o
   callback for that gateway's payments found no order and was dropped with a 204. An order prefix stored as a number
   is now stripped like the gateway reads it, as a string. A callback on a payment's own callback url is unaffected by
   another gateway's configuration.
+- **The admin form shows what checkout uses, so re-saving an unchanged Quickpay payment method never changes how a
+  working gateway behaves.** The form reads the stored gateway configuration by payum-quickpay's rules and shows the
+  capture mode checkout uses; it has no rules of its own any more. Before, re-saving could change the gateway: a
+  stored `auto_capture: 'yes'` flipped to capture on completion, `use_authorize: 'false'` was shown as "immediately"
+  although checkout reads it as true and authorizes, and an agreement id stored as `'1e3'` was saved as 1000. **A
+  configuration without `use_authorize`** (written by fixtures or the Admin API) is now shown with capture mode
+  "immediately", because checkout captures immediately; before, it was shown as "on completion", and re-saving it
+  switched the capture mode. A `payment_methods` stored as a list is shown as comma-separated text, and a 1.x option
+  name next to a current name stored as null is shown, as the gateway now reads it too. A configuration the gateway
+  rejects still opens, with its values under the current names where a field can show them as stored, empty where
+  it can't, and the capture mode as checkout reads `use_authorize`. Saving writes the current names and folds
+  `auto_capture` into the capture mode, as before.
 - **Checkout shows the payment method logos for `payment_methods` stored as a list**, a shape the gateway accepts
   (fixtures and the Admin API can write one). Before, only text got logos. A Quickpay payment method whose gateway
   configuration is unusable shows no logos and a warning is logged; the checkout page keeps working.

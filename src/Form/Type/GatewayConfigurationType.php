@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Form\Type;
 
+use Setono\Payum\Quickpay\GatewayOptions;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\CaptureMode;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
@@ -98,43 +102,93 @@ final class GatewayConfigurationType extends AbstractType
                 'help' => self::TRANSLATION_PREFIX . 'branding_id_help',
                 'required' => false,
             ])
-            // Gateway configurations stored before the options were renamed carry the old keys;
-            // migrate them so the form shows the stored values and saves the new keys. The agreement
-            // id may be stored as a string (or '' from an unset fixture env var), which the integer
-            // field cannot display, so it is normalized while migrating
             ->addEventListener(FormEvents::PRE_SET_DATA, static function (FormEvent $event): void {
-                $data = $event->getData();
-                if (!is_array($data)) {
-                    return;
+                $config = $event->getData();
+                if (is_array($config)) {
+                    $event->setData(self::show($config));
                 }
-
-                $data['api_key'] ??= $data['apikey'] ?? null;
-                $data['private_key'] ??= $data['privatekey'] ?? null;
-
-                $agreementId = $data['agreement_id'] ?? $data['agreement'] ?? null;
-                $data['agreement_id'] = is_numeric($agreementId) ? (int) $agreementId : null;
-
-                // Configurations saved before 2.0 carry the deprecated `auto_capture` option next to a
-                // hidden `use_authorize: true`. An enabled auto capture is what "capture immediately"
-                // now means, so it becomes `use_authorize: false`; a fresh configuration defaults to
-                // authorize — hold the money, capture on completion
-                if (array_key_exists('auto_capture', $data)) {
-                    $data['use_authorize'] = !self::toBool($data['auto_capture']);
-                }
-                $data['use_authorize'] = self::toBool($data['use_authorize'] ?? true);
-
-                unset($data['apikey'], $data['privatekey'], $data['agreement'], $data['auto_capture']);
-
-                $event->setData($data);
             })
         ;
     }
 
     /**
-     * Stored booleans come in every shape Sylius has persisted over the years: bool, 0/1, '0'/'1'
+     * What the form shows of a stored gateway configuration: what checkout uses, under the current option
+     * names. Submitting it saves those names without the deprecated ones, and with the deprecated
+     * `auto_capture` folded into the capture mode, so re-saving an unchanged form never changes how a
+     * working gateway behaves. The form has no rules of its own: payum-quickpay decides what each gateway
+     * option means, and the gateway configuration module what the capture mode is (ADR 0002). Options
+     * without a field, such as `language`, are kept as stored.
+     *
+     * @param array<array-key, mixed> $config
+     *
+     * @return array<array-key, mixed>
      */
-    private static function toBool(mixed $value): bool
+    private static function show(array $config): array
     {
-        return true === $value || 1 === $value || '1' === $value || 'true' === $value;
+        // A new payment method: the defaults, holding the money until the payment completes
+        if ([] === $config) {
+            return ['use_authorize' => true];
+        }
+
+        $configuration = GatewayConfiguration::fromConfig($config);
+
+        $shown = GatewayOptions::withCurrentNames($config);
+        unset($shown['auto_capture']);
+
+        try {
+            $options = $configuration->options();
+        } catch (UnusableGatewayConfiguration) {
+            return self::showAsStored($shown);
+        }
+
+        return array_replace($shown, [
+            'api_key' => $options->apiKey,
+            'private_key' => $options->privateKey,
+            'agreement_id' => $options->agreementId,
+            'payment_methods' => $options->paymentMethods,
+            'use_authorize' => CaptureMode::OnCompletion === $configuration->captureMode(),
+            'synchronized' => $options->synchronized,
+            'order_prefix' => $options->orderPrefix,
+            'branding_id' => $options->brandingId,
+        ]);
+    }
+
+    /**
+     * A configuration the gateway rejects still opens, so it can be fixed here, and fixing one option
+     * keeps the others: each value is shown as stored where its field holds it exactly, and empty where it
+     * can't. That is the fields' display, not a reading of the gateway options: a text field holds text or
+     * an integer; the agreement id field an integer, or a string of digits as that integer; the checkbox a
+     * boolean, or its own checked and unchecked values (1 and 0, as integers or strings). The capture mode
+     * is Sylius' rule alone, as checkout reads it.
+     *
+     * @param array<array-key, mixed> $config under the current names, without `auto_capture`
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function showAsStored(array $config): array
+    {
+        foreach (['api_key', 'private_key', 'payment_methods', 'order_prefix', 'branding_id'] as $textOption) {
+            $value = $config[$textOption] ?? null;
+            if (!is_string($value) && !is_int($value)) {
+                $config[$textOption] = null;
+            }
+        }
+
+        $agreementId = $config['agreement_id'] ?? null;
+        if (is_string($agreementId) && 1 === preg_match('/\A\d+\z/', $agreementId)) {
+            $agreementId = (int) $agreementId;
+        }
+        $config['agreement_id'] = is_int($agreementId) ? $agreementId : null;
+
+        $config['synchronized'] = match ($config['synchronized'] ?? null) {
+            true, 1, '1' => true,
+            false, 0, '0' => false,
+            default => null,
+        };
+
+        // Without `auto_capture`, the module's capture mode reads `use_authorize` alone and never the options
+        $config['use_authorize'] = CaptureMode::OnCompletion === GatewayConfiguration::fromConfig($config)->captureMode();
+
+        return $config;
     }
 }
