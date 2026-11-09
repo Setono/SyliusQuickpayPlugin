@@ -70,16 +70,17 @@ Run any Symfony console command for the plugin from inside that directory, e.g.
 ### Test layout
 Each PHPUnit suite is one directory: `tests/Unit/` (no kernel, no database; paths mirror `src/`, namespace
 `Setono\SyliusQuickpayPlugin\Tests\Unit\…`) and `tests/Functional/` (below). Test support stays outside both, where
-either suite and the test application can reach it: the Quickpay HTTP doubles in `tests/Quickpay/` (`ScriptedHttpClient`
-for the functional suite, the PSR-18 `FixedResponseHttpClient` for unit tests running a real SDK client), `tests/GatewayConfiguration/GatewayConfigurations`,
+either suite and the test application can reach it: the functional suite's Quickpay HTTP double
+`tests/Quickpay/ScriptedHttpClient` (unit tests at the HTTP seam use Symfony's `MockHttpClient` instead), `tests/GatewayConfiguration/GatewayConfigurations`,
 `tests/Payum/OfflineNotifyAction`, `tests/Application/` and `tests/PHPStan/`. `GatewayConfigurations` is the one shared
 helper for real gateway config objects: `of($config, $gatewayName)` and `encrypted()` give the module's
 `GatewayConfiguration`, `entity(...)` and `encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted
 flag with nothing decrypted, as Doctrine loads it), `USABLE` the two required gateway options. Never double
 `getConfig()` arrays; a reader's unit test doubles `GatewayConfigurationProviderInterface` and returns values from this
 helper. A caller reading a Quickpay payment (the fraud check, the operations panel) doubles
-`QuickpayClientProviderInterface` and returns the SDK's `Payment` objects or throws, never an SDK client or a client
-factory.
+`QuickpayClientProviderInterface` and returns the SDK's `Payment` objects or throws, never an SDK client (the fraud
+report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); a
+caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts.
 
 ### Functional suite
 `tests/Functional/` holds kernel tests against the test application's database (create it once with
@@ -137,7 +138,7 @@ minting), capture, refund, cancel, status (balance-aware), notify (HMAC validati
 
 Services use **FQCN ids** in `services.xml`, with an interface → class alias for every `*Interface` the plugin
 defines (`PaymentReconcilerInterface`, `GatewayConfigurationProviderInterface`, `PaymentProcessorInterface`,
-`PaymentProviderInterface`, `ClientFactoryInterface`, ...) — inject the interface, alias resolution does the rest.
+`PaymentProviderInterface`, `QuickpayClientProviderInterface`, ...) — inject the interface, alias resolution does the rest.
 
 ### Gateway configuration (`src/GatewayConfiguration/`)
 Read `GLOSSARY.md` (Gateway configuration, Gateway option, Capture mode) and
@@ -222,10 +223,10 @@ Quickpay goes through one scoped HTTP client with one policy**, the gateway's an
   gateway option to a closure Payum resolves with the gateway's own config (builder defaults come before
   `payum.api`, and Payum resolves closures in order). payum-quickpay's check that the client agrees with
   `synchronized` still runs on that client (`QuickpayGatewayFactoryBuilderTest`).
-- `Quickpay/ClientFactory` is still defined, on the same scoped client, but nothing uses it any more: every plugin call
-  goes through the provider. `tests/Functional/QuickpayHttpPolicyTest` asserts `timeout` and `max_duration` on a
-  gateway operation's request and on a plugin call's request (the api key gateway check), and
-  `tests/Functional/QuickpayClientProviderTest` proves the provider's clients reach the scripted Quickpay.
+- Nothing else builds an SDK client: no caller turns an api key into a client itself. `tests/Unit/Quickpay/QuickpayClientProviderTest`
+  tests the provider at the HTTP seam (Symfony's `MockHttpClient`), `tests/Functional/QuickpayHttpPolicyTest` asserts
+  `timeout` and `max_duration` on a gateway operation's request and on a plugin call's request (the api key gateway
+  check), and `tests/Functional/QuickpayClientProviderTest` proves the provider's clients reach the scripted Quickpay.
 
 ### Gateway checks (`src/Quickpay/GatewayCheck/`)
 Read `GLOSSARY.md` (Gateway check, Verdict) first. A gateway check tests against Quickpay what a usable gateway

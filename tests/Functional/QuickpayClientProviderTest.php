@@ -8,9 +8,9 @@ use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 
 /**
- * Proves the harness: the clients the plugin's client provider builds for its own calls (the fraud check, the
- * operations panel, the gateway checks, the doctor and the fraud report) send their HTTP through the same scoped HTTP
- * client as the Quickpay gateways, to the scripted Quickpay below it
+ * Proves the harness: the clients the plugin's client provider builds, for the Quickpay gateways and for the plugin's
+ * own calls (the fraud check, the operations panel, the gateway checks and the fraud report), send their HTTP through
+ * the scoped HTTP client, to the scripted Quickpay below it
  */
 final class QuickpayClientProviderTest extends FunctionalTestCase
 {

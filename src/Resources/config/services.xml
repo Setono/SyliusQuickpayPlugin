@@ -105,13 +105,6 @@
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider"/>
 
-        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory">
-            <argument type="service" id="setono_sylius_quickpay.http_client"/>
-        </service>
-
-        <service id="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface"
-                 alias="Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory"/>
-
         <!-- Gateway checks -->
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
