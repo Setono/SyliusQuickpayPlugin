@@ -4,17 +4,15 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Command;
 
-use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyResolver;
 use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
-use Sylius\Bundle\PayumBundle\Model\GatewayConfigInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -34,14 +32,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 final class ReconcilePaymentsCommand extends Command
 {
-    /**
-     * @param RepositoryInterface<GatewayConfigInterface> $gatewayConfigRepository
-     */
     public function __construct(
         private readonly PendingPaymentProviderInterface $pendingPaymentProvider,
         private readonly PaymentReconcilerInterface $reconciler,
         private readonly ClientFactoryInterface $clientFactory,
-        private readonly RepositoryInterface $gatewayConfigRepository,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
     ) {
         parent::__construct();
     }
@@ -155,20 +150,17 @@ final class ReconcilePaymentsCommand extends Command
      * Unlike reconciliation, which walks the local pending payments, this asks Quickpay directly:
      * every configured Quickpay gateway is queried for payments flagged fraud suspected within the
      * period, regardless of their local state. Report only — nothing is transitioned or persisted.
+     * A gateway that can't be queried, its gateway configuration unusable included, is reported and
+     * fails the run, so a gap in the report is never silent.
      */
     private function reportFraudSuspected(SymfonyStyle $io, \DateTimeImmutable $createdSince, int $limit): int
     {
         $rows = [];
         $errored = false;
 
-        /** @var GatewayConfigInterface $gatewayConfig */
-        foreach ($this->gatewayConfigRepository->findBy(['factoryName' => QuickpayGatewayFactory::NAME]) as $gatewayConfig) {
-            $apiKey = ApiKeyResolver::fromGatewayConfig($gatewayConfig->getConfig());
-            if (null === $apiKey) {
-                continue;
-            }
-
+        foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
             try {
+                $apiKey = $gatewayConfiguration->options()->apiKey;
                 $payments = $this->clientFactory->create($apiKey)->payments()->paginate(new PaymentsQuery(
                     minTime: $createdSince,
                     fraudSuspected: true,
@@ -178,7 +170,7 @@ final class ReconcilePaymentsCommand extends Command
 
                 foreach ($payments as $payment) {
                     $rows[] = [
-                        (string) $gatewayConfig->getGatewayName(),
+                        $gatewayConfiguration->gatewayName,
                         (string) $payment->id,
                         $payment->orderId,
                         $payment->state,
@@ -190,9 +182,9 @@ final class ReconcilePaymentsCommand extends Command
                         break 2;
                     }
                 }
-            } catch (QuickpayException $e) {
+            } catch (UnusableGatewayConfiguration|QuickpayException $e) {
                 $errored = true;
-                $io->warning(sprintf('Gateway "%s": %s', (string) $gatewayConfig->getGatewayName(), $e->getMessage()));
+                $io->warning(sprintf('Gateway "%s": %s', $gatewayConfiguration->gatewayName, $e->getMessage()));
             }
         }
 

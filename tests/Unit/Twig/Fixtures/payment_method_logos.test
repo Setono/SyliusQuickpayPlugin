@@ -8,7 +8,7 @@ return ['method' => (static function () {
     $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
     $gatewayConfig->setFactoryName('quickpay');
     $gatewayConfig->setGatewayName('quickpay');
-    $gatewayConfig->setConfig(['payment_methods' => '3d-creditcard, !diners, mobilepay-subscriptions, resurs, unzer-pay-later-invoice']);
+    $gatewayConfig->setConfig(['api_key' => 'the-api-key', 'private_key' => 'the-private-key', 'payment_methods' => '3d-creditcard, !diners, mobilepay-subscriptions, resurs, unzer-pay-later-invoice']);
 
     $method = new \Sylius\Component\Core\Model\PaymentMethod();
     $method->setGatewayConfig($gatewayConfig);
@@ -22,6 +22,21 @@ mastercard|Mastercard|bundles/setonosyliusquickpayplugin/images/payment-methods/
 mobilepay|MobilePay|bundles/setonosyliusquickpayplugin/images/payment-methods/mobilepay.svg
 resurs|Resurs Bank|https://cdn.example/resurs.png
 unzer-pay-later-invoice|Unzer Pay Later Invoice|-
+--DATA--
+return ['method' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('quickpay');
+    $gatewayConfig->setGatewayName('quickpay');
+    $gatewayConfig->setConfig(['api_key' => 'the-api-key', 'private_key' => 'the-private-key', 'payment_methods' => ['mobilepay', ' dankort ']]);
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setGatewayConfig($gatewayConfig);
+
+    return $method;
+})()]
+--EXPECT--
+mobilepay|MobilePay|bundles/setonosyliusquickpayplugin/images/payment-methods/mobilepay.svg
+dankort|Dankort|bundles/setonosyliusquickpayplugin/images/payment-methods/dankort.svg
 --DATA--
 return ['method' => (static function () {
     $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();

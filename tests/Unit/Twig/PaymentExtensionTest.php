@@ -60,7 +60,7 @@ final class PaymentExtensionTest extends IntegrationTestCase
 
         return [new FactoryRuntimeLoader([
             PaymentRuntime::class => static fn (): PaymentRuntime => new PaymentRuntime(
-                new PaymentMethodLogoProvider(['resurs' => 'https://cdn.example/resurs.png'], ['dankort', 'visa', 'mastercard']),
+                new PaymentMethodLogoProvider($gatewayConfigurationProvider, ['resurs' => 'https://cdn.example/resurs.png'], ['dankort', 'visa', 'mastercard']),
                 new PaymentLinkProvider($gatewayConfigurationProvider, new UrlGenerator($routes, $context), new UrlHelper(new RequestStack(), $context)),
             ),
         ])];

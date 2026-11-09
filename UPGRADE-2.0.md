@@ -241,7 +241,10 @@ mapping applies.
 |---|---|---|
 | `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `PaymentLink\PaymentLinkProvider` | `(UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` |
-| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository)` |
+| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, ClientFactoryInterface $clientFactory, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
+| `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
+| `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory)` |
+| `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory, Environment $twig)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 
 The service definitions changed accordingly; only a redefinition or decoration of these services needs updating.
@@ -269,6 +272,18 @@ The service definitions changed accordingly; only a redefinition or decoration o
   rejects still opens, with its values under the current names where a field can show them as stored, empty where
   it can't, and the capture mode as checkout reads `use_authorize`. Saving writes the current names and folds
   `auto_capture` into the capture mode, as before.
+- **Checkout shows the payment method logos for `payment_methods` stored as a list**, a shape the gateway accepts
+  (fixtures and the Admin API can write one). Before, only text got logos. A Quickpay payment method whose gateway
+  configuration is unusable shows no logos and a warning is logged; the checkout page keeps working.
+- **The fraud check before an automatic capture logs a warning when the payment's gateway configuration is
+  unusable**, and still fails open, so the capture goes ahead. Before, a configuration without an api key was
+  silently treated as no fraud suspected.
+- **The admin operation history panel shows its inline error (502) when the payment's gateway configuration is
+  unusable**, like any other failure to reach Quickpay. Before, a configuration without an api key answered 404. A
+  payment whose method isn't a Quickpay one still answers 404.
+- **`reconcile-payments --fraud-suspected` reports a gateway whose configuration is unusable** with a warning naming
+  the gateway, goes on with the other gateways and exits non-zero. Before, a gateway without an api key was skipped
+  silently, and an encrypted configuration crashed the report.
 - **`reconcile-payments --dry-run` writes nothing.** It runs a status check per payment: no state change, no
   state-machine callbacks (the order isn't marked paid, inventory isn't sold) and nothing persisted, not even
   refreshed payment details. Before, Sylius applied the transitions during the dry run and they were saved. Each
