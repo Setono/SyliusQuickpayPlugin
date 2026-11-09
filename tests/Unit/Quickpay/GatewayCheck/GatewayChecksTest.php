@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Quickpay\GatewayCheck;
 
 use PHPUnit\Framework\TestCase;
+use Prophecy\PhpUnit\ProphecyTrait;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
@@ -19,6 +21,8 @@ use Symfony\Component\HttpClient\Response\MockResponse;
  */
 final class GatewayChecksTest extends TestCase
 {
+    use ProphecyTrait;
+
     /** @var array<string, MockResponse> Quickpay's answer per "METHOD /path" */
     private array $responses = [];
 
@@ -208,7 +212,7 @@ final class GatewayChecksTest extends TestCase
             $this->requestHeaders[] = $headers;
 
             return $this->responses[$key] ?? throw new \LogicException(sprintf('No response scripted for "%s"', $key));
-        }), $this->cacheDir));
+        }), $this->cacheDir, $this->prophesize(GatewayConfigurationProviderInterface::class)->reveal()));
     }
 
     private function respond(string $method, string $path, MockResponse $response): void

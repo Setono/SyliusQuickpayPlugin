@@ -225,7 +225,8 @@ Each Quickpay payment on the admin order view shows its **live operation history
 authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
 captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
-gateway configuration is unusable, the panel shows an inline notice with a retry link. Nothing is stored — the panel reflects what Quickpay reports right now.
+gateway configuration is unusable, the panel shows an inline notice with a retry link, and the cause is logged as a
+warning with the payment id and the gateway name. Nothing is stored — the panel reflects what Quickpay reports right now.
 
 ## Fraud signals
 

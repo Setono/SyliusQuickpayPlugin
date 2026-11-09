@@ -251,12 +251,18 @@ mapping applies.
   base URI `https://api.quickpay.net`, `timeout` 10, `max_duration` 10, no `retry_failed`. Override single options
   under the same name in your framework configuration (see the README's *HTTP policy*).
 - **`Quickpay\QuickpayClientProviderInterface`**, service `Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider`
-  (constructor `(HttpClientInterface $httpClient, string $cacheDir)`: the scoped client and the SDK's mapper cache
-  directory, `%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk`), aliased by the interface.
+  (constructor `(HttpClientInterface $httpClient, string $cacheDir, GatewayConfigurationProviderInterface
+  $gatewayConfigurationProvider)`: the scoped client, the SDK's mapper cache directory,
+  `%kernel.cache_dir%/setono_sylius_quickpay/quickpay_sdk`, and the gateway configuration module), aliased by the interface.
   `forGatewayConfiguration(GatewayConfiguration): ClientInterface` builds a new SDK client on the scoped client from
   the gateway configuration's api key and `synchronized`, with the SDK's mapper cache, and throws
   `UnusableGatewayConfiguration` for an unusable configuration. Every Quickpay gateway gets its client from it,
   through payum-quickpay's `quickpay.client` gateway option.
+  `quickpayPaymentOf(PaymentInterface): ?Payment` reads the Quickpay payment (the SDK's `Payment`) of a Sylius payment
+  with a client for its gateway configuration: null when the payment's method has no Quickpay gateway configuration
+  or its details carry no Quickpay payment id (read through payum-quickpay's `Details`). It throws
+  `UnusableGatewayConfiguration`, payum-quickpay's `LogicException` for an id it can't read, and the SDK's
+  `QuickpayException`s. The fraud check and the operations panel read through it.
 - **The gateway checks, `Quickpay\GatewayCheck\GatewayChecksInterface`**, service
   `Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks` (constructor
   `(QuickpayClientProviderInterface $clientProvider)`), aliased by the interface (terms in [GLOSSARY.md](GLOSSARY.md):
@@ -276,8 +282,8 @@ mapping applies.
 | `PaymentLink\PaymentLinkProvider` | `(UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` |
 | `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, QuickpayClientProviderInterface $clientProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
-| `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory)` |
-| `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, ClientFactoryInterface $clientFactory, Environment $twig)` |
+| `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(QuickpayClientProviderInterface $quickpayClientProvider)` |
+| `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, QuickpayClientProviderInterface $quickpayClientProvider, Environment $twig)`, and logger-aware |
 | `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(QuickpayClientProviderInterface $clientProvider, GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 | `FactoryBuilder\QuickpayGatewayFactoryBuilder` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser)` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser, QuickpayClientProviderInterface $clientProvider)` |
@@ -345,6 +351,9 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **The admin operation history panel shows its inline error (502) when the payment's gateway configuration is
   unusable**, like any other failure to reach Quickpay. Before, a configuration without an api key answered 404. A
   payment whose method isn't a Quickpay one still answers 404.
+- **The admin operation history panel logs why it failed.** Each inline error (502) logs a warning with the Sylius
+  payment id, the gateway name and the error (under `exception`). Before, the cause was dropped. A payment whose
+  details carry a Quickpay payment id payum-quickpay can't read now answers with the inline error too, instead of 404.
 - **`reconcile-payments --fraud-suspected` reports a gateway whose configuration is unusable** with a warning naming
   the gateway, goes on with the other gateways and exits non-zero. Before, a gateway without an api key was skipped
   silently, and an encrypted configuration crashed the report.
