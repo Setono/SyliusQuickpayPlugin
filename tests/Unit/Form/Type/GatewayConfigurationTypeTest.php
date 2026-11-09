@@ -204,6 +204,19 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
 
     /**
      * @test
+     */
+    public function it_shows_a_required_credential_that_is_not_stored_as_empty(): void
+    {
+        $form = $this->factory->create(GatewayConfigurationType::class, ['order_prefix' => 'qp_', 'use_authorize' => true]);
+
+        $shown = self::shownValues($form);
+        self::assertSame('', $shown['api_key']);
+        self::assertSame('', $shown['private_key']);
+        self::assertSame('qp_', $shown['order_prefix']);
+    }
+
+    /**
+     * @test
      *
      * @dataProvider provideValuesTheFieldsHold
      */
@@ -228,6 +241,32 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     }
 
     /**
+     * @test
+     */
+    public function it_keeps_every_option_the_gateway_accepts_when_a_configuration_the_gateway_rejects_is_fixed(): void
+    {
+        // the branding id makes the gateway reject the configuration
+        $form = $this->factory->create(GatewayConfigurationType::class, [
+            ...GatewayConfigurations::USABLE,
+            'payment_methods' => ['visa', 'mobilepay'],
+            'synchronized' => 'yes',
+            'agreement_id' => '5',
+            'branding_id' => 'abc',
+        ]);
+
+        // the admin fixes the branding id and saves
+        $form->submit(['branding_id' => '7'] + self::shownValues($form));
+
+        $saved = $form->getData();
+        self::assertIsArray($saved);
+        $options = GatewayConfiguration::fromConfig($saved)->options();
+        self::assertSame('visa,mobilepay', $options->paymentMethods);
+        self::assertTrue($options->synchronized);
+        self::assertSame(5, $options->agreementId);
+        self::assertSame(7, $options->brandingId);
+    }
+
+    /**
      * @return iterable<string, array{string, mixed, ?string, mixed}>
      */
     public static function provideValuesTheFieldsHold(): iterable
@@ -246,7 +285,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
      *
      * @param array<string, mixed> $stored
      */
-    public function it_shows_the_capture_mode_of_a_configuration_the_gateway_rejects_by_sylius_rule(array $stored, string $expectedCaptureMode): void
+    public function it_shows_the_capture_mode_of_a_configuration_the_gateway_rejects_from_the_options_it_accepts(array $stored, string $expectedCaptureMode): void
     {
         // no private key: the gateway rejects the configuration
         $form = $this->factory->create(GatewayConfigurationType::class, ['api_key' => 'the-api-key', ...$stored]);
@@ -255,7 +294,8 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     }
 
     /**
-     * Sylius' checkout authorizes when `use_authorize` is set and true under PHP's bool cast
+     * As for a usable configuration: Sylius' checkout authorizes when `use_authorize` is set and true under
+     * PHP's bool cast, and the deprecated `auto_capture` folds in, unless the gateway rejects it too
      *
      * @return iterable<string, array{array<string, mixed>, string}>
      */
@@ -265,7 +305,8 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         yield "use_authorize 'false'" => [['use_authorize' => 'false'], self::ON_COMPLETION];
         yield 'use_authorize false' => [['use_authorize' => false], self::IMMEDIATELY];
         yield 'no use_authorize' => [[], self::IMMEDIATELY];
-        yield 'use_authorize true and auto_capture on' => [['use_authorize' => true, 'auto_capture' => 1], self::ON_COMPLETION];
+        yield 'use_authorize true and auto_capture on' => [['use_authorize' => true, 'auto_capture' => 1], self::IMMEDIATELY];
+        yield 'use_authorize true and an auto_capture the gateway rejects' => [['use_authorize' => true, 'auto_capture' => 'maybe'], self::ON_COMPLETION];
     }
 
     /**

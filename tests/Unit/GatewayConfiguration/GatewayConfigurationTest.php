@@ -42,9 +42,8 @@ final class GatewayConfigurationTest extends TestCase
     {
         $config = ['apikey' => 'the-1.x-api-key', 'private_key' => 'the-private-key', 'branding_id' => ' 7 '];
 
-        $configuration = GatewayConfiguration::fromConfig($config, 'quickpay_dk');
+        $configuration = GatewayConfiguration::fromConfig($config);
 
-        self::assertSame('quickpay_dk', $configuration->gatewayName);
         self::assertEquals(GatewayConfigurations::of($config)->options(), $configuration->options());
         self::assertSame(7, $configuration->options()->brandingId);
     }
@@ -61,6 +60,7 @@ final class GatewayConfigurationTest extends TestCase
             self::fail('The configuration was read');
         } catch (UnusableGatewayConfiguration $e) {
             self::assertSame('quickpay_dk', $e->gatewayName);
+            self::assertFalse($e->isUnreadable());
             self::assertSame(['private_key', 'agreement_id', 'branding_id'], array_keys($e->getViolations()));
             self::assertSame('The "private_key" option is required', $e->getViolations()['private_key']);
             self::assertStringContainsString('"quickpay_dk"', $e->getMessage());
@@ -80,6 +80,7 @@ final class GatewayConfigurationTest extends TestCase
             self::fail('The configuration was read');
         } catch (UnusableGatewayConfiguration $e) {
             self::assertSame('quickpay_dk', $e->gatewayName);
+            self::assertTrue($e->isUnreadable());
             self::assertSame([], $e->getViolations());
             self::assertStringContainsString('"quickpay_dk"', $e->getMessage());
             self::assertStringContainsString('Encrypting gateway configurations is not supported', $e->getMessage());

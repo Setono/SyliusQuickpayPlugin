@@ -34,8 +34,7 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator
         try {
             $options = GatewayConfiguration::fromGatewayConfig($value)->options();
         } catch (UnusableGatewayConfiguration $e) {
-            // Unreadable as a whole, as an encrypted configuration is
-            if ([] === $e->getViolations()) {
+            if ($e->isUnreadable()) {
                 $this->context->buildViolation($constraint->unreadableMessage)
                     ->atPath('config')
                     ->addViolation()

@@ -289,9 +289,10 @@ The service definitions changed accordingly; only a redefinition or decoration o
   "immediately", because checkout captures immediately; before, it was shown as "on completion", and re-saving it
   switched the capture mode. A `payment_methods` stored as a list is shown as comma-separated text, and a 1.x option
   name next to a current name stored as null is shown, as the gateway now reads it too. A configuration the gateway
-  rejects still opens, with its values under the current names where a field can show them as stored, empty where
-  it can't, and the capture mode as checkout reads `use_authorize`. Saving writes the current names and folds
-  `auto_capture` into the capture mode, as before.
+  rejects still opens under the current names, and fixing one option keeps the others: every option the gateway
+  accepts is shown as it reads it, the capture mode included, and each rejected one as stored where its field holds
+  it, empty where it can't. Saving writes the current names and folds `auto_capture` into the capture mode, as
+  before.
 - **Checkout shows the payment method logos for `payment_methods` stored as a list**, a shape the gateway accepts
   (fixtures and the Admin API can write one). Before, only text got logos. A Quickpay payment method whose gateway
   configuration is unusable shows no logos and a warning is logged; the checkout page keeps working.

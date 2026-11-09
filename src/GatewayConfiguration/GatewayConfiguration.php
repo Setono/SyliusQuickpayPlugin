@@ -34,13 +34,14 @@ final class GatewayConfiguration
     }
 
     /**
-     * For a stored configuration without its gateway config, as the admin form's `config` field holds it
+     * For a stored configuration without its gateway config, as the admin form's `config` field holds it. It
+     * has no gateway name.
      *
      * @param array<array-key, mixed> $config
      */
-    public static function fromConfig(array $config, string $gatewayName = ''): self
+    public static function fromConfig(array $config): self
     {
-        return new self($gatewayName, $config);
+        return new self('', $config);
     }
 
     /**
@@ -63,23 +64,23 @@ final class GatewayConfiguration
 
     /**
      * The capture mode checkout uses. It is Sylius' `use_authorize` gateway option, which payum-quickpay
-     * never reads: Sylius' checkout authorizes when it is set and true under PHP's bool cast, and executes
-     * `Capture` otherwise. An authorization is then captured on completion, unless the deprecated
-     * `auto_capture`, read by payum-quickpay's rule, makes Quickpay capture it right away.
+     * never reads ({@see CaptureMode::fromUseAuthorize()}). An authorization is then captured on completion,
+     * unless the deprecated `auto_capture`, read by payum-quickpay's rule, makes Quickpay capture it right away.
      *
      * @throws UnusableGatewayConfiguration only when `auto_capture` is stored and the configuration is unusable
      */
     public function captureMode(): CaptureMode
     {
-        if (!(bool) ($this->config['use_authorize'] ?? null)) {
+        $captureMode = CaptureMode::fromUseAuthorize($this->config['use_authorize'] ?? null);
+
+        if (CaptureMode::OnCompletion === $captureMode &&
+            null !== ($this->config['auto_capture'] ?? null) &&
+            $this->options()->autoCapture
+        ) {
             return CaptureMode::Immediately;
         }
 
-        if (null === ($this->config['auto_capture'] ?? null)) {
-            return CaptureMode::OnCompletion;
-        }
-
-        return $this->options()->autoCapture ? CaptureMode::Immediately : CaptureMode::OnCompletion;
+        return $captureMode;
     }
 
     /**

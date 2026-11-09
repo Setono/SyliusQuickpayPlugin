@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\PaymentLink;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Symfony\Component\HttpFoundation\UrlHelper;
 use Symfony\Component\Routing\Exception\ExceptionInterface as RoutingException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
@@ -39,8 +38,7 @@ final class PaymentLinkProvider implements PaymentLinkProviderInterface
             return null;
         }
 
-        $method = $payment->getMethod();
-        if (!$method instanceof PaymentMethodInterface || null === $this->gatewayConfigurationProvider->forPaymentMethod($method)) {
+        if (null === $this->gatewayConfigurationProvider->forPayment($payment)) {
             return null;
         }
 
