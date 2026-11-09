@@ -35,3 +35,11 @@ _Avoid_: config key, parameter
 **Capture mode**:
 Whether a payment is authorized at checkout and captured when the Sylius payment completes, or captured by Quickpay at authorization.
 _Avoid_: auto capture, use_authorize
+
+**Gateway check**:
+A test against Quickpay of what a gateway configuration's credentials allow, such as whether the api key is accepted, the agreement exists or payment links may be created.
+_Avoid_: probe, verification, doctor check
+
+**Verdict**:
+The outcome of a gateway check: passed, failed, or undetermined when Quickpay's answer proves neither.
+_Avoid_: result, verification
