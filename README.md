@@ -342,6 +342,60 @@ Scheduling is your application's choice; a cron entry along these lines is plent
 The command exits non-zero when any payment could not be checked, so cron mail or your monitoring
 will surface persistent problems.
 
+## HTTP policy
+
+Every request to Quickpay, the gateway's (checkout, capture, refund, cancel, callbacks, reconciling) and the plugin's
+own (the fraud check, the operation history, the fraud report, the doctor, verifying the api key on save), goes
+through one [scoped HTTP client](https://symfony.com/doc/current/http_client.html#scoping-client) that the plugin adds
+to your framework configuration: `setono_sylius_quickpay.http_client`. Its defaults:
+
+| Option | Default | |
+|---|---|---|
+| `base_uri` | `https://api.quickpay.net` | |
+| `timeout` | `10` | seconds a request may wait for Quickpay without receiving anything |
+| `max_duration` | `10` | seconds a request may take in total |
+| `retry_failed` | off | no request is retried |
+
+So a slow Quickpay can't hang checkout, the admin or a callback for more than 10 seconds per request, and the requests
+show up in the Symfony profiler. Override any option under the same name in your own framework configuration; the
+others keep the plugin's defaults. A proxy or extra headers go here too:
+
+```yaml
+# config/packages/framework.yaml
+framework:
+    http_client:
+        scoped_clients:
+            setono_sylius_quickpay.http_client:
+                timeout: 5
+                max_duration: 15
+                proxy: 'http://proxy.example.com:3128'
+```
+
+Mind the [reconcile lock](#callbacks) when you raise the timeouts: a callback makes up to four requests in a row while
+it holds its payment's lock, which expires after 60 seconds.
+
+**Retries are off on purpose.** Symfony's `retry_failed` also retries `POST` requests on some statuses (423, 425,
+429, 502 and 503), and a retried capture or refund can take or return the money twice. If you enable retries, limit
+them to reads:
+
+```yaml
+framework:
+    http_client:
+        scoped_clients:
+            setono_sylius_quickpay.http_client:
+                retry_failed:
+                    max_retries: 1
+                    http_codes:
+                        0: [GET]     # no response at all, a timeout included
+                        429: [GET]
+                        500: [GET]
+                        502: [GET]
+                        503: [GET]
+                        504: [GET]
+```
+
+Each retry waits up to the full timeouts again, so keep `max_retries` low with the lock in mind.
+
 ## Testing
 
 ```bash
