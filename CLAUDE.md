@@ -326,7 +326,7 @@ captures immediately), for a readable configuration even when it is invalid. Non
 warnings don't fail. Its output is English console text, like the other commands', so it has no translations.
 
 `Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args
-`PendingPaymentProviderInterface`, `PaymentReconcilerInterface`, `ClientFactoryInterface`,
+`PendingPaymentProviderInterface`, `PaymentReconcilerInterface`, `QuickpayClientProviderInterface`,
 `GatewayConfigurationProviderInterface`) is the backstop for callbacks that never arrive:
 `Provider/PendingPaymentProvider` queries Quickpay payments in state new/processing/authorized with a
 `quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()` (see
@@ -378,8 +378,11 @@ passed to the processor as container parameters). An opt-in `fraud.block_capture
 with a warning log, on any error, an unusable gateway configuration included) before the automatic capture and skip it with a warning when fraud is suspected — the
 transition itself proceeds. The operation-history admin panel shows a fraud badge from the same metadata, and the
 reconcile command has a `--fraud-suspected` report mode that queries each configured gateway's account directly
-(`PaymentsQuery`, one per gateway configuration from the module's `all()`), transitioning nothing; a gateway that
-can't be queried, an unusable gateway configuration included, prints a warning naming it and fails the run.
+(`PaymentsQuery`, one per gateway configuration from the module's `all()`, on the client provider's
+`forGatewayConfiguration()`), transitioning nothing; a gateway that can't be queried, an unusable gateway
+configuration included, prints a warning naming it and fails the run. `--limit` caps the payments reported across
+gateways: once reached, the gateways after it aren't queried, and the report says it stopped and names them (or
+says it may be incomplete); reaching the limit doesn't fail the run.
 
 ### Payment link (admin)
 `PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel
