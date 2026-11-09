@@ -367,16 +367,30 @@ in that folder) and need `assets:install` in the host app.
   payum-quickpay, and the form only adds its field.
   Reading the api key back out of a
   stored config (old or new name) is `Quickpay/ApiKeyResolver`'s job — the one place that knows the
-  pre-2.0 `apikey` spelling; use it instead of reading the config array directly. The `api_key` carries a `QuickpayCredentials` constraint
-  (sylius group) whose validator verifies the key through `Quickpay/ApiKeyVerifier` (shared with the
-  doctor command; backed by `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first,
-  falling back to a one-item `/payments` read because Quickpay answers 401 on `/ping` both for an
-  invalid key and for a valid key whose api user lacks the `/ping` permission (verified live) — an
-  explicit 401/403 from the probe raises a violation, anything else fails open.
+  pre-2.0 `apikey` spelling; use it instead of reading the config array directly.
   Sylius' admin form theme ignores Symfony's `help_html` option, so the
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/form/theme.html.twig`, scoped to that field's block prefix and registered by
-  `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`).
+  `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`). The fields carry no constraints of the
+  gateway's rules, which save validation (below) checks; only the order prefix keeps its `Length`.
+- **Save validation**: `SetonoSyliusQuickpayExtension::prepend()` prepends
+  `sylius_payum.gateway_config.validation_groups.quickpay: [sylius, sylius_quickpay]`, so Sylius'
+  `GatewayConfigGroupsGenerator` validates a Quickpay payment method in `sylius_quickpay` too, in the admin form and the
+  Admin API alike (the payment method's `Valid` cascade reaches the gateway config; the pattern Sylius' Stripe and
+  PayPal gateways use). The plugin's validation mapping (`Resources/config/validation/GatewayConfig.xml`) declares
+  `Validator/Constraints/UsableGatewayConfiguration` (class constraint on Sylius' `GatewayConfig`, group
+  `sylius_quickpay`): its validator reads the config through the gateway configuration module and adds payum-quickpay's
+  violations, in the library's English, one per option at `config[<option>]` (lands on the form field; an option
+  without a field, like `language`, on the config form); an unreadable/encrypted config gets the plugin's
+  `unreadable` message on `config`. Every message the plugin owns is a `validators` key shipped in all 16 locales
+  (the functional test checks each locale). Only on a usable configuration
+  does it then verify the api key through `Quickpay/ApiKeyVerifier` (shared with the doctor command; backed by
+  `Quickpay/ClientFactory`, symfony/http-client capped at 5s): ping first, falling back to a one-item `/payments` read
+  because Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
+  permission (verified live) — an explicit 401/403 is a violation at `config[api_key]` (translated
+  `validators` message), anything else fails open. Tested functionally in `tests/Functional/Validator/` (the
+  container's validator with the generator's groups) and `tests/Functional/Form/PaymentMethodFormTest` (the real
+  payment method form type).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at
   build time; `Guesser/LanguageGuesser` derives it from Sylius's locale context (mapping `nb`/`nn` → `no`).
 

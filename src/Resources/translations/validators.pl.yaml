@@ -2,3 +2,4 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay odrzucił ten klucz API. Sprawdź, czy jest to klucz API użytkownika API w Twoim managerze Quickpay (Ustawienia → Użytkownicy).'
+        unreadable: 'Nie można odczytać konfiguracji bramki płatności, co dzieje się, gdy jest zaszyfrowana. Szyfrowanie konfiguracji bramek płatności nie jest obsługiwane.'

@@ -2,3 +2,4 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'Quickpay heeft deze API-sleutel geweigerd. Controleer of het de API-sleutel van de API-gebruiker in je Quickpay-manager is (Instellingen → Gebruikers).'
+        unreadable: 'De gatewayconfiguratie kan niet worden gelezen, zoals gebeurt wanneer deze versleuteld is. Het versleutelen van gatewayconfiguraties wordt niet ondersteund.'

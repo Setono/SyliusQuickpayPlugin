@@ -4,85 +4,26 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Form\Type;
 
-use Nyholm\Psr7\Response;
-use Prophecy\Argument;
-use Prophecy\PhpUnit\ProphecyTrait;
-use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\SyliusQuickpayPlugin\Form\Type\GatewayConfigurationType;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerification;
-use Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
-use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator;
 use Symfony\Component\Form\ChoiceList\View\ChoiceView;
 use Symfony\Component\Form\Extension\Validator\ValidatorExtension;
 use Symfony\Component\Form\FormExtensionInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Form\Test\TypeTestCase;
-use Symfony\Component\Validator\Constraint;
-use Symfony\Component\Validator\ConstraintValidatorFactory;
-use Symfony\Component\Validator\ConstraintValidatorFactoryInterface;
-use Symfony\Component\Validator\ConstraintValidatorInterface;
 use Symfony\Component\Validator\Validation;
 
 final class GatewayConfigurationTypeTest extends TypeTestCase
 {
-    use ProphecyTrait;
-
     /**
-     * Quickpay accepts every api key except 'rejected-api-key'
-     *
      * @return list<FormExtensionInterface>
      */
     protected function getExtensions(): array
     {
-        $apiKeyVerifier = $this->prophesize(ApiKeyVerifierInterface::class);
-        $apiKeyVerifier->verify(Argument::type('string'))->willReturn(ApiKeyVerification::ViaPing);
-        $apiKeyVerifier->verify('rejected-api-key')->willThrow(new UnauthorizedException(new Response(401)));
-
-        $credentialsValidator = new QuickpayCredentialsValidator($apiKeyVerifier->reveal());
-
-        $validator = Validation::createValidatorBuilder()
-            ->setConstraintValidatorFactory(new class($credentialsValidator) implements ConstraintValidatorFactoryInterface {
-                private readonly ConstraintValidatorFactory $fallback;
-
-                public function __construct(private readonly QuickpayCredentialsValidator $credentialsValidator)
-                {
-                    $this->fallback = new ConstraintValidatorFactory();
-                }
-
-                public function getInstance(Constraint $constraint): ConstraintValidatorInterface
-                {
-                    if (QuickpayCredentialsValidator::class === $constraint->validatedBy()) {
-                        return $this->credentialsValidator;
-                    }
-
-                    return $this->fallback->getInstance($constraint);
-                }
-            })
-            ->getValidator();
-
         return [
-            new ValidatorExtension($validator),
+            new ValidatorExtension(Validation::createValidator()),
         ];
-    }
-
-    /**
-     * @test
-     */
-    public function it_is_invalid_when_quickpay_rejects_the_api_key(): void
-    {
-        $form = $this->factory->create(GatewayConfigurationType::class, null, [
-            'validation_groups' => ['sylius'],
-        ]);
-
-        $form->submit([
-            'api_key' => 'rejected-api-key',
-            'private_key' => 'private-key',
-        ]);
-
-        self::assertFalse($form->isValid());
-        self::assertGreaterThan(0, \count($form->get('api_key')->getErrors()));
     }
 
     /**
@@ -178,9 +119,12 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     }
 
     /**
+     * Saving the payment method validates the gateway configuration by the gateway's own rules (see
+     * tests/Functional/Form/PaymentMethodFormTest), so the order prefix's length is the only constraint of the form's own
+     *
      * @test
      */
-    public function it_is_invalid_when_required_fields_are_blank(): void
+    public function it_is_invalid_only_when_the_order_prefix_is_too_long(): void
     {
         $form = $this->factory->create(GatewayConfigurationType::class, null, [
             'validation_groups' => ['sylius'],
@@ -195,15 +139,8 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
         ]);
 
         self::assertFalse($form->isValid());
-        foreach (['api_key', 'private_key', 'order_prefix'] as $field) {
-            self::assertGreaterThan(0, \count($form->get($field)->getErrors()), sprintf('Expected a validation error on the "%s" field', $field));
-        }
-
-        // Quickpay only requires the api and private keys; an empty payment_methods
-        // makes the payment window offer every method enabled on the agreement
-        foreach (['agreement_id', 'payment_methods'] as $field) {
-            self::assertCount(0, $form->get($field)->getErrors(), sprintf('Expected no validation error on the "%s" field', $field));
-        }
+        self::assertCount(1, $form->getErrors(true));
+        self::assertCount(1, $form->get('order_prefix')->getErrors());
     }
 
     /**

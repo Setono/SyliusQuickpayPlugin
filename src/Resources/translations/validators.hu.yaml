@@ -2,3 +2,4 @@ setono_sylius_quickpay:
     gateway_configuration:
         api_key:
             invalid: 'A Quickpay elutasította ezt az API-kulcsot. Ellenőrizd, hogy az API-felhasználó API-kulcsa-e a Quickpay managerben (Beállítások → Felhasználók).'
+        unreadable: 'A fizetési átjáró konfigurációja nem olvasható, ahogy az titkosítás esetén történik. A fizetési átjárók konfigurációjának titkosítása nem támogatott.'

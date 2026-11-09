@@ -196,6 +196,7 @@ changed. Every callback and the reconciliation command go through the module.
 |---|---|---|
 | `Payum\Extension\NotifyIdempotencyExtension` | `Setono\SyliusQuickpayPlugin\Payum\Extension\NotifyIdempotencyExtension`, tagged `payum.extension` (alias `setono_sylius_quickpay.notify_idempotency`) | the payment's lock, taken by `PaymentReconcilerInterface::reconcileFromCallback()` |
 | `Payum\Extension\AcknowledgeNotifyAction` | none | the callback endpoints answer a duplicate callback themselves |
+| `Validator\Constraints\QuickpayCredentials`, `Validator\Constraints\QuickpayCredentialsValidator` | `Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator`, tagged `validator.constraint_validator` | `Validator\Constraints\UsableGatewayConfiguration`, which verifies the api key on save, also through the Admin API |
 
 The reconciliation command's private Quickpay status → transition mapping is gone as well: Sylius' own
 mapping applies.
@@ -234,6 +235,14 @@ mapping applies.
     `isCaptureModeSet()` and `usesDeprecatedOptions()`;
   - reading an unusable configuration (invalid by the library's rules, or encrypted) throws
     `UnusableGatewayConfiguration`, which carries the library's violations. Listing and finding never throw.
+- **The `sylius_quickpay` validation group.** The extension prepends
+  `sylius_payum.gateway_config.validation_groups.quickpay: [sylius, sylius_quickpay]`, so Sylius validates a Quickpay
+  payment method's gateway config in `sylius_quickpay` as well, in the admin form and the Admin API alike. The group
+  holds one constraint, `Validator\Constraints\UsableGatewayConfiguration`, declared on Sylius' `GatewayConfig` by the
+  plugin's validation mapping (validator service `Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator`,
+  constructor `(ApiKeyVerifierInterface $apiKeyVerifier)`). An application that sets
+  `sylius_payum.gateway_config.validation_groups.quickpay` itself replaces the plugin's entry, so it must list
+  `sylius_quickpay` too.
 
 ### Changed constructors
 
@@ -253,6 +262,15 @@ The service definitions changed accordingly; only a redefinition or decoration o
 
 - **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.2`**, the release whose public `GatewayOptions` the plugin
   reads gateway configurations with. A root `composer.json` allowing `^2.0@RC` picks it up with `composer update`.
+- **A gateway configuration the gateway would reject is refused on save, also through the Admin API.** Saving a
+  Quickpay payment method validates its gateway configuration by payum-quickpay's rules, the ones the gateway is built
+  from, and reports every invalid option at once, each on its field (an option the form has no field for, such as
+  `language`, on the gateway configuration as a whole). Once the configuration is valid, the api key is verified with
+  Quickpay as before. Before, the form only required the api and private keys and verified the api key, and the Admin
+  API checked nothing, so a branding name where the branding id belongs, or agreement id 0, was saved and every
+  operation on that gateway then threw. The form's fields lost their `NotBlank` constraints and the api key its
+  credentials constraint; the order prefix keeps its length constraint. The messages for the gateway's rules are
+  payum-quickpay's, in English. Fixtures, the console and direct database writes are still not validated.
 - **The shared callback endpoint answers 500 while a stored Quickpay gateway configuration is unusable**, invalid by
   payum-quickpay's rules (written by fixtures, the Admin API or the database directly) or encrypted, so Quickpay
   retries the callback once it is fixed. Every callback on `/payment/quickpay/notify` fails meanwhile, because its

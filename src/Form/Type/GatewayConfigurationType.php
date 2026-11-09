@@ -8,7 +8,6 @@ use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\CaptureMode;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentials;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -18,9 +17,13 @@ use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
 use Symfony\Component\Validator\Constraints\Length;
-use Symfony\Component\Validator\Constraints\NotBlank;
 
 /**
+ * Saving the payment method validates the whole gateway configuration by the gateway's own rules, in the admin and the
+ * Admin API alike, and puts each error on its field
+ * ({@see \Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration}), so the fields carry no
+ * constraints of their own but the order prefix's length
+ *
  * @extends AbstractType<array<string, mixed>>
  */
 final class GatewayConfigurationType extends AbstractType
@@ -34,17 +37,10 @@ final class GatewayConfigurationType extends AbstractType
             ->add('api_key', TextType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'api_key',
                 'help' => self::TRANSLATION_PREFIX . 'api_key_help',
-                'constraints' => [
-                    new NotBlank(['groups' => 'sylius']),
-                    new QuickpayCredentials(['groups' => 'sylius']),
-                ],
             ])
             ->add('private_key', TextType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'private_key',
                 'help' => self::TRANSLATION_PREFIX . 'private_key_help',
-                'constraints' => [
-                    new NotBlank(['groups' => 'sylius']),
-                ],
             ])
             ->add('agreement_id', IntegerType::class, [
                 'label' => self::TRANSLATION_PREFIX . 'agreement_id',
