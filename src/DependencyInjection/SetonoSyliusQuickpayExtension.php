@@ -96,6 +96,23 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
                     ],
                 ],
             ]);
+
+            // The one HTTP policy of every request to Quickpay, the gateway's and the plugin's own (ADR 0003): at most
+            // 10 s idle and 10 s in total, and no retries, since a retried capture or refund can move money twice.
+            // Ten seconds keeps a callback's reads inside the 60 s TTL of the payment's reconcile lock. The
+            // application overrides single options in its own framework config under the same name, which is merged
+            // over this one
+            $container->prependExtensionConfig('framework', [
+                'http_client' => [
+                    'scoped_clients' => [
+                        'setono_sylius_quickpay.http_client' => [
+                            'base_uri' => 'https://api.quickpay.net',
+                            'timeout' => 10,
+                            'max_duration' => 10,
+                        ],
+                    ],
+                ],
+            ]);
         }
 
         // The guard keeps the plugin bootable in applications running the sylius_payment graph on
