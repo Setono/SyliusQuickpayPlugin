@@ -152,6 +152,13 @@ configuration, so its checkout would capture immediately whatever the payment me
   moment the card is authorized. Under the hood the mode is Sylius core's `use_authorize` gateway option — the
   plugin runs Payum's `Authorize` or `Capture` accordingly, which is how the gateway library expresses the two
   flows since 2.0.
+* When checkout creates the Quickpay payment, the plugin describes the order to Quickpay: the invoice and shipping
+  addresses, the basket with each item's VAT rate, shipping, and the plugin and its version as the shop system. The
+  Quickpay manager shows them on the payment; they never change what is charged. Whatever the order lacks, such as a
+  shipping address, is left out. A customer paying the same order again after a declined attempt continues on the
+  Quickpay payment created the first time, which keeps what it was told then. To change what Quickpay is told,
+  decorate `Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriberInterface`, or
+  `Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface` for the VAT rates.
 * Quickpay notifies your store of payment changes through callbacks on a **per-payment url** the gateway mints — for
   the payment window's outcome *and* for every capture, refund and cancel the store issues (the gateway names that
   url on each operation). Only operations made outside the store need the account-wide callback url (see
