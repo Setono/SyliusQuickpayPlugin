@@ -61,7 +61,8 @@ final class ConvertPaymentAction implements ActionInterface, GatewayAwareInterfa
         $describedPayment->setDetails($payment->getDetails());
         $describedPayment->setOrderDescription($this->orderDescriber->describe($order));
 
-        $this->gateway->execute($convert = new Convert($describedPayment, 'array', $request->getToken()));
+        $convert = new Convert($describedPayment, 'array', $request->getToken());
+        $this->gateway->execute($convert);
 
         $request->setResult($convert->getResult());
     }
