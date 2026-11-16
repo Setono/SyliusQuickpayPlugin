@@ -57,6 +57,102 @@ final class PaymentMethodFormTest extends FunctionalTestCase
     }
 
     /**
+     * @test
+     */
+    public function it_puts_the_refusal_of_an_agreement_quickpay_does_not_find_on_the_agreement_field(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+        $this->quickpay()->respond('GET', '/agreements/12345', new Response(404, ['Content-Type' => 'application/json'], '{"message":"Not found"}'));
+
+        $errors = $this->submit($this->createPaymentMethod('quickpay_dk', []), [
+            'api_key' => 'the-api-key',
+            'private_key' => 'the-private-key',
+            'agreement_id' => '12345',
+        ]);
+
+        self::assertSame(['gatewayConfig.config.agreement_id' => 1], $errors);
+    }
+
+    /**
+     * The api user may lack the /agreements permission, which must not block saving
+     *
+     * @test
+     *
+     * @dataProvider refusals
+     */
+    public function it_saves_an_agreement_quickpay_refuses_to_read(int $status): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+        $this->quickpay()->respond('GET', '/agreements/12345', new Response($status, ['Content-Type' => 'application/json'], '{"message":"Not authorized"}'));
+
+        $errors = $this->submit($this->createPaymentMethod('quickpay_dk', []), [
+            'api_key' => 'the-api-key',
+            'private_key' => 'the-private-key',
+            'agreement_id' => '12345',
+        ]);
+
+        self::assertSame([], $errors);
+        self::assertSame(['GET /ping', 'GET /agreements/12345'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function refusals(): iterable
+    {
+        yield 'unauthorized' => [401];
+        yield 'forbidden' => [403];
+    }
+
+    /**
+     * Quickpay then uses the account's default agreement, which needs no check
+     *
+     * @test
+     */
+    public function it_asks_quickpay_about_no_agreement_without_an_agreement_id(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $errors = $this->submit($this->createPaymentMethod('quickpay_dk', []), [
+            'api_key' => 'the-api-key',
+            'private_key' => 'the-private-key',
+            'agreement_id' => '',
+        ]);
+
+        self::assertSame([], $errors);
+        self::assertSame(['GET /ping'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * Quickpay's answer about the agreement proves nothing with an api key it rejects, and the rejected key is the
+     * one error to fix
+     *
+     * @test
+     */
+    public function it_asks_quickpay_about_no_agreement_when_it_rejects_the_api_key(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+        $this->quickpay()->respond('GET', '/payments', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+
+        $errors = $this->submit($this->createPaymentMethod('quickpay_dk', []), [
+            'api_key' => 'the-api-key',
+            'private_key' => 'the-private-key',
+            'agreement_id' => '12345',
+        ]);
+
+        self::assertSame(['gatewayConfig.config.api_key' => 1], $errors);
+        self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
      * A stored gateway option the form has no field for, like the language, is kept when the form is saved
      *
      * @test

@@ -1,5 +1,7 @@
 setono_sylius_quickpay:
     gateway_configuration:
+        agreement_id:
+            not_found: 'Tato smlouva na vašem účtu Quickpay neexistuje. Zadejte ID některé ze smluv účtu (Nastavení → Integrace v Quickpay manageru), nebo pole ponechte prázdné, aby se použila výchozí smlouva platebního okna.'
         api_key:
             invalid: 'Quickpay tento API klíč odmítl. Zkontrolujte, že jde o API klíč API uživatele ve vašem Quickpay manageru (Nastavení → Uživatelé).'
         gateway_option:

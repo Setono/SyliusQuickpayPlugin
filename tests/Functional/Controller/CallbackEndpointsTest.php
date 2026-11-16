@@ -126,6 +126,32 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     }
 
     /**
+     * Building the gateway of the payment's own unusable gateway configuration throws on the payment's callback url, and
+     * the shared endpoint can't read that configuration's order prefix: both answer a 500, so Quickpay retries
+     *
+     * @test
+     *
+     * @dataProvider callbackEndpoints
+     */
+    public function a_callback_for_a_payment_on_an_unusable_gateway_configuration_answers_a_500_and_changes_nothing(string $endpoint): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        // A branding name where the branding id belongs, stored by fixtures or the database directly
+        $payment->setMethod($this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'order_prefix' => self::ORDER_PREFIX, 'branding_id' => 'Our brand']));
+        $this->entityManager()->flush();
+
+        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment);
+
+        self::assertSame(500, $response->getStatusCode());
+        self::assertSame([], $this->quickpay()->sentRequests());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+    }
+
+    /**
      * @test
      */
     public function a_notify_for_another_gateways_payment_is_left_to_payum(): void

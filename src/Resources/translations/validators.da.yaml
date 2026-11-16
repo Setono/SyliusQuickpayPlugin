@@ -1,5 +1,7 @@
 setono_sylius_quickpay:
     gateway_configuration:
+        agreement_id:
+            not_found: 'Aftalen findes ikke på din Quickpay-konto. Indtast id''et på en af kontoens aftaler (Indstillinger → Integration i Quickpay manageren), eller lad feltet være tomt for at bruge standardaftalen for betalingsvinduet.'
         api_key:
             invalid: 'Quickpay afviste denne API-nøgle. Tjek at det er API-brugerens API-nøgle i din Quickpay manager (Indstillinger → Brugere).'
         gateway_option:

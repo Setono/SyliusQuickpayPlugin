@@ -1,22 +1,13 @@
-# Quickpay's HTTP is the one thing the functional tests substitute: every Quickpay gateway, and every
-# Quickpay client the plugin's client factory creates, sends its requests to the scripted client, which a
-# test scripts and asserts on
+# Quickpay's HTTP is the one thing the functional tests substitute, below the plugin's scoped HTTP client: every
+# request to Quickpay, the gateways' and the plugin's own, goes through the real client provider, SDK clients and
+# HTTP policy, and reaches the scripted client, which a test scripts and asserts on
+framework:
+    http_client:
+        mock_response_factory: Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient
+
 services:
     Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient:
         public: true
-
-    Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedGatewayFactoryBuilder:
-        decorates: Setono\SyliusQuickpayPlugin\FactoryBuilder\QuickpayGatewayFactoryBuilder
-        arguments:
-            - '@.inner'
-            - '@Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient'
-
-    # Replaces the plugin's client factory, so the fraud check, the operations panel, api key verification,
-    # the doctor and the fraud report reach the scripted client too
-    Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedClientFactory:
-        decorates: Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory
-        arguments:
-            - '@Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient'
 
     # The functional tests reach the reconciliation module through its interface, whether or not anything
     # else in the container consumes it

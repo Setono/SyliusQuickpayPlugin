@@ -6,50 +6,33 @@ namespace Setono\SyliusQuickpayPlugin\Fraud;
 
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
-use Setono\Payum\Quickpay\Details;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
-use Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 
 final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
 {
     use LoggerAwareTrait;
 
-    public function __construct(
-        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
-        private readonly ClientFactoryInterface $clientFactory,
-    ) {
+    public function __construct(private readonly QuickpayClientProviderInterface $quickpayClientProvider)
+    {
     }
 
     public function isFraudSuspected(PaymentInterface $payment): bool
     {
-        $details = new \ArrayObject($payment->getDetails());
-        if (!Details::hasPaymentId($details)) {
-            return false;
-        }
-
-        $gatewayConfiguration = $this->gatewayConfigurationProvider->forPayment($payment);
-        if (null === $gatewayConfiguration) {
-            return false;
-        }
-
         try {
-            // An unusable gateway configuration, and a present but unusable id (Details::paymentId() throws
-            // for one), land in the same fail-open catch as an unreachable Quickpay: the question cannot be
-            // answered, and a configuration problem never blocks a capture
-            $apiKey = $gatewayConfiguration->options()->apiKey;
-            $quickpayPaymentId = Details::paymentId($details);
-
-            $quickpayPayment = $this->clientFactory->create($apiKey)->payments()->getById($quickpayPaymentId);
+            $quickpayPayment = $this->quickpayClientProvider->quickpayPaymentOf($payment);
         } catch (\Throwable $e) {
+            // An unusable gateway configuration, and a present but unusable id, land in the same fail-open catch as
+            // an unreachable Quickpay: the question cannot be answered, and a configuration problem never blocks a
+            // capture
             $this->logger?->warning(sprintf('Could not check the Quickpay payment for suspected fraud: %s', $e->getMessage()), [
-                'quickpayPaymentId' => $details['quickpayPaymentId'] ?? null,
+                'quickpayPaymentId' => $payment->getDetails()['quickpayPaymentId'] ?? null,
                 'paymentId' => $payment->getId(),
             ]);
 
             return false;
         }
 
-        return true === $quickpayPayment->metadata?->fraudSuspected;
+        return true === $quickpayPayment?->metadata?->fraudSuspected;
     }
 }

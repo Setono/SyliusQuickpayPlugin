@@ -6,6 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\DependencyInjection;
 
 use Matthias\SymfonyDependencyInjectionTest\PhpUnit\AbstractExtensionTestCase;
 use Setono\SyliusQuickpayPlugin\DependencyInjection\SetonoSyliusQuickpayExtension;
+use Symfony\Bundle\FrameworkBundle\DependencyInjection\Configuration as FrameworkConfiguration;
+use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 
@@ -128,15 +130,48 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
 
         (new SetonoSyliusQuickpayExtension())->prepend($container);
 
-        self::assertSame([
-            [
-                'lock' => [
-                    'resources' => [
-                        'setono_sylius_quickpay' => ['flock'],
-                    ],
+        self::assertContains([
+            'lock' => [
+                'resources' => [
+                    'setono_sylius_quickpay' => ['flock'],
                 ],
             ],
         ], $container->getExtensionConfig('framework'));
+    }
+
+    /**
+     * @test
+     */
+    public function it_prepends_the_scoped_http_client_every_quickpay_request_goes_through(): void
+    {
+        $httpClient = self::scopedHttpClientWithPrepended();
+
+        self::assertSame('https://api.quickpay.net', $httpClient['base_uri'] ?? null);
+        self::assertSame(10, $httpClient['timeout'] ?? null);
+        self::assertSame(10, $httpClient['max_duration'] ?? null);
+        self::assertSame(['enabled' => false], array_intersect_key((array) ($httpClient['retry_failed'] ?? null), ['enabled' => true]));
+    }
+
+    /**
+     * @test
+     */
+    public function an_applications_framework_config_overrides_single_options_of_the_scoped_http_client(): void
+    {
+        $httpClient = self::scopedHttpClientWithPrepended([
+            'http_client' => [
+                'scoped_clients' => [
+                    'setono_sylius_quickpay.http_client' => [
+                        'timeout' => 30,
+                        'retry_failed' => ['http_codes' => [0 => ['GET'], 503 => ['GET']]],
+                    ],
+                ],
+            ],
+        ]);
+
+        self::assertSame(30, $httpClient['timeout'] ?? null);
+        self::assertSame(10, $httpClient['max_duration'] ?? null);
+        self::assertSame('https://api.quickpay.net', $httpClient['base_uri'] ?? null);
+        self::assertSame(['enabled' => true], array_intersect_key((array) ($httpClient['retry_failed'] ?? null), ['enabled' => true]));
     }
 
     /**
@@ -259,5 +294,44 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
         (new SetonoSyliusQuickpayExtension())->prepend($container);
 
         self::assertSame([], $container->getExtensionConfig('sylius_ui'));
+    }
+
+    /**
+     * The scoped HTTP client `setono_sylius_quickpay.http_client` as FrameworkBundle reads the framework config: the
+     * config the plugin prepends, then the application's own
+     *
+     * @param array<string, mixed> ...$applicationConfigs
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function scopedHttpClientWithPrepended(array ...$applicationConfigs): array
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class() extends Extension {
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return 'framework';
+            }
+        });
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        $config = (new Processor())->processConfiguration(
+            new FrameworkConfiguration(false),
+            [...$container->getExtensionConfig('framework'), ...$applicationConfigs],
+        );
+
+        $httpClients = $config['http_client'] ?? null;
+        self::assertIsArray($httpClients);
+        $scopedClients = $httpClients['scoped_clients'] ?? null;
+        self::assertIsArray($scopedClients);
+        $httpClient = $scopedClients['setono_sylius_quickpay.http_client'] ?? null;
+        self::assertIsArray($httpClient);
+
+        return $httpClient;
     }
 }

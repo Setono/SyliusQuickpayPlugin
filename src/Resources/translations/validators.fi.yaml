@@ -1,5 +1,7 @@
 setono_sylius_quickpay:
     gateway_configuration:
+        agreement_id:
+            not_found: 'Tätä sopimusta ei ole Quickpay-tililläsi. Anna jonkin tilin sopimuksen tunnus (Asetukset → Integraatio Quickpay-hallinnassa) tai jätä kenttä tyhjäksi, jolloin käytetään maksuikkunan oletussopimusta.'
         api_key:
             invalid: 'Quickpay hylkäsi tämän API-avaimen. Tarkista, että se on API-käyttäjän API-avain Quickpay-hallinnassa (Asetukset → Käyttäjät).'
         gateway_option:

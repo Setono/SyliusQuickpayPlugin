@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Validator;
 
 use Nyholm\Psr7\Response;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator;
 use Sylius\Bundle\PayumBundle\Validator\GroupsGenerator\GatewayConfigGroupsGenerator;
@@ -103,24 +103,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     public function it_logs_payum_quickpays_reason_for_rejecting_an_option(): void
     {
         self::bootKernel();
-
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
-        $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
-        self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);
-        $validator->setLogger($logger);
+        $logger = $this->recordValidatorLogs();
 
         $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand']));
 
@@ -187,6 +170,158 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
 
         self::assertSame(['gatewayConfig.config[api_key]'], array_keys($this->violationsOf($paymentMethod)));
+        self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @test
+     */
+    public function it_accepts_an_api_key_whose_api_user_lacks_the_ping_permission(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+        $this->quickpay()->respond('GET', '/payments', new Response(200, ['Content-Type' => 'application/json'], '[]'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
+
+        self::assertSame([], $this->violationsOf($paymentMethod));
+        self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * Checkout sends the agreement id when it creates the payment link, so an agreement the account doesn't have would
+     * break it
+     *
+     * @test
+     */
+    public function it_refuses_an_agreement_quickpay_does_not_find(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+        $this->quickpay()->respond('GET', '/agreements/12345', new Response(404, ['Content-Type' => 'application/json'], '{"message":"Not found"}'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345]);
+
+        self::assertSame(['gatewayConfig.config[agreement_id]'], array_keys($this->violationsOf($paymentMethod)));
+        self::assertSame(['GET /ping', 'GET /agreements/12345'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * The api user may lack the /agreements permission, and an unreachable Quickpay never makes a payment method
+     * unsaveable. Why the agreement check is undetermined is logged.
+     *
+     * @test
+     *
+     * @dataProvider undeterminedAgreementAnswers
+     */
+    public function it_accepts_an_agreement_whose_check_is_undetermined(Response $response, string $why): void
+    {
+        self::bootKernel();
+        $logger = $this->recordValidatorLogs();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+        $this->quickpay()->respond('GET', '/agreements/12345', $response);
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345]);
+
+        self::assertSame([], $this->violationsOf($paymentMethod));
+        self::assertSame(['GET /ping', 'GET /agreements/12345'], $this->quickpay()->sentRequests());
+        self::assertSame([[
+            LogLevel::INFO,
+            sprintf('Accepted agreement 12345 of the Quickpay gateway "quickpay_dk", whose check is undetermined: %s', $why),
+            ['gatewayName' => 'quickpay_dk'],
+        ]], $logger->records);
+    }
+
+    /**
+     * Quickpay then uses the account's default Payment Window agreement
+     *
+     * @test
+     *
+     * @dataProvider withoutAgreementId
+     */
+    public function it_asks_quickpay_nothing_about_the_agreement_without_an_agreement_id(mixed $agreementId): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => $agreementId]);
+
+        self::assertSame([], $this->violationsOf($paymentMethod));
+        self::assertSame(['GET /ping'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function withoutAgreementId(): iterable
+    {
+        yield 'none' => [null];
+        yield 'an empty one' => [''];
+    }
+
+    /**
+     * Quickpay's answer about the agreement would prove nothing, and a rejected api key is one error, not two
+     *
+     * @test
+     *
+     * @dataProvider apiKeysNotAccepted
+     *
+     * @param array<string, Response> $responses
+     * @param list<string> $violations
+     */
+    public function it_asks_quickpay_nothing_about_the_agreement_unless_it_accepts_the_api_key(array $responses, array $violations): void
+    {
+        self::bootKernel();
+
+        foreach ($responses as $path => $response) {
+            $this->quickpay()->respond('GET', $path, $response);
+        }
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345]);
+
+        self::assertSame($violations, array_keys($this->violationsOf($paymentMethod)));
+        self::assertSame(array_map(static fn (string $path): string => 'GET ' . $path, array_keys($responses)), $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @return iterable<string, array{array<string, Response>, list<string>}>
+     */
+    public static function apiKeysNotAccepted(): iterable
+    {
+        yield 'rejected' => [
+            [
+                '/ping' => new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'),
+                '/payments' => new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'),
+            ],
+            ['gatewayConfig.config[api_key]'],
+        ];
+        yield 'undetermined' => [
+            ['/ping' => new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}')],
+            [],
+        ];
+    }
+
+    /**
+     * @return iterable<string, array{Response, string}>
+     */
+    public static function undeterminedAgreementAnswers(): iterable
+    {
+        yield 'unauthorized' => [
+            new Response(401, ['Content-Type' => 'application/json'], '{"message":"Not authorized"}'),
+            'the api user may lack the /agreements permission',
+        ];
+        yield 'forbidden' => [
+            new Response(403, ['Content-Type' => 'application/json'], '{"message":"Not authorized"}'),
+            'the api user may lack the /agreements permission',
+        ];
+        yield 'a server error' => [
+            new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}'),
+            'The status code was: 500. [GET https://api.quickpay.net/agreements/12345] The body was: {"message":"Internal server error"}.',
+        ];
     }
 
     /**
@@ -207,24 +342,60 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
-     * Only an explicit rejection of the key counts: an unreachable Quickpay never makes a payment method unsaveable
+     * Only an explicit rejection of the key counts: an unreachable Quickpay never makes a payment method unsaveable.
+     * Why the api key check is undetermined is logged.
      *
      * @test
+     *
+     * @dataProvider unanswered
+     *
+     * @param array<string, Response> $responses
+     * @param list<string> $requests
      */
-    public function it_accepts_an_api_key_quickpay_could_not_verify(): void
+    public function it_accepts_an_api_key_whose_check_is_undetermined(array $responses, array $requests, string $quickpaysError): void
     {
         self::bootKernel();
+        $logger = $this->recordValidatorLogs();
 
-        $this->quickpay()->respond('GET', '/ping', new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}'));
+        foreach ($responses as $path => $response) {
+            $this->quickpay()->respond('GET', $path, $response);
+        }
 
         $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
 
         self::assertSame([], $this->violationsOf($paymentMethod));
+        self::assertSame($requests, $this->quickpay()->sentRequests());
+        self::assertSame([[
+            LogLevel::INFO,
+            sprintf('Accepted the api key of the Quickpay gateway "quickpay_dk", whose check is undetermined: %s', $quickpaysError),
+            ['gatewayName' => 'quickpay_dk'],
+        ]], $logger->records);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, Response>, list<string>, string}>
+     */
+    public static function unanswered(): iterable
+    {
+        yield 'an error on /ping' => [
+            ['/ping' => new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}')],
+            ['GET /ping'],
+            'The status code was: 500. [GET https://api.quickpay.net/ping] The body was: {"message":"Internal server error"}.',
+        ];
+        yield 'an error on the /payments read after /ping refused' => [
+            [
+                '/ping' => new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'),
+                '/payments' => new Response(502, ['Content-Type' => 'application/json'], '{"message":"Bad gateway"}'),
+            ],
+            ['GET /ping', 'GET /payments'],
+            'The status code was: 502. [GET https://api.quickpay.net/payments] The body was: {"message":"Bad gateway"}.',
+        ];
     }
 
     /**
      * Every refusal is shown in the admin's language: a message per gateway option payum-quickpay rejects, the
-     * fallback for an option without one, a rejected api key and an unreadable configuration
+     * fallback for an option without one, a rejected api key, an agreement Quickpay doesn't find and an unreadable
+     * configuration
      *
      * @test
      *
@@ -234,6 +405,10 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     {
         self::bootKernel();
         $translator = $this->translatorIn($locale);
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+        $this->quickpay()->respond('GET', '/agreements/12345', new Response(404, ['Content-Type' => 'application/json'], '{"message":"Not found"}'));
+        $agreementNotFound = array_values($this->violationsOf($this->createPaymentMethod('quickpay_de', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345])));
 
         $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
         $this->quickpay()->respond('GET', '/payments', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
@@ -264,9 +439,10 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
             ),
             ...array_values($this->violationsOf($rejectedApiKey)),
             ...array_values($this->violationsOf($unreadable)),
+            ...$agreementNotFound,
         ];
-        self::assertCount(12, $violations);
-        self::assertCount(12, array_unique(array_map(
+        self::assertCount(13, $violations);
+        self::assertCount(13, array_unique(array_map(
             static fn (ConstraintViolationInterface $violation): string => $violation->getMessageTemplate(),
             $violations,
         )), 'Each gateway option has a message of its own');
@@ -289,6 +465,20 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
             yield $locale => [$locale];
         }
+    }
+
+    /**
+     * Gives the save validation's validator a logger recording what it logs
+     */
+    private function recordValidatorLogs(): RecordingLogger
+    {
+        $logger = new RecordingLogger();
+
+        $validator = self::getContainer()->get(UsableGatewayConfigurationValidator::class);
+        self::assertInstanceOf(UsableGatewayConfigurationValidator::class, $validator);
+        $validator->setLogger($logger);
+
+        return $logger;
     }
 
     /**

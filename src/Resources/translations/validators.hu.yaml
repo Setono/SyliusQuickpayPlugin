@@ -1,5 +1,7 @@
 setono_sylius_quickpay:
     gateway_configuration:
+        agreement_id:
+            not_found: 'Ez a megállapodás nem létezik a Quickpay-fiókodban. Add meg a fiók egyik megállapodásának azonosítóját (Beállítások → Integráció a Quickpay managerben), vagy hagyd üresen a mezőt az alapértelmezett fizetésiablak-megállapodás használatához.'
         api_key:
             invalid: 'A Quickpay elutasította ezt az API-kulcsot. Ellenőrizd, hogy az API-felhasználó API-kulcsa-e a Quickpay managerben (Beállítások → Felhasználók).'
         gateway_option:

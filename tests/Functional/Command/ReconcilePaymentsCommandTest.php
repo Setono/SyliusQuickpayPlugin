@@ -59,6 +59,35 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * Building the gateway of a payment whose gateway configuration is unusable throws, and the run counts that
+     * payment as errored and goes on
+     *
+     * @test
+     */
+    public function a_payment_on_an_unusable_gateway_configuration_is_counted_as_errored(): void
+    {
+        self::bootKernel();
+
+        $unusable = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501, orderNumber: '000000001');
+        // A branding name where the branding id belongs, stored by fixtures or the database directly
+        $unusable->setMethod($this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'branding_id' => 'Our brand']));
+        $this->entityManager()->flush();
+        $transitioning = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 502, orderNumber: '000000002');
+        $this->quickpay()->respond('GET', '/payments/502', self::quickpayPayment(502, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $tester = $this->executeCommand([]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $display = $tester->getDisplay();
+        self::assertStringContainsString(sprintf('Payment %s:', (string) $unusable->getId()), $display);
+        self::assertStringContainsString('The gateway configuration of a Quickpay gateway is invalid: The "branding_id" option', (string) preg_replace('/\s+/', ' ', $display));
+        self::assertStringContainsString('2 checked, 1 transitioned, 0 unchanged, 0 skipped, 1 errored', $display);
+        self::assertNotContains('GET /payments/501', $this->quickpay()->sentRequests());
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $this->reload($unusable)->getState());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($transitioning)->getState());
+    }
+
+    /**
      * @test
      *
      * @dataProvider stateMachineAdapters
@@ -214,6 +243,67 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * `--limit` is the number of payments reported across gateways: once the report holds that many, the gateways
+     * after it go unqueried, and the report says so
+     *
+     * @test
+     */
+    public function the_fraud_report_stops_at_the_limit_and_names_the_gateways_it_did_not_query(): void
+    {
+        self::bootKernel();
+
+        $this->createPaymentMethod('quickpay_dk', ['api_key' => 'the-dk-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => '1']);
+
+        // Reaching the limit isn't a failure
+        $tester->assertCommandIsSuccessful();
+        $display = (string) preg_replace('/\s+/', ' ', $tester->getDisplay());
+        self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
+
+        // Nothing orders the gateway configurations, so whichever gateway was queried, the other one is named
+        $gatewayByAuthorization = [
+            'Authorization: Basic ' . base64_encode(':the-dk-api-key') => 'quickpay_dk',
+            'Authorization: Basic ' . base64_encode(':the-se-api-key') => 'quickpay_se',
+        ];
+        $authorization = self::authorizationOf($this->quickpay()->sentRequestOptions()[0]);
+        self::assertIsArray($authorization);
+        self::assertCount(1, $authorization);
+        $authorization = $authorization[0] ?? null;
+        self::assertIsString($authorization);
+        $queried = $gatewayByAuthorization[$authorization] ?? null;
+        self::assertNotNull($queried, 'The report queried Quickpay with neither gateway\'s api key');
+        $unqueried = 'quickpay_dk' === $queried ? 'quickpay_se' : 'quickpay_dk';
+
+        self::assertStringContainsString(sprintf('%s 501 qp_000000001', $queried), $display);
+        self::assertStringContainsString(sprintf('The report stopped at the limit of 1 payment(s) and didn\'t query the gateway(s) "%s".', $unqueried), $display);
+    }
+
+    /**
+     * @test
+     */
+    public function the_fraud_report_names_a_gateway_with_an_unusable_gateway_configuration_and_still_queries_the_others(): void
+    {
+        self::bootKernel();
+
+        // A branding name where the branding id belongs, stored by fixtures or the database directly
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'private_key' => self::PRIVATE_KEY, 'branding_id' => 'Our brand']);
+        $this->createPaymentMethod('quickpay_dk', ['api_key' => 'the-dk-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $display = (string) preg_replace('/\s+/', ' ', $tester->getDisplay());
+        self::assertStringContainsString('Gateway "quickpay_se": The gateway configuration of the Quickpay gateway "quickpay_se" is invalid: The "branding_id" option', $display);
+        self::assertStringContainsString('quickpay_dk 501 qp_000000001', $display);
+        self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
+        self::assertSame(['Authorization: Basic ' . base64_encode(':the-dk-api-key')], self::authorizationOf($this->quickpay()->sentRequestOptions()[0]));
+    }
+
+    /**
      * @param array<string, mixed> $input
      */
     private function executeCommand(array $input): CommandTester
@@ -225,5 +315,37 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         $tester->execute($input);
 
         return $tester;
+    }
+
+    /**
+     * Quickpay's answer to the fraud report's query: a page of fraud suspected payments, one per order number
+     */
+    private static function fraudSuspectedQuickpayPayments(string ...$orderNumbers): Response
+    {
+        $payments = [];
+        foreach (array_values($orderNumbers) as $i => $orderNumber) {
+            $payments[] = [
+                'id' => 501 + $i,
+                'order_id' => self::ORDER_PREFIX . $orderNumber,
+                'currency' => self::CURRENCY,
+                'state' => 'new',
+                'merchant_id' => 1,
+                'test_mode' => true,
+                'metadata' => ['fraud_suspected' => true],
+            ];
+        }
+
+        return new Response(200, ['Content-Type' => 'application/json'], json_encode($payments, \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param array<string, mixed> $options a request's options, as sent
+     */
+    private static function authorizationOf(array $options): mixed
+    {
+        $headers = $options['normalized_headers'] ?? null;
+        self::assertIsArray($headers);
+
+        return $headers['authorization'] ?? null;
     }
 }
