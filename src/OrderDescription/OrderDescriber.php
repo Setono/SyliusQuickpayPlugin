@@ -20,9 +20,6 @@ use Symfony\Component\Intl\Countries;
 use Symfony\Component\Intl\Exception\MissingResourceException;
 use Webmozart\Assert\Assert;
 
-/**
- * @see https://learn.quickpay.net/tech-talk/payments/form/#quickpay-form for field names reference
- */
 final class OrderDescriber implements OrderDescriberInterface
 {
     private const PACKAGE = 'setono/sylius-quickpay-plugin';
