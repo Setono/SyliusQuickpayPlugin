@@ -1,0 +1,26 @@
+# The reconcile command reads Quickpay's changes
+
+The reconcile command is the backstop for callbacks that never arrive. It used to reconcile the oldest 100 pending payments created in the last 7 days, and that budget went to the wrong payments: with the default capture mode every order waiting for shipment holds an authorized payment for days, so the oldest 100 could all be authorized while the payments the command exists for (a processing one, or a new one whose authorize callback was missed) waited behind them. A payment created 10 days ago and captured in the Quickpay manager today was never reconciled at all. Now a run asks Quickpay which payments changed since the previous run (`GET /payments?timestamp=updated_at&min_time=…`, once per Quickpay account, that is per distinct api key) and reconciles the pending payments among them, stuck ones first, however old. A payment Quickpay hasn't changed can't be out of step with the store, so it costs no request.
+
+## Considered Options
+
+The request counts are for a shop with 1,000 orders a day running the command every 30 minutes.
+
+- **A fixed budget** (the old command): 100 payments a run, about 4,800 requests a day. Rejected: the budget is spent oldest first, mostly on authorized payments that haven't changed, so stuck payments wait behind them, and a payment older than the window is never reconciled whatever happens to it.
+- **Every pending payment**, every run: about 3,000 a run (three days of orders waiting for shipment), so about 144,000 requests a day, nearly all about authorized payments that haven't changed, on the API live checkouts share. Quickpay documents no rate limits. Rejected for the cost.
+- **Aging backoff**: every pending payment, reconciled less often the older it gets. Rejected: it needs a last-reconciled time stored per payment, it still spends requests on payments that haven't changed, and it sees late exactly the change it backs off from, a capture or cancel in the Quickpay manager days after checkout.
+- **The change feed** (chosen): about 50 payments change at Quickpay in a run, and only the pending ones among them are read, about 1,400 requests a day. Quickpay can't sort the list by `updated_at` (it rejects `sort_by=updated_at`), so it is listed by id, which pages steadily while payments change.
+
+## Watermarks, retries and the run lock
+
+- **A watermark per account that always moves on.** For each account it listed, a run stores its start, less 5 minutes for clocks out of step, and the next run lists that account's changes since then. Only an account that couldn't be listed keeps its previous watermark: its changes are listed again by the next run, the run fails, and the other accounts move on.
+- **A retry list instead of holding the watermark back.** A payment that errored, or was skipped because a callback held its lock, goes on the retry list, and every run reconciles it again by its id until it reconciles or is no longer pending: one request a run, reported as errored every run. Holding the watermark back for a failed payment would let one payment that keeps failing widen every later run to the full lookback, which brings back the cost of reconciling every pending payment.
+- **The fallback.** With no watermark (the first run, a cleared cache, a new api key) or with `--full`, a run lists the changes of the last `--since` (default 7 days), and a watermark older than that is clamped to it. `--full` catches the store up after a database restore. `--limit` no longer applies to reconciling: the changed set is small, and a budget is what starved the stuck payments.
+- **One run at a time.** Two runs at once would send the same requests, and the one finishing last would overwrite the other's retry list. A run that writes takes a run lock from the plugin's lock resource, so a shared store keeps runs on different servers apart; a run started while it is held skips and exits 0, so overlapping cron runs don't alert anyone. A dry run and the fraud report store nothing and take no lock.
+
+## Consequences
+
+- **The plugin relies on Quickpay's `timestamp=updated_at` filter.** Quickpay's API reference only lists `updated_at` among the `timestamp` parameter's values. It was verified live: a payment created before `min_time` and captured after it is listed, and an operation moves its `updated_at`. The plugin's tests script Quickpay's answers, so they can't notice should Quickpay change it.
+- **A cleared cache costs one fallback run.** The watermarks and the retry list are kept in the cache pool `setono_sylius_quickpay.reconcile`, on `cache.app` unless the application points it elsewhere. Losing them is safe: the next run lists the whole `--since` period, and a payment to retry whose change is older than that is listed again once it changes again. A filesystem `cache.app` is emptied on every deploy, so the README advises a persistent adapter. A watermark is stored under a hash of the account's api key, never the key itself.
+- **A payment that keeps failing is never dropped**, and there is no backoff: it costs one request a run and is reported with the time it first failed until someone fixes it.
+- **Pending payments are matched by Quickpay payment id**, so a run needs no order prefix to find the Sylius payment of a listed one.
