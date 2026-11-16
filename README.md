@@ -287,10 +287,10 @@ the payment window's outcome on the payment link's callback url, and capture/ref
 `QuickPay-Callback-Url` header the gateway sends on every operation it issues. Payum checks the url's token and
 the plugin handles the callback; none of it needs configuration.
 
-The **account-wide** callback url of your Quickpay account (*Settings* → *Integration* → *Callback url*) is only
-consulted for operations made *outside* the store — a refund clicked in the Quickpay manager, a capture issued by
-another system talking to the API. If you do that and want your store to know, point the account-wide url at the
-plugin's endpoint:
+The **account-wide** callback url of your Quickpay account (*Settings* → *Integration* → *Callback url*, empty by
+default) is only consulted for operations made *outside* the store — a refund clicked in the Quickpay manager, a
+capture issued by another system talking to the API. If you make those, point the account-wide url at the plugin's
+endpoint:
 
 ```
 https://your-shop.example/payment/quickpay/notify
@@ -306,9 +306,15 @@ its own callback url answers a callback about it the same way. While one of the 
 gateway configuration the gateway can't be built from (written by fixtures, the Admin API or the database directly),
 it answers every callback with a 500 and Quickpay retries it once that is fixed.
 A Quickpay account has exactly one such url, so when
-several environments share an account, only the one it points at receives those callbacks — the others can rely on
-the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries undelivered callbacks 24 times with
-backoff.
+several environments share an account, only the one it points at receives those callbacks. Quickpay retries
+undelivered callbacks 24 times with backoff.
+
+Without those callbacks, in a store that leaves the account-wide url empty or an environment it doesn't point at, the
+[reconciliation command](#reconciling-missed-callbacks) still reconciles a capture or cancel of an authorized payment
+made outside the store, but not a refund of a paid order: it reconciles only pending payments. A full refund made in
+the Quickpay manager on a paid order then never reaches that store, and the order stays paid in Sylius. Refund the
+payment in Sylius yourself to bring the order in line: the plugin first asks Quickpay for the Quickpay payment's
+status, sees it refunded already, and sends no second refund.
 
 Deliveries can race: Quickpay retries a callback it considers undelivered, and a retry can arrive while the
 original is still being handled. Two operations in quick succession, such as the authorization and the capture under
@@ -338,10 +344,11 @@ framework:
 ## Reconciling missed callbacks
 
 Callbacks are normally how your store learns about a payment state change. If one never arrives — the store was
-unreachable until Quickpay gave up retrying, or the change was made outside the store and the account-wide callback
-url points elsewhere (see [Callbacks](#callbacks)) — the payment stays stuck and the order never completes. The plugin
-ships a reconciliation command that closes this gap: each run asks Quickpay which payments changed since the previous
-run, and reconciles those still pending in your store with their Quickpay payments:
+unreachable until Quickpay gave up retrying, or a capture or cancel was made outside the store and the account-wide
+callback url points elsewhere (see [Callbacks](#callbacks)) — the payment stays stuck and the order never completes.
+The plugin ships a reconciliation command that closes this gap for pending payments (below): each run asks Quickpay
+which payments changed since the previous run, and reconciles those still pending in your store with their Quickpay
+payments:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments             # the payments Quickpay changed since the last run
@@ -356,6 +363,12 @@ pending ones among them: the stuck ones (*new*, *processing*) first, then the au
 payment Quickpay hasn't changed costs no request, so a run sends a list request per account (one per page of a long
 list) and one request per payment it reconciles. A capture or cancel made in the Quickpay manager is reconciled by the
 next run however old the payment is.
+
+Only pending payments are reconciled, so a refund made in the Quickpay manager on a paid order (a *completed*
+payment) never is: only a callback on the account-wide callback url reconciles it, and [Callbacks](#callbacks) says
+what to do without one. Completed payments are left out on purpose: a run reads through the pending payments in
+your database to find the ones Quickpay changed, and reading through the completed ones too would mean every paid
+order your store ever took, on every run.
 
 Each run first says, per account, which changes it lists:
 
