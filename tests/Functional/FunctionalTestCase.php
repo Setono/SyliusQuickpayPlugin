@@ -210,15 +210,21 @@ abstract class FunctionalTestCase extends KernelTestCase
      * holds one unit of each, priced so the order totals the payment's amount, and paying the order sells
      * those units.
      *
+     * Without a Quickpay payment id the payment has no details, like one that never got a payment link (the
+     * payment Sylius opens after a failed one, say). The payment is paid with the shared Quickpay payment method
+     * unless another is given ({@see self::createPaymentMethod()}), and created now unless another time is given.
+     *
      * @param list<ProductVariantInterface> $orderedVariants
      */
     protected function createSyliusPayment(
         string $state,
         string $orderPaymentState,
-        int $quickpayPaymentId,
+        ?int $quickpayPaymentId,
         int $amount = 10_000,
         string $orderNumber = '000000001',
         array $orderedVariants = [],
+        ?PaymentMethodInterface $method = null,
+        ?\DateTimeInterface $createdAt = null,
     ): PaymentInterface {
         $order = $this->createOrder($this->channel(), $orderPaymentState, $orderNumber);
         foreach ($orderedVariants as $variant) {
@@ -231,14 +237,19 @@ abstract class FunctionalTestCase extends KernelTestCase
 
         $payment = $paymentFactory->createWithAmountAndCurrencyCode($amount, self::CURRENCY);
         self::assertInstanceOf(PaymentInterface::class, $payment);
-        $payment->setMethod($this->quickpayPaymentMethod());
+        $payment->setMethod($method ?? $this->quickpayPaymentMethod());
         $payment->setState($state);
-        $payment->setDetails([
-            'quickpayPaymentId' => $quickpayPaymentId,
-            'order_id' => self::ORDER_PREFIX . (string) $order->getNumber(),
-            'amount' => $amount,
-            'currency' => self::CURRENCY,
-        ]);
+        if (null !== $quickpayPaymentId) {
+            $payment->setDetails([
+                'quickpayPaymentId' => $quickpayPaymentId,
+                'order_id' => self::ORDER_PREFIX . (string) $order->getNumber(),
+                'amount' => $amount,
+                'currency' => self::CURRENCY,
+            ]);
+        }
+        if (null !== $createdAt) {
+            $payment->setCreatedAt($createdAt);
+        }
         $order->addPayment($payment);
 
         $this->entityManager()->persist($payment);
