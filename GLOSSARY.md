@@ -12,6 +12,10 @@ _Avoid_: order payment, local payment
 The payment as Quickpay holds it, identified by its Quickpay payment id and linked to exactly one Sylius payment.
 _Avoid_: transaction, remote payment
 
+**Order description**:
+What Quickpay is told about an order when its Quickpay payment is created: the invoice and shipping addresses, the basket, shipping and the shop system that created the payment. It is informational, never changes the amount, currency or order id, and is distinct from Payum's one-line payment description.
+_Avoid_: payment description, order details, basket (one part of it)
+
 **Callback**:
 Quickpay's request telling the shop that a Quickpay payment has changed.
 _Avoid_: notify, notification, webhook
