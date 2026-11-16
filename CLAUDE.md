@@ -181,8 +181,9 @@ ADR: **payum-quickpay owns the convert; the plugin only describes the order.** A
   included):
   - per order item, one `BasketItem` per distinct `OrderItemUnit::getTotal()` (price + the unit's promotions + tax
     added on top; included tax is neutral, so it is gross either way), in the order the units come: the units with
-    that total as quantity, the variant code, the product and variant names joined by a space only when both are set,
-    the unit total, the item's VAT rate (`forOrderItem()`); a unit total of 0 still gets its line;
+    that total as quantity, the variant code, the product and variant names joined by a space only when both are set
+    (the variant code when neither is), the unit total, the item's VAT rate (`forOrderItem()`); a unit total of 0
+    still gets its line;
   - then one line per non-neutral, non-zero adjustment on the item itself, and after every item, one per such
     adjustment on the order except the types `Order::getShippingTotal()` counts (shipping, order shipping promotion,
     tax): quantity 1, its amount (negative for a discount or gift card), its type as item number, its label (else its

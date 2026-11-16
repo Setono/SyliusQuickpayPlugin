@@ -153,7 +153,7 @@ final class OrderDescriber implements OrderDescriberInterface
             $quantityPerUnitTotal[$unitTotal] = ($quantityPerUnitTotal[$unitTotal] ?? 0) + 1;
         }
 
-        $itemName = self::nameOf($item);
+        $itemName = self::nameOf($item, $variant);
         $vatRate = $this->vatRateResolver->forOrderItem($item);
 
         $lines = [];
@@ -178,14 +178,17 @@ final class OrderDescriber implements OrderDescriberInterface
     }
 
     /**
-     * The product name and the variant name, joined by a space only when both are set
+     * The product name and the variant name, joined by a space only when both are set (an empty name counts as unset),
+     * or the variant's code when neither is, so a line is never sent without a name
      */
-    private static function nameOf(OrderItemInterface $item): string
+    private static function nameOf(OrderItemInterface $item, ProductVariantInterface $variant): string
     {
-        return implode(' ', array_filter(
+        $names = array_filter(
             [$item->getProductName(), $item->getVariantName()],
             static fn (?string $name): bool => null !== $name && '' !== $name,
-        ));
+        );
+
+        return [] === $names ? (string) $variant->getCode() : implode(' ', $names);
     }
 
     /**

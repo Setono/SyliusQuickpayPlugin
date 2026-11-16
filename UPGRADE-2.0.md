@@ -163,7 +163,8 @@ if you make those and want the store to notice. The README's *Callbacks* section
   added up to less or more than the payment's amount; Klarna rejects such a payment. Each line is now a unit price
   with its VAT, one line per distinct unit price of an item, and each adjustment outside the units and shipping (a
   plugin's payment fee or gift card, say) is a line of its own, named by its label, with the VAT rate from
-  `VatRateResolverInterface::forAdjustment()`. A line's name no longer ends in a space when the variant has no name.
+  `VatRateResolverInterface::forAdjustment()`. A line's name no longer ends in a space when the variant has no name,
+  and a line whose product and variant both have no name is named by its variant code.
 - **A refund targets Quickpay's `balance`** (what is still captured) rather than the original amount,
   so a payment partially refunded directly in the Quickpay manager refunds only the remainder instead
   of failing. The balance is persisted into the payment details whenever a callback or the reconciliation
@@ -416,7 +417,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   its VAT (`OrderItemUnit::getTotal()`), one line per distinct unit price of an item, and each non-neutral adjustment
   on an order item, or on the order outside shipping (a plugin's payment fee or gift card, say), is a line of its own:
   quantity 1, its amount, its type as the item number and its label (else its type) as the name. A line's name no
-  longer ends in a space when the variant has no name.
+  longer ends in a space when the variant has no name, and a line whose product and variant both have no name is named
+  by its variant code.
 - **`VatRateResolverInterface` has a third method, `forAdjustment(AdjustmentInterface $adjustment): float`** (Sylius'
   `Sylius\Component\Order\Model\AdjustmentInterface`), the VAT rate of an adjustment's basket line. Add it to your
   own implementation; a decorator can delegate it to the inner resolver. The plugin's resolver returns the rate stored

@@ -23,6 +23,7 @@ use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItem;
 use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\OrderItemUnit;
+use Sylius\Component\Core\Model\Product;
 use Sylius\Component\Core\Model\ProductVariant;
 use Sylius\Component\Core\Model\Shipment;
 
@@ -237,29 +238,37 @@ final class OrderDescriberTest extends TestCase
     }
 
     /**
-     * A product's only variant often has no name, and checkout then stores none on the item (Sylius falls back to the
-     * variant's own name, which is empty too)
+     * An item is named by its product and variant names joined by a space when it has both, by the one it has otherwise
+     * (an empty name counts as none), and by its variant code when it has neither. A product's only variant often has
+     * no name, and checkout then stores none on the item (Sylius falls back to the variant's own name, which is empty
+     * too)
      *
      * @test
      *
-     * @dataProvider emptyVariantNames
+     * @dataProvider itemNames
      */
-    public function it_names_an_item_by_its_product_name_alone_when_its_variant_has_no_name(?string $variantName): void
-    {
+    public function it_names_an_item_by_its_product_and_variant_names(
+        ?string $productName,
+        ?string $variantName,
+        string $itemName,
+    ): void {
         $order = self::order();
-        $order->addItem($item = self::item('CAP', 'Knitted wool-blend green cap', 'Green', unitPrice: 1_000, quantity: 1));
-        $item->setVariantName($variantName);
+        $order->addItem(self::item('CAP_GREEN', $productName, $variantName, unitPrice: 1_000, quantity: 1));
 
-        self::assertSame('Knitted wool-blend green cap', self::describe($order)->basket[0]->itemName);
+        self::assertSame($itemName, self::describe($order)->basket[0]->itemName);
     }
 
     /**
-     * @return iterable<string, array{string|null}>
+     * @return iterable<string, array{string|null, string|null, string}>
      */
-    public static function emptyVariantNames(): iterable
+    public static function itemNames(): iterable
     {
-        yield 'no name' => [null];
-        yield 'an empty name' => [''];
+        yield 'a product and a variant name' => ['Knitted wool-blend cap', 'Green', 'Knitted wool-blend cap Green'];
+        yield 'a variant without a name' => ['Knitted wool-blend cap', null, 'Knitted wool-blend cap'];
+        yield 'a variant with an empty name' => ['Knitted wool-blend cap', '', 'Knitted wool-blend cap'];
+        yield 'a product without a name' => [null, 'Green', 'Green'];
+        yield 'neither a product nor a variant name' => [null, null, 'CAP_GREEN'];
+        yield 'two empty names' => ['', '', 'CAP_GREEN'];
     }
 
     /**
@@ -448,22 +457,31 @@ final class OrderDescriberTest extends TestCase
 
     /**
      * An order item of the given number of units, each taxed, when given a VAT rate, as Sylius' taxation taxes it: a
-     * tax adjustment per unit carrying the rate, neutral when the price includes the tax
+     * tax adjustment per unit carrying the rate, neutral when the price includes the tax. Its product and variant are
+     * named as given, and the item carries their names as Sylius copies them, so a name not given is missing wherever
+     * Sylius looks for it
      */
     private static function item(
         string $variantCode,
-        string $productName,
-        string $variantName,
+        ?string $productName,
+        ?string $variantName,
         int $unitPrice,
         int $quantity,
         int $taxPerUnit = 0,
         ?float $vatRate = null,
         bool $taxIncluded = true,
     ): OrderItemInterface {
+        $product = new Product();
+        $product->setCurrentLocale('en_US');
+        $product->setFallbackLocale('en_US');
+        $product->setName($productName);
+
         $variant = new ProductVariant();
         $variant->setCode($variantCode);
         $variant->setCurrentLocale('en_US');
         $variant->setFallbackLocale('en_US');
+        $variant->setName($variantName);
+        $product->addVariant($variant);
 
         $item = new OrderItem();
         $item->setVariant($variant);
