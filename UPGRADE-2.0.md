@@ -125,6 +125,7 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
 | `Checker\*`, `Validator\*`, `Klarna\*`, `Fixture\KlarnaTestShopUserFixture` | removed with Klarna support |
 | `Form\Type\QuickPayGatewayConfigurationType` | `Form\Type\GatewayConfigurationType` |
 | `Guesser\QuickpayLanguageGuesser(Interface)` | `Guesser\LanguageGuesser(Interface)` |
+| `Action\ConvertPaymentAction`'s order mapping (`getRelatedOrderDetails()`, `convertAddress()`, `convertOrderItems()`) | `OrderDescription\OrderDescriber(Interface)` — the convert action only hands its order description to the gateway library's convert |
 
 ## The account-wide callback url is only needed for outside operations
 
@@ -139,6 +140,23 @@ if you make those and want the store to notice. The README's *Callbacks* section
 - **Payment details are scalar-only.** `quickpayPaymentId` is the source of truth and the payment is
   re-fetched from Quickpay when needed. The `quickpayPayment` object stored in old payment details is
   simply ignored — existing payments keep working.
+- **The gateway library's convert creates the Quickpay payment; the plugin only describes the order to it.**
+  Sylius' capture and authorize actions first convert the Sylius payment itself, and fall back to a synthetic
+  Payum payment only when no action supports that. `Action\ConvertPaymentAction` now takes that first attempt:
+  it reads the order from the Sylius payment, where 1.x went through the Payum token and storage (so a convert
+  without a token works, without return urls), asks the order describer what Quickpay is told about the order
+  (the invoice and shipping addresses, the basket with each item's VAT rate, shipping, and the plugin and its
+  version as the shop system) and hands that to the gateway library's convert, which owns the order id, finding
+  or creating the Quickpay payment, the currency check and the return urls. To change what Quickpay is told,
+  decorate the new `OrderDescription\OrderDescriberInterface` (or `VatRateResolverInterface` for the VAT
+  rates) instead of extending the convert action.
+- **An order missing optional data reaches the payment window.** On 1.x, the checkout of an order without a
+  customer, without a billing or shipping address, or with an address in a country Symfony Intl has no alpha-3
+  code for (such as Kosovo, `XK`) failed in the convert action, an error page instead of the payment window.
+  Quickpay takes every address field as optional, so the order describer leaves out what the order lacks: the
+  email on the addresses, the invoice or shipping address, or that address' country. An order item without a
+  variant, or an address without a street or country, still fails: Sylius always sets them, so such an order is
+  broken rather than missing optional data.
 - **A refund targets Quickpay's `balance`** (what is still captured) rather than the original amount,
   so a payment partially refunded directly in the Quickpay manager refunds only the remainder instead
   of failing. The balance is persisted into the payment details whenever a callback or the reconciliation
