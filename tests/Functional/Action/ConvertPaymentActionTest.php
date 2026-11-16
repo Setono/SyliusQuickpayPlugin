@@ -109,6 +109,38 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
     }
 
     /**
+     * Quickpay takes every address field as optional, so an order without a shipping address still reaches the payment
+     * window: its Quickpay payment is created without one
+     *
+     * @test
+     */
+    public function a_checkout_creates_the_quickpay_payment_without_a_shipping_address_the_order_lacks(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createCheckoutPayment(withShippingAddress: false);
+        $token = $this->createCaptureToken($payment);
+
+        $this->quickpay()->respond('GET', '/payments', self::json([]));
+        $this->quickpay()->respond('POST', '/payments', self::quickpayPayment(1001, 'initial', [], balance: 0));
+        $this->quickpay()->respond('GET', '/payments/1001', self::quickpayPayment(1001, 'initial', [], balance: 0));
+        $this->quickpay()->respond('PUT', '/payments/1001/link', self::json(['url' => self::LINK_URL]));
+
+        $redirect = $this->capture($token);
+
+        self::assertSame(self::LINK_URL, $redirect->getUrl());
+        self::assertSame(
+            ['GET /payments', 'POST /payments', 'GET /payments/1001', 'PUT /payments/1001/link'],
+            $this->quickpay()->sentRequests(),
+        );
+
+        $body = $this->sentBody('POST /payments');
+        self::assertArrayNotHasKey('shipping_address', $body);
+        self::assertSame('Jane Doe', ((array) ($body['invoice_address'] ?? null))['name'] ?? null);
+        self::assertSame(1001, $this->reload($payment)->getDetails()['quickpayPaymentId'] ?? null);
+    }
+
+    /**
      * A customer who was declined and pays the same order again: the order id already belongs to a Quickpay payment
      * nobody paid, which is picked up as it is
      *
@@ -187,9 +219,9 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
     /**
      * The new Sylius payment of a checked-out order of 2 mugs at 100.00 and a book at 150.00, with 25 % and 12 % VAT
      * included, shipped for 49.00 with 25 % VAT included, all persisted. The order totals 399.00, and the payment
-     * pays it in full.
+     * pays it in full. It is billed to Jane and, unless told otherwise, shipped to John.
      */
-    private function createCheckoutPayment(): PaymentInterface
+    private function createCheckoutPayment(bool $withShippingAddress = true): PaymentInterface
     {
         $order = $this->createOrder($this->channel(), OrderPaymentStates::STATE_AWAITING_PAYMENT, '000000001');
 
@@ -199,7 +231,9 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
         $order->setCustomer($customer);
 
         $order->setBillingAddress($this->createAddress('Jane', 'Doe', 'Vestergade 1', 'Aarhus C', '8000', company: 'Acme ApS', provinceName: 'Midtjylland', phoneNumber: '+4512345678'));
-        $order->setShippingAddress($this->createAddress('John', 'Doe', 'Nørregade 2', 'København K', '1165', provinceCode: 'DK-84', phoneNumber: '+4587654321'));
+        if ($withShippingAddress) {
+            $order->setShippingAddress($this->createAddress('John', 'Doe', 'Nørregade 2', 'København K', '1165', provinceCode: 'DK-84', phoneNumber: '+4587654321'));
+        }
 
         $order->addItem($this->createTaxedOrderItem('MUG_RED', 'Mug', 'Red', unitPrice: 10_000, quantity: 2, taxPerUnit: 2_000, vatRate: 0.25));
         $order->addItem($this->createTaxedOrderItem('BOOK_HC', 'Book', 'Hardcover', unitPrice: 15_000, quantity: 1, taxPerUnit: 1_607, vatRate: 0.12));

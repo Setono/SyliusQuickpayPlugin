@@ -134,6 +134,79 @@ final class OrderDescriberTest extends TestCase
     }
 
     /**
+     * @test
+     *
+     * @dataProvider customersWithoutAnEmail
+     */
+    public function it_describes_the_addresses_without_an_email_for_an_order_without_a_customers_email(?Customer $customer): void
+    {
+        $order = self::order();
+        $order->setCustomer($customer);
+
+        $description = self::describe($order);
+        self::assertNull($description->invoiceAddress?->email);
+        self::assertNull($description->shippingAddress?->email);
+        self::assertSame('Jane Doe', $description->invoiceAddress?->name);
+        self::assertSame('John Doe', $description->shippingAddress?->name);
+    }
+
+    /**
+     * @return iterable<string, array{Customer|null}>
+     */
+    public static function customersWithoutAnEmail(): iterable
+    {
+        yield 'no customer' => [null];
+        yield 'a customer without an email' => [new Customer()];
+    }
+
+    /**
+     * @test
+     */
+    public function it_describes_no_invoice_address_for_an_order_without_a_billing_address(): void
+    {
+        $order = self::order();
+        $order->setBillingAddress(null);
+
+        $description = self::describe($order);
+        self::assertNull($description->invoiceAddress);
+        self::assertSame('John Doe', $description->shippingAddress?->name);
+    }
+
+    /**
+     * @test
+     */
+    public function it_describes_no_shipping_address_for_an_order_without_one(): void
+    {
+        $order = self::order();
+        $order->setShippingAddress(null);
+
+        $description = self::describe($order);
+        self::assertNull($description->shippingAddress);
+        self::assertSame('Jane Doe', $description->invoiceAddress?->name);
+    }
+
+    /**
+     * Kosovo's code, XK, is in use but not assigned by ISO 3166, and Symfony Intl has no alpha-3 code for it
+     *
+     * @test
+     */
+    public function it_describes_an_address_without_a_country_when_its_country_has_no_alpha3_code(): void
+    {
+        $order = self::order();
+        $order->setShippingAddress(self::address('John', 'Doe', 'Rruga Agim Ramadani 1', 'Pristina', '10000', countryCode: 'XK'));
+
+        $description = self::describe($order);
+        self::assertEquals(new QuickpayAddress(
+            name: 'John Doe',
+            street: 'Rruga Agim Ramadani 1',
+            city: 'Pristina',
+            zipCode: '10000',
+            email: 'jane@example.com',
+        ), $description->shippingAddress);
+        self::assertSame('DNK', $description->invoiceAddress?->countryCode);
+    }
+
+    /**
      * Sylius always sets an item's variant and an address' street and country, so an order lacking one is broken
      * rather than missing optional data, and describing it fails
      *

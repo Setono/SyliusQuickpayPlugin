@@ -13,11 +13,11 @@ use Setono\Quickpay\Request\Payment\Shipping;
 use Setono\Quickpay\Request\Payment\Shopsystem;
 use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface;
 use Sylius\Component\Core\Model\AddressInterface;
-use Sylius\Component\Core\Model\CustomerInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\ProductVariantInterface;
 use Symfony\Component\Intl\Countries;
+use Symfony\Component\Intl\Exception\MissingResourceException;
 use Webmozart\Assert\Assert;
 
 /**
@@ -33,18 +33,11 @@ final class OrderDescriber implements OrderDescriberInterface
 
     public function describe(OrderInterface $order): OrderDescription
     {
-        $customer = $order->getCustomer();
-        Assert::isInstanceOf($customer, CustomerInterface::class);
-
-        $shippingAddress = $order->getShippingAddress();
-        Assert::isInstanceOf($shippingAddress, AddressInterface::class);
-
-        $billingAddress = $order->getBillingAddress();
-        Assert::isInstanceOf($billingAddress, AddressInterface::class);
+        $email = $order->getCustomer()?->getEmail();
 
         return new OrderDescription(
-            invoiceAddress: self::describeAddress($billingAddress, $customer),
-            shippingAddress: self::describeAddress($shippingAddress, $customer),
+            invoiceAddress: self::describeAddress($order->getBillingAddress(), $email),
+            shippingAddress: self::describeAddress($order->getShippingAddress(), $email),
             basket: $this->describeItems($order->getItems()),
             shipping: new Shipping(
                 amount: $order->getShippingTotal(),
@@ -64,8 +57,12 @@ final class OrderDescriber implements OrderDescriberInterface
             : 'unknown';
     }
 
-    private static function describeAddress(AddressInterface $address, CustomerInterface $customer): Address
+    private static function describeAddress(?AddressInterface $address, ?string $email): ?Address
     {
+        if (null === $address) {
+            return null;
+        }
+
         $countryCode = $address->getCountryCode();
         Assert::notNull($countryCode);
 
@@ -79,11 +76,24 @@ final class OrderDescriber implements OrderDescriberInterface
             city: $address->getCity(),
             zipCode: $address->getPostcode(),
             region: $address->getProvinceName() ?? $address->getProvinceCode(),
-            countryCode: Countries::getAlpha3Code($countryCode),
+            countryCode: self::alpha3CodeOf($countryCode),
             phoneNumber: $address->getPhoneNumber(),
             mobileNumber: $address->getPhoneNumber(),
-            email: $customer->getEmail(),
+            email: $email,
         );
+    }
+
+    /**
+     * The country's ISO 3166-1 alpha-3 code, which Quickpay takes, or null for a code Symfony Intl has none for (e.g.
+     * Kosovo's XK), so the address is sent without a country
+     */
+    private static function alpha3CodeOf(string $countryCode): ?string
+    {
+        try {
+            return Countries::getAlpha3Code($countryCode);
+        } catch (MissingResourceException) {
+            return null;
+        }
     }
 
     /**
