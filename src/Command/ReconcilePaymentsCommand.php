@@ -78,6 +78,12 @@ final class ReconcilePaymentsCommand extends Command
         $dryRun = (bool) $input->getOption('dry-run');
 
         if (true === $input->getOption('fraud-suspected')) {
+            if ($full) {
+                $io->error('--full only applies to reconciling: the fraud report has no watermark, and always reports the --since period.');
+
+                return Command::INVALID;
+            }
+
             if (null !== $limit && ((string) (int) $limit !== $limit || (int) $limit < 1)) {
                 $io->error(sprintf('Cannot use "%s" as --limit. Use a whole number of payments, at least 1.', $limit));
 

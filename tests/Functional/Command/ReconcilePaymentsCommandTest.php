@@ -589,6 +589,20 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     /**
      * @test
      */
+    public function the_fraud_report_has_no_full_run(): void
+    {
+        self::bootKernel();
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true, '--full' => true]);
+
+        self::assertSame(Command::INVALID, $tester->getStatusCode());
+        self::assertStringContainsString('--full only applies to reconciling', self::normalized($tester->getDisplay()));
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @test
+     */
     public function the_fraud_report_without_a_limit_reports_every_flagged_payment(): void
     {
         self::bootKernel();
