@@ -13,12 +13,13 @@ final class AccountWindow
 {
     /**
      * @param non-empty-list<string> $gatewayNames the gateways sharing the account
-     * @param bool $sinceLastRun whether the run lists since the account's watermark, rather than the lookback
+     * @param WindowReason $reason why the run lists since then: the account's watermark or, for any other reason, the
+     *        lookback
      */
     public function __construct(
         public readonly array $gatewayNames,
         public readonly \DateTimeImmutable $changedSince,
-        public readonly bool $sinceLastRun,
+        public readonly WindowReason $reason,
     ) {
     }
 }

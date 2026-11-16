@@ -14,6 +14,7 @@ use Setono\SyliusQuickpayPlugin\Reconciliation\AnotherRunIsReconciling;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsRun;
+use Setono\SyliusQuickpayPlugin\Reconciliation\WindowReason;
 use Setono\SyliusQuickpayPlugin\Tests\Cache\RefusingArrayAdapter;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -235,7 +236,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         $run = $this->start(new \DateTimeImmutable('2026-11-09 12:00:00 +01:00'));
 
-        self::assertEquals([new AccountWindow(['quickpay'], new \DateTimeImmutable('2026-11-09 12:00:00 +01:00'), false)], $run->windows());
+        self::assertEquals([new AccountWindow(['quickpay'], new \DateTimeImmutable('2026-11-09 12:00:00 +01:00'), WindowReason::NoEarlierRun)], $run->windows());
         $query = $this->sentQueries()[0];
         self::assertSame('2026-11-09 12:00:00 +0100', $query['min_time'] ?? null);
         self::assertSame('updated_at', $query['timestamp'] ?? null);
@@ -256,7 +257,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         $window = $run->windows()[0];
         self::assertSame(['quickpay'], $window->gatewayNames);
-        self::assertTrue($window->sinceLastRun);
+        self::assertSame(WindowReason::SinceLastRun, $window->reason);
         // The previous run's start, less five minutes for clocks out of step
         self::assertGreaterThanOrEqual($startedAfter->modify('-5 minutes'), $window->changedSince);
         self::assertLessThanOrEqual($startedBefore->modify('-5 minutes'), $window->changedSince);
@@ -275,7 +276,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         $run = $this->start($lookbackFrom);
 
-        self::assertEquals([new AccountWindow(['quickpay'], $lookbackFrom, false)], $run->windows());
+        self::assertEquals([new AccountWindow(['quickpay'], $lookbackFrom, WindowReason::LastRunTooLongAgo)], $run->windows());
     }
 
     /**
@@ -290,7 +291,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         $run = $this->start($lookbackFrom, full: true);
 
-        self::assertEquals([new AccountWindow(['quickpay'], $lookbackFrom, false)], $run->windows());
+        self::assertEquals([new AccountWindow(['quickpay'], $lookbackFrom, WindowReason::Full)], $run->windows());
         self::assertSame($lookbackFrom->format('Y-m-d H:i:s O'), $this->sentQueries()[1]['min_time'] ?? null);
     }
 
@@ -309,8 +310,8 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $run = $this->start($lookbackFrom);
 
         $windows = self::windowsByGateway($run);
-        self::assertTrue($windows['quickpay']->sinceLastRun);
-        self::assertEquals(new AccountWindow(['quickpay_se'], $lookbackFrom, false), $windows['quickpay_se']);
+        self::assertSame(WindowReason::SinceLastRun, $windows['quickpay']->reason);
+        self::assertEquals(new AccountWindow(['quickpay_se'], $lookbackFrom, WindowReason::NoEarlierRun), $windows['quickpay_se']);
         self::assertSame(
             [
                 'quickpay' => $windows['quickpay']->changedSince->format('Y-m-d H:i:s O'),
@@ -343,8 +344,8 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
         $windows = self::windowsByGateway($this->start($lookbackFrom));
 
-        self::assertEquals(new AccountWindow(['quickpay'], $failedAccountWatermark, true), $windows['quickpay']);
-        self::assertTrue($windows['quickpay_se']->sinceLastRun);
+        self::assertEquals(new AccountWindow(['quickpay'], $failedAccountWatermark, WindowReason::SinceLastRun), $windows['quickpay']);
+        self::assertSame(WindowReason::SinceLastRun, $windows['quickpay_se']->reason);
         self::assertGreaterThanOrEqual($startedAfter->modify('-5 minutes'), $windows['quickpay_se']->changedSince);
         self::assertLessThanOrEqual($startedBefore->modify('-5 minutes'), $windows['quickpay_se']->changedSince);
     }
@@ -359,7 +360,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $this->finishedRun(dryRun: true);
         $lookbackFrom = new \DateTimeImmutable('-7 days');
 
-        self::assertEquals([new AccountWindow(['quickpay'], $lookbackFrom, false)], $this->start($lookbackFrom)->windows());
+        self::assertEquals([new AccountWindow(['quickpay'], $lookbackFrom, WindowReason::NoEarlierRun)], $this->start($lookbackFrom)->windows());
     }
 
     /**
@@ -448,7 +449,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         self::assertSame(1, $run->paymentsToRetry());
         self::assertSame([$failing->getId(), $changed->getId()], self::idsOf($run));
-        self::assertTrue($run->windows()[0]->sinceLastRun);
+        self::assertSame(WindowReason::SinceLastRun, $run->windows()[0]->reason);
     }
 
     /**
@@ -604,7 +605,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $this->holdRunLock()->release();
         $run = $this->start();
         self::assertSame(0, $run->paymentsToRetry());
-        self::assertFalse($run->windows()[0]->sinceLastRun);
+        self::assertSame(WindowReason::NoEarlierRun, $run->windows()[0]->reason);
     }
 
     /**

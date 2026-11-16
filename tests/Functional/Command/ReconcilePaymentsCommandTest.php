@@ -367,6 +367,26 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * The previous run's watermark, its start less five minutes, lies before the last minute
+     *
+     * @test
+     */
+    public function a_run_whose_last_run_was_longer_ago_than_the_since_period_looks_back_the_since_period(): void
+    {
+        self::bootKernel();
+
+        $this->quickpayPaymentMethod();
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+        $this->executeCommand([])->assertCommandIsSuccessful();
+
+        $tester = $this->executeCommand(['--since' => '1 minute']);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('(the last run was more than 1 minute ago: the last 1 minute)', self::windowLineIn($tester));
+    }
+
+    /**
      * @test
      */
     public function a_full_run_looks_back_the_since_period_whatever_the_last_run(): void

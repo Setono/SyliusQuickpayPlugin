@@ -116,13 +116,18 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
         $listed = [];
         foreach ($accounts as $apiKey => $gatewayConfigurations) {
             $accountKey = self::accountKey((string) $apiKey);
-            $watermark = $full ? null : $watermarks[$accountKey] ?? null;
-            $sinceLastRun = null !== $watermark && $watermark >= $lookbackFrom;
+            $watermark = $watermarks[$accountKey] ?? null;
+            $reason = match (true) {
+                $full => WindowReason::Full,
+                null === $watermark => WindowReason::NoEarlierRun,
+                $watermark < $lookbackFrom => WindowReason::LastRunTooLongAgo,
+                default => WindowReason::SinceLastRun,
+            };
 
             $window = new AccountWindow(
                 array_map(static fn (GatewayConfiguration $gatewayConfiguration): string => $gatewayConfiguration->gatewayName, $gatewayConfigurations),
-                $sinceLastRun ? $watermark : $lookbackFrom,
-                $sinceLastRun,
+                WindowReason::SinceLastRun === $reason && null !== $watermark ? $watermark : $lookbackFrom,
+                $reason,
             );
             $windows[] = $window;
 

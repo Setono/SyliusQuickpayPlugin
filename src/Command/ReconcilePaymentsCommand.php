@@ -15,6 +15,7 @@ use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsRun;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
+use Setono\SyliusQuickpayPlugin\Reconciliation\WindowReason;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -47,7 +48,7 @@ final class ReconcilePaymentsCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('since', null, InputOption::VALUE_REQUIRED, 'How far back to look for the payments Quickpay changed when there was no earlier run, or with --full; with --fraud-suspected, the period to report', '7 days')
+            ->addOption('since', null, InputOption::VALUE_REQUIRED, 'How far back to look for the payments Quickpay changed when there was no earlier run, the last run was longer ago, or with --full; with --fraud-suspected, the period to report', '7 days')
             ->addOption('full', null, InputOption::VALUE_NONE, 'Ignore the last run: reconcile every payment Quickpay changed within --since')
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'With --fraud-suspected, the maximum number of payments to report across all gateways')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report the transition each payment would get, changing nothing')
@@ -103,7 +104,7 @@ final class ReconcilePaymentsCommand extends Command
         }
 
         try {
-            return $this->reconcile($io, $run, $full, $dryRun, $period);
+            return $this->reconcile($io, $run, $dryRun, $period);
         } finally {
             // A run that ended on an error stores nothing, and the next run isn't kept waiting for the run lock
             $run->release();
@@ -113,14 +114,14 @@ final class ReconcilePaymentsCommand extends Command
     /**
      * Reconciles each pending payment of a run, or runs the status check on it in a dry run, and reports the run
      */
-    private function reconcile(SymfonyStyle $io, PendingPaymentsRun $run, bool $full, bool $dryRun, string $period): int
+    private function reconcile(SymfonyStyle $io, PendingPaymentsRun $run, bool $dryRun, string $period): int
     {
         foreach ($run->windows() as $window) {
             $io->writeln(sprintf(
                 'Gateway(s) %s: the payments Quickpay changed since %s (%s)',
                 self::quoted($window->gatewayNames),
                 $window->changedSince->format('Y-m-d H:i'),
-                self::describeWindow($window, $full, $period),
+                self::describeWindow($window, $period),
             ));
         }
 
@@ -226,13 +227,14 @@ final class ReconcilePaymentsCommand extends Command
         return $errored > 0 || [] !== $run->failedGateways() || !$stateSaved ? Command::FAILURE : Command::SUCCESS;
     }
 
-    private static function describeWindow(AccountWindow $window, bool $full, string $period): string
+    private static function describeWindow(AccountWindow $window, string $period): string
     {
-        if ($window->sinceLastRun) {
-            return 'since the last run';
-        }
-
-        return sprintf('%s: the last %s', $full ? '--full' : 'no earlier run', $period);
+        return match ($window->reason) {
+            WindowReason::SinceLastRun => 'since the last run',
+            WindowReason::NoEarlierRun => sprintf('no earlier run: the last %s', $period),
+            WindowReason::LastRunTooLongAgo => sprintf('the last run was more than %1$s ago: the last %1$s', $period),
+            WindowReason::Full => sprintf('--full: the last %s', $period),
+        };
     }
 
     /**
