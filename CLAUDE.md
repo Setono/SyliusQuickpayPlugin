@@ -394,12 +394,12 @@ happen in `start()`; matching runs lazily as the run is iterated.
   architecture candidate 07). The entity manager is cleared between pages: the reconciler loads a payment it no
   longer manages afresh. A payment is yielded once, when its Quickpay payment id was listed or it is on the retry
   list. The match is by Quickpay payment id, so no order prefix is involved.
-- **The run**, `PendingPaymentsRun` (iterate it once): `windows()`, `failedGateways()`, `paymentsToRetry()` (the size
+- **The run**, `PendingPaymentsRun` (iterate it once): `windows()`, `failedGateways()`, `retryListSize()` (the size
   of the retry list it started with), `failingSince($payment)` (when a payment on that list first failed, else null),
-  `retry($payment)` (for a payment that errored or was skipped; it keeps the time it first failed) and `finish()`.
+  `retryLater($payment)` (for a payment that errored or was skipped; it keeps the time it first failed) and `finish()`.
 - **`finish()`** stores nothing on a dry run. Otherwise each listed account's watermark becomes the run's start
   minus 5 minutes, whatever became of its payments; an account that failed to list keeps its old one; the retry list
-  becomes exactly the payments passed to `retry()`, so one yielded and not retried, or no longer pending, leaves it.
+  becomes exactly the payments passed to `retryLater()`, so one yielded and not retried, or no longer pending, leaves it.
 - **Storage**: the PSR-6 pool `setono_sylius_quickpay.reconcile`, prepended by
   `SetonoSyliusQuickpayExtension::prepend()` with adapter `cache.app` (apps override it under the same name; the README
   advises a persistent adapter). Keys: `watermark_` + the first 32 hex digits of the api key's sha256 (a
@@ -498,7 +498,7 @@ status → transition mapping all live elsewhere.
 - **Errors.** Each payment is persisted by its own reconcile (no end-of-loop flush). The command catches any
   `\Exception` per payment (Quickpay, Payum, a failing state-machine callback, a failed flush), counts it as errored,
   prints it as a warning (`… (failing since <Y-m-d H:i>)` for a payment from the retry list) and goes on: the module
-  saved nothing of it. An errored or skipped payment is passed to `retry()`, and `finish()` runs before the summary.
+  saved nothing of it. An errored or skipped payment is passed to `retryLater()`, and `finish()` runs before the summary.
   After a failed flush the entity manager stays closed, so the rest of that run errors as well (accepted: nothing is
   saved half-applied, they are all retried, and the next run, a new process, reconciles them). Non-zero exit when a
   payment errored or a gateway failed to list.

@@ -10,8 +10,8 @@ use Webmozart\Assert\Assert;
 /**
  * One reconcile run's pending payments ({@see PendingPaymentsInterface}): the ones whose Quickpay payment changed in
  * the run's windows and the ones to retry, yielded once each, stuck ones (new, processing) first, then authorized
- * ones, each oldest first. Iterate it once, pass each payment that errored or was skipped to {@see self::retry()},
- * {@see self::finish()} it, and {@see self::release()} it however it ends.
+ * ones, each oldest first. Iterate it once, pass each payment that errored or was skipped to
+ * {@see self::retryLater()}, {@see self::finish()} it, and {@see self::release()} it however it ends.
  *
  * @implements \IteratorAggregate<int, PaymentInterface>
  */
@@ -70,9 +70,10 @@ final class PendingPaymentsRun implements \IteratorAggregate
     }
 
     /**
-     * How many payments an earlier run couldn't reconcile; the run yields those still pending
+     * The size of the retry list the run started with: how many payments an earlier run couldn't reconcile. The run
+     * yields those still pending.
      */
-    public function paymentsToRetry(): int
+    public function retryListSize(): int
     {
         return \count($this->retryList);
     }
@@ -92,7 +93,7 @@ final class PendingPaymentsRun implements \IteratorAggregate
      * Retries the payment the run yielded on every later run until it reconciles or is no longer pending: for a
      * payment that errored or was skipped. It keeps the time it first failed.
      */
-    public function retry(PaymentInterface $payment): void
+    public function retryLater(PaymentInterface $payment): void
     {
         $id = $payment->getId();
         Assert::integer($id);

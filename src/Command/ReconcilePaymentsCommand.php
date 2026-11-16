@@ -131,8 +131,8 @@ final class ReconcilePaymentsCommand extends Command
             ));
         }
 
-        if ($run->paymentsToRetry() > 0) {
-            $io->writeln(sprintf('%d payment(s) to retry', $run->paymentsToRetry()));
+        if ($run->retryListSize() > 0) {
+            $io->writeln(sprintf('%d payment(s) to retry', $run->retryListSize()));
         }
 
         // Its changes are listed again by the next run that lists the account
@@ -195,14 +195,14 @@ final class ReconcilePaymentsCommand extends Command
                     case ReconcileOutcome::Skipped:
                         // Whoever holds its lock may fail to reconcile it, so the next run makes sure
                         ++$skipped;
-                        $run->retry($payment);
+                        $run->retryLater($payment);
                         $io->writeln(self::describe($payment, 'skipped, it is locked by a callback being handled or another run'));
 
                         break;
                 }
             } catch (\Exception $e) {
                 ++$errored;
-                $run->retry($payment);
+                $run->retryLater($payment);
 
                 $failingSince = $run->failingSince($payment);
                 $io->warning(self::describe($payment, null === $failingSince ? $e->getMessage() : sprintf(

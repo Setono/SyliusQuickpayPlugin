@@ -447,7 +447,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         $run = $this->start();
 
-        self::assertSame(1, $run->paymentsToRetry());
+        self::assertSame(1, $run->retryListSize());
         self::assertSame([$failing->getId(), $changed->getId()], self::idsOf($run));
         self::assertSame(WindowReason::SinceLastRun, $run->windows()[0]->reason);
     }
@@ -464,10 +464,10 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         // It reconciles this time
         [$run] = $this->finishedRun();
-        self::assertSame(1, $run->paymentsToRetry());
+        self::assertSame(1, $run->retryListSize());
 
         $run = $this->start();
-        self::assertSame(0, $run->paymentsToRetry());
+        self::assertSame(0, $run->retryListSize());
         self::assertSame([], self::idsOf($run));
     }
 
@@ -488,7 +488,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
         self::assertSame([], self::idsOf($run));
         $run->finish();
 
-        self::assertSame(0, $this->start()->paymentsToRetry());
+        self::assertSame(0, $this->start()->retryListSize());
     }
 
     /**
@@ -595,7 +595,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, 502));
         $run = $this->start();
         foreach ($run as $payment) {
-            $run->retry($payment);
+            $run->retryLater($payment);
 
             break;
         }
@@ -604,7 +604,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
         $this->holdRunLock()->release();
         $run = $this->start();
-        self::assertSame(0, $run->paymentsToRetry());
+        self::assertSame(0, $run->retryListSize());
         self::assertSame(WindowReason::NoEarlierRun, $run->windows()[0]->reason);
     }
 
@@ -808,7 +808,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $run = $this->start(dryRun: $dryRun);
         foreach ($run as $payment) {
             if ($payment->getId() === $failing->getId()) {
-                $run->retry($payment);
+                $run->retryLater($payment);
             }
         }
         $run->finish();

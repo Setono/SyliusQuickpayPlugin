@@ -332,7 +332,7 @@ mapping applies.
   account (a distinct api key), the payments Quickpay changed since the account's watermark, or since `$lookbackFrom`
   when it has none, it is older, or `$full` is set. The `PendingPaymentsRun` yields the pending payments among them and
   the ones to retry, stuck ones first, and says what it listed per account (`windows()`, each an `AccountWindow`) and
-  which gateways it couldn't list (`failedGateways()`, each a `ListingFailure`). `retry()` puts a payment that errored
+  which gateways it couldn't list (`failedGateways()`, each a `ListingFailure`). `retryLater()` puts a payment that errored
   or was skipped on the retry list, `failingSince()` says since when a payment to retry has been failing, and
   `finish()` stores the watermarks and the retry list, unless the run is a dry run.
 - **The cache pool `setono_sylius_quickpay.reconcile`.** The extension prepends it onto `framework.cache.pools` with
