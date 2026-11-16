@@ -153,12 +153,23 @@ configuration, so its checkout would capture immediately whatever the payment me
   plugin runs Payum's `Authorize` or `Capture` accordingly, which is how the gateway library expresses the two
   flows since 2.0.
 * When checkout creates the Quickpay payment, the plugin describes the order to Quickpay: the invoice and shipping
-  addresses, the basket with each item's VAT rate, shipping, and the plugin and its version as the shop system. The
-  Quickpay manager shows them on the payment; they never change what is charged. Whatever the order lacks, such as a
-  shipping address, is left out. A customer paying the same order again after a declined attempt continues on the
-  Quickpay payment created the first time, which keeps what it was told then. To change what Quickpay is told,
-  decorate `Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriberInterface`, or
-  `Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface` for the VAT rates.
+  addresses, the basket with each line's VAT rate, shipping, and the plugin and its version as the shop system. The
+  Quickpay manager shows them on the payment, and they never change what is charged, but some payment methods check
+  them: Klarna rejects a payment whose basket and shipping don't add up to its amount, and Resurs requires a basket.
+  So the basket and shipping add up to the order total:
+  * each basket line is priced per unit with its VAT, whether your channel includes the tax in its prices or adds it
+    on top, and an item whose units cost different amounts after promotions (an order promotion's odd cents) gets a
+    line per price;
+  * an adjustment outside the units and shipping, such as a payment fee or a gift card a plugin puts on the order, is
+    a line of its own, named by its label, with the VAT rate stored in its details (`taxRateAmount`), else 0.
+
+  They can't add up when the payment is for another amount than the order total (a plugin's partial payments, or
+  Quickpay's auto fee added in the payment window), or when Sylius clamps a total that adjustments made negative at
+  0. Whatever the order lacks, such as a shipping address, is left out. A customer paying the same order again after a
+  declined attempt continues on the Quickpay payment created the first time, which keeps what it was told then. To
+  change what Quickpay is told, decorate `Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriberInterface`, or
+  `Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface` for the VAT rates (`forAdjustment()` for an
+  adjustment's line, e.g. a fee that carries VAT).
 * Quickpay notifies your store of payment changes through callbacks on a **per-payment url** the gateway mints — for
   the payment window's outcome *and* for every capture, refund and cancel the store issues (the gateway names that
   url on each operation). Only operations made outside the store need the account-wide callback url (see

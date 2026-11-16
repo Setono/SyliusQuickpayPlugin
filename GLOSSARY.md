@@ -13,7 +13,7 @@ The payment as Quickpay holds it, identified by its Quickpay payment id and link
 _Avoid_: transaction, remote payment
 
 **Order description**:
-What Quickpay is told about an order when its Quickpay payment is created: the invoice and shipping addresses, the basket, shipping and the shop system that created the payment. It is informational, never changes the amount, currency or order id, and is distinct from Payum's one-line payment description.
+What Quickpay is told about an order when its Quickpay payment is created: the invoice and shipping addresses, the basket, shipping and the shop system that created the payment. Its basket and shipping add up to the order total. It never changes the amount, currency or order id, but some payment methods check it: Klarna requires the basket and shipping to equal the payment's amount, and Resurs requires a basket. It is distinct from Payum's one-line payment description.
 _Avoid_: payment description, order details, basket (one part of it)
 
 **Callback**:

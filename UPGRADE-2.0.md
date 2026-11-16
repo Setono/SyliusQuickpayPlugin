@@ -157,6 +157,13 @@ if you make those and want the store to notice. The README's *Callbacks* section
   email on the addresses, the invoice or shipping address, or that address' country. An order item without a
   variant, or an address without a street or country, still fails: Sylius always sets them, so such an order is
   broken rather than missing optional data.
+- **The basket and shipping Quickpay is told add up to the order total.** 1.x sent one basket line per order item
+  priced at its first unit's price after promotions, without the tax added on top, so in a channel adding the tax on
+  top of its prices, or when an order promotion's cents split unevenly over an item's units, the basket and shipping
+  added up to less or more than the payment's amount; Klarna rejects such a payment. Each line is now a unit price
+  with its VAT, one line per distinct unit price of an item, and each adjustment outside the units and shipping (a
+  plugin's payment fee or gift card, say) is a line of its own, named by its label, with the VAT rate from
+  `VatRateResolverInterface::forAdjustment()`. A line's name no longer ends in a space when the variant has no name.
 - **A refund targets Quickpay's `balance`** (what is still captured) rather than the original amount,
   so a payment partially refunded directly in the Quickpay manager refunds only the remainder instead
   of failing. The balance is persisted into the payment details whenever a callback or the reconciliation
@@ -347,6 +354,7 @@ mapping applies.
   callbacks*).
 - **`psr/cache` (`^2.0 || ^3.0`) is a direct dependency.** Symfony's cache component already requires it, so nothing
   new is installed.
+- **`sylius/order` (`^1.0`) is a direct dependency.** `sylius/core` already requires it, so nothing new is installed.
 
 ### Changed constructors
 
@@ -381,7 +389,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   is one of payum-quickpay's `LogicException`s now, where it failed an assertion). The order is read from the Sylius
   payment instead of through the Payum token and storage, so a `Convert` of a Sylius payment without a token works,
   without return urls. A `Convert` of a Payum payment on a Quickpay gateway goes to payum-quickpay's convert and sends
-  no order description. Quickpay is told the same about the order as before, but for what an order lacks (next item).
+  no order description. Quickpay is told the same about the order as before, but for what an order lacks and the
+  basket (next items).
   The describer gets the VAT rate resolver through `VatRateResolverInterface`, so a decorator of that alias applies now
   too; before, the convert action only got a decorator of the `VatRateResolver` service.
 - **An order missing optional data still reaches the payment window.** Before, the checkout of an order without a
@@ -391,6 +400,18 @@ The service definitions changed accordingly; only a redefinition or decoration o
   addresses, the invoice or shipping address, or that address' country. An order item without a variant, or an address
   without a street or country, still fails: Sylius always sets them, so such an order is broken rather than missing
   optional data.
+- **The basket and shipping Quickpay is told add up to the order total.** Before, the basket had one line per order
+  item priced at its first unit's price after promotions, without the tax added on top, so in a channel adding the tax
+  on top of its prices, or when an order promotion's cents split unevenly over an item's units, the basket and shipping
+  added up to less or more than the payment's amount; Klarna rejects such a payment. Each line is now a unit price with
+  its VAT (`OrderItemUnit::getTotal()`), one line per distinct unit price of an item, and each non-neutral adjustment
+  on an order item, or on the order outside shipping (a plugin's payment fee or gift card, say), is a line of its own:
+  quantity 1, its amount, its type as the item number and its label (else its type) as the name. A line's name no
+  longer ends in a space when the variant has no name.
+- **`VatRateResolverInterface` has a third method, `forAdjustment(AdjustmentInterface $adjustment): float`** (Sylius'
+  `Sylius\Component\Order\Model\AdjustmentInterface`), the VAT rate of an adjustment's basket line. Add it to your
+  own implementation; a decorator can delegate it to the inner resolver. The plugin's resolver returns the rate stored
+  in the adjustment's details (`taxRateAmount`), else 0.
 - **Every request to Quickpay gives up after 10 seconds**, the gateway's and the plugin's own alike, and none is
   retried. Before, the gateway built its own HTTP client through PSR-18 discovery: a request could wait 60 seconds
   (PHP's `default_socket_timeout`) for each idle stretch, with no limit in total, so a slow Quickpay could hang the
