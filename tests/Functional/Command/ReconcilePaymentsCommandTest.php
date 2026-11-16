@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Command;
 
 use Nyholm\Psr7\Response;
+use Setono\SyliusQuickpayPlugin\Tests\Cache\RefusingArrayAdapter;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -427,6 +428,28 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         self::assertStringContainsString('Gateway(s) "quickpay": could not list the payments Quickpay changed:', $display);
         self::assertStringContainsString('0 checked, 0 transitioned, 0 unchanged, 0 skipped, 0 errored', $display);
         self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @test
+     */
+    public function a_run_whose_state_the_cache_refuses_to_save_fails(): void
+    {
+        self::bootKernel();
+        self::getContainer()->set('setono_sylius_quickpay.reconcile', new RefusingArrayAdapter());
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_PROCESSING, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $tester = $this->executeCommand([]);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $display = self::normalized($tester->getDisplay());
+        self::assertStringContainsString('Could not save the reconcile state; the next run lists the changes since the previous one again.', $display);
+        self::assertStringContainsString('1 checked, 1 transitioned, 0 unchanged, 0 skipped, 0 errored', $display);
+        // The payment was reconciled all the same
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
     }
 
     /**

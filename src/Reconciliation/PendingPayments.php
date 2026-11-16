@@ -45,7 +45,11 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
      */
     private const CLOCK_SKEW_MARGIN = 'PT5M';
 
-    private const RETRY_LIST_KEY = 'retry_list';
+    /**
+     * The cache key of what a run leaves the next one to start from: every account's watermark and the retry list, in
+     * one item, so a cache that loses it loses them together
+     */
+    private const STATE_KEY = 'run_state';
 
     /**
      * How many changed payments a list request asks Quickpay for (it accepts 100, verified live), rather than the
@@ -54,7 +58,8 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
     private const LIST_PAGE_SIZE = 100;
 
     /**
-     * @param CacheItemPoolInterface $cache where the watermarks are kept, the cache pool `setono_sylius_quickpay.reconcile`
+     * @param CacheItemPoolInterface $cache where the watermarks and the retry list are kept, the cache pool
+     *        `setono_sylius_quickpay.reconcile`
      * @param class-string<PaymentInterface> $paymentClass
      * @param positive-int $pageSize how many local pending payments are read from the database at a time
      */
@@ -93,6 +98,7 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
     private function startHolding(?LockInterface $runLock, \DateTimeImmutable $lookbackFrom, bool $full): PendingPaymentsRun
     {
         $startedAt = new \DateTimeImmutable();
+        [$watermarks, $retryList] = $this->storedState();
         $failures = [];
 
         // A Quickpay account is a distinct api key, however many gateways share it
@@ -109,8 +115,8 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
         $windows = [];
         $listed = [];
         foreach ($accounts as $apiKey => $gatewayConfigurations) {
-            $watermarkKey = self::watermarkKey((string) $apiKey);
-            $watermark = $full ? null : $this->watermark($watermarkKey);
+            $accountKey = self::accountKey((string) $apiKey);
+            $watermark = $full ? null : $watermarks[$accountKey] ?? null;
             $sinceLastRun = null !== $watermark && $watermark >= $lookbackFrom;
 
             $window = new AccountWindow(
@@ -147,26 +153,28 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
                     }
                 }
 
-                $listed[] = $watermarkKey;
+                $listed[] = $accountKey;
             } catch (UnusableGatewayConfiguration|QuickpayException $e) {
                 $failures[] = new ListingFailure($window->gatewayNames, $e->getMessage());
             }
         }
 
-        $retryList = $this->retryList();
-
         // The next run lists each account that was listed from this run's start on, less a margin for clocks out of
         // step, whatever became of its payments: the payments to retry are retried by id instead, so one that keeps
         // failing never widens a window. An account that couldn't be listed keeps its watermark, so the next run lists
         // its changes again
-        $finish = null === $runLock ? null : function (array $retryList) use ($listed, $startedAt): void {
+        $finish = null === $runLock ? null : function (array $retryList) use ($watermarks, $listed, $startedAt): bool {
             $watermark = $startedAt->sub(new \DateInterval(self::CLOCK_SKEW_MARGIN));
-            foreach ($listed as $watermarkKey) {
-                $this->cache->saveDeferred($this->cache->getItem($watermarkKey)->set($watermark));
+            foreach ($listed as $accountKey) {
+                $watermarks[$accountKey] = $watermark;
             }
 
-            $this->cache->saveDeferred($this->cache->getItem(self::RETRY_LIST_KEY)->set($retryList));
-            $this->cache->commit();
+            // Should the cache refuse it, what the previous run stored stays: its watermarks are older, so the next run
+            // lists again what this one saw
+            return $this->cache->save($this->cache->getItem(self::STATE_KEY)->set([
+                'watermarks' => $watermarks,
+                'retry_list' => $retryList,
+            ]));
         };
 
         return new PendingPaymentsRun(
@@ -212,37 +220,42 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
     }
 
     /**
-     * The cache key of an account's watermark: derived from its api key, which is never stored
+     * The key of an account's watermark in the run's state: derived from its api key, which is never stored
      */
-    private static function watermarkKey(string $apiKey): string
+    private static function accountKey(string $apiKey): string
     {
-        return 'watermark_' . substr(hash('sha256', $apiKey), 0, 32);
-    }
-
-    private function watermark(string $watermarkKey): ?\DateTimeImmutable
-    {
-        $watermark = $this->cache->getItem($watermarkKey)->get();
-
-        return $watermark instanceof \DateTimeImmutable ? $watermark : null;
+        return substr(hash('sha256', $apiKey), 0, 32);
     }
 
     /**
-     * The payments the previous run couldn't reconcile, as the time each first failed by the Sylius payment's id
+     * What the previous run that wrote left this one to start from: each account's watermark by its key, and the
+     * payments it couldn't reconcile, as the time each first failed by the Sylius payment's id. Nothing when the cache
+     * holds nothing, or nothing it can read.
      *
-     * @return array<int, \DateTimeImmutable>
+     * @return array{array<string, \DateTimeImmutable>, array<int, \DateTimeImmutable>}
      */
-    private function retryList(): array
+    private function storedState(): array
     {
-        $stored = $this->cache->getItem(self::RETRY_LIST_KEY)->get();
+        $stored = $this->cache->getItem(self::STATE_KEY)->get();
+        if (!is_array($stored)) {
+            return [[], []];
+        }
+
+        $watermarks = [];
+        foreach (is_array($stored['watermarks'] ?? null) ? $stored['watermarks'] : [] as $accountKey => $watermark) {
+            if (is_string($accountKey) && $watermark instanceof \DateTimeImmutable) {
+                $watermarks[$accountKey] = $watermark;
+            }
+        }
 
         $retryList = [];
-        foreach (is_array($stored) ? $stored : [] as $id => $failingSince) {
+        foreach (is_array($stored['retry_list'] ?? null) ? $stored['retry_list'] : [] as $id => $failingSince) {
             if (is_int($id) && $failingSince instanceof \DateTimeImmutable) {
                 $retryList[$id] = $failingSince;
             }
         }
 
-        return $retryList;
+        return [$watermarks, $retryList];
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 
 use Doctrine\Persistence\ManagerRegistry;
 use Nyholm\Psr7\Response;
+use Psr\Cache\CacheItemPoolInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
@@ -13,6 +14,7 @@ use Setono\SyliusQuickpayPlugin\Reconciliation\AnotherRunIsReconciling;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsRun;
+use Setono\SyliusQuickpayPlugin\Tests\Cache\RefusingArrayAdapter;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
@@ -376,6 +378,60 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
+     * Every account's watermark and the retry list are one cache item, so a cache that loses it loses them together:
+     * the next run then looks back the whole lookback for every account, which lists again the changes of any payment
+     * to retry that the run that failed it saw
+     *
+     * @test
+     */
+    public function a_run_stores_what_the_next_run_starts_from_in_one_cache_item(): void
+    {
+        $payment = $this->payment(PaymentInterface::STATE_NEW, 501);
+        $this->createPaymentMethod('quickpay_se', self::config('the-se-api-key'));
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+
+        $this->runRetrying($payment);
+
+        self::assertCount(1, $this->cache()->getValues());
+    }
+
+    /**
+     * What the previous run stored stays: its watermarks are older, so the next run lists again what this one saw
+     *
+     * @test
+     */
+    public function finishing_a_run_whose_state_the_cache_refuses_to_save_says_so_and_keeps_the_previous_state(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+        $cache = new RefusingArrayAdapter();
+        $cache->refusing = false;
+        $pendingPayments = $this->pendingPayments(cache: $cache);
+        $lookbackFrom = new \DateTimeImmutable('-7 days');
+        self::assertTrue($pendingPayments->start($lookbackFrom, false, false)->finish());
+
+        $cache->refusing = true;
+        $run = $pendingPayments->start($lookbackFrom, false, false);
+        $previousWatermark = $run->windows()[0]->changedSince;
+
+        self::assertFalse($run->finish());
+
+        $cache->refusing = false;
+        self::assertEquals($previousWatermark, $pendingPayments->start($lookbackFrom, false, false)->windows()[0]->changedSince);
+    }
+
+    /**
+     * @test
+     */
+    public function a_dry_run_has_nothing_to_save(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+
+        self::assertTrue($this->pendingPayments(cache: new RefusingArrayAdapter())->start(new \DateTimeImmutable('-7 days'), false, true)->finish());
+    }
+
+    /**
      * A payment that errored or was skipped is retried on the next run, while the watermark moves on as for any run
      *
      * @test
@@ -623,16 +679,19 @@ final class PendingPaymentsTest extends FunctionalTestCase
 
     /**
      * The module as the container wires it, or one reading the given number of local pending payments at a time, on
-     * the given lock factory
+     * the given lock factory or the given cache pool
      *
      * @param positive-int|null $pageSize
      */
-    private function pendingPayments(?int $pageSize = null, ?LockFactory $lockFactory = null): PendingPaymentsInterface
-    {
+    private function pendingPayments(
+        ?int $pageSize = null,
+        ?LockFactory $lockFactory = null,
+        ?CacheItemPoolInterface $cache = null,
+    ): PendingPaymentsInterface {
         $container = self::getContainer();
         $pendingPayments = $container->get(PendingPaymentsInterface::class);
         self::assertInstanceOf(PendingPayments::class, $pendingPayments);
-        if (null === $pageSize && null === $lockFactory) {
+        if (null === $pageSize && null === $lockFactory && null === $cache) {
             return $pendingPayments;
         }
 
@@ -651,7 +710,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
             self::assertInstanceOf(LockFactory::class, $lockFactory);
         }
 
-        return new PendingPayments($gatewayConfigurationProvider, $clientProvider, $this->cache(), $lockFactory, $doctrine, $paymentClass, $pageSize ?? 100);
+        return new PendingPayments($gatewayConfigurationProvider, $clientProvider, $cache ?? $this->cache(), $lockFactory, $doctrine, $paymentClass, $pageSize ?? 100);
     }
 
     /**

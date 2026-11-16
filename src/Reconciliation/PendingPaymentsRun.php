@@ -27,8 +27,8 @@ final class PendingPaymentsRun implements \IteratorAggregate
      * @param array<int, \DateTimeImmutable> $retryList the time each payment to retry first failed, by its id
      * @param list<AccountWindow> $windows
      * @param list<ListingFailure> $failedGateways
-     * @param (\Closure(array<int, \DateTimeImmutable>): void)|null $finish stores what the next run starts from,
-     *        given the payments to retry; null on a dry run
+     * @param (\Closure(array<int, \DateTimeImmutable>): bool)|null $finish stores what the next run starts from,
+     *        given the payments to retry, and says whether the cache saved it; null on a dry run
      * @param (\Closure(): void)|null $releaseRunLock null on a dry run, which holds no run lock
      */
     public function __construct(
@@ -104,14 +104,21 @@ final class PendingPaymentsRun implements \IteratorAggregate
      * Ends the run, once its payments are reconciled. Unless it is a dry run: each account that was listed is listed
      * from this run's start on next time, and an account that couldn't be listed from where it was this time; the
      * payments retried are the ones to retry next time, and no others. Then it releases the run lock.
+     *
+     * @return bool false when the cache didn't save what the next run starts from. The next run then starts from what
+     *              the previous run stored, so it lists again the changes this one listed. True otherwise, also on a
+     *              dry run, which saves nothing.
      */
-    public function finish(): void
+    public function finish(): bool
     {
+        $saved = true;
         if (null !== $this->finish && null !== $this->releaseRunLock) {
-            ($this->finish)($this->retried);
+            $saved = ($this->finish)($this->retried);
         }
 
         $this->release();
+
+        return $saved;
     }
 
     /**

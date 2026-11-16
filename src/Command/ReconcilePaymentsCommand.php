@@ -206,7 +206,12 @@ final class ReconcilePaymentsCommand extends Command
             }
         }
 
-        $run->finish();
+        // Should the cache refuse it, the next run starts from what the previous one stored, and lists again the changes
+        // this one listed
+        $stateSaved = $run->finish();
+        if (!$stateSaved) {
+            $io->warning('Could not save the reconcile state; the next run lists the changes since the previous one again.');
+        }
 
         $io->success(sprintf(
             '%d checked, %d transitioned%s, %d unchanged, %d skipped, %d errored',
@@ -218,7 +223,7 @@ final class ReconcilePaymentsCommand extends Command
             $errored,
         ));
 
-        return $errored > 0 || [] !== $run->failedGateways() ? Command::FAILURE : Command::SUCCESS;
+        return $errored > 0 || [] !== $run->failedGateways() || !$stateSaved ? Command::FAILURE : Command::SUCCESS;
     }
 
     private static function describeWindow(AccountWindow $window, bool $full, string $period): string
