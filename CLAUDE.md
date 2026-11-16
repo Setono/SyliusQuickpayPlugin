@@ -19,7 +19,8 @@ base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.
 convert takes an order description; the SDK is stable, `^1.3`).
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
-`quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
+`quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed; it is read only
+through `Quickpay\QuickpayPaymentIdProviderInterface` (ADR 0006).
 `UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x, and (its last
 section) from an earlier 2.0 alpha: removed/changed classes, services, constructor signatures and behaviour —
 keep it updated when further 2.x breaks land. Domain terms are defined in `GLOSSARY.md`, settled decisions in
@@ -83,7 +84,9 @@ helper for real gateway config objects: `of($config, $gatewayName)` and `encrypt
 `GatewayConfiguration`, `entity(...)` and `encryptedEntity()` Sylius' `GatewayConfig` entity (encrypted = the encrypted
 flag with nothing decrypted, as Doctrine loads it), `USABLE` the two required gateway options. Never double
 `getConfig()` arrays; a reader's unit test doubles `GatewayConfigurationProviderInterface` and returns values from this
-helper. A caller reading a Quickpay payment (the fraud check, the operations panel) doubles
+helper. A caller of the Quickpay payment id (the shared endpoint, the fraud check, the client provider) uses the real
+`QuickpayPaymentIdProvider` over that doubled `GatewayConfigurationProviderInterface`, never a double of the id provider.
+A caller reading a Quickpay payment (the fraud check, the operations panel) doubles
 `QuickpayClientProviderInterface` and returns the SDK's `Payment` objects or throws, never an SDK client (the fraud
 report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); a
 caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts, and its latest order
@@ -155,7 +158,8 @@ supports, and hands the library's convert the order description (*Convert and th
 
 Services use **FQCN ids** in `services.xml`, with an interface → class alias for every `*Interface` the plugin
 defines (`PaymentReconcilerInterface`, `GatewayConfigurationProviderInterface`, `PaymentProcessorInterface`,
-`PaymentProviderInterface`, `QuickpayClientProviderInterface`, ...) — inject the interface, alias resolution does the rest.
+`QuickpayPaymentIdProviderInterface`, `QuickpayClientProviderInterface`, ...) — inject the interface, alias resolution
+does the rest.
 
 ### Convert and the order description (`src/Action/`, `src/OrderDescription/`)
 Read `GLOSSARY.md` (Order description) and `docs/adr/0004-payum-quickpay-owns-the-convert.md` first. The rule from the
@@ -252,7 +256,10 @@ module's lookups can't do.
   own error policy to it; ask `isUnreadable()` rather than checking for empty violations.
 - Readers, each keeping its own error policy for an unusable configuration: the shared callback endpoint (order
   prefixes from `all()`, an unusable configuration propagates → 500), `PayumNotifyController` (`forGatewayName()`: is
-  the token's gateway a Quickpay one), `PaymentLinkProvider` (`forPayment()`: is the payment a Quickpay one),
+  the token's gateway a Quickpay one; `forPayment()`: is its payment still a Quickpay one), `PaymentLinkProvider`
+  (`forPayment()`: is the payment a Quickpay one), the Quickpay payment id module (`forPayment()`: *A payment's
+  Quickpay payment id* below), the reconciler, the state machine processor and the operations panel's log
+  (`forPayment()->gatewayName`: the one way the plugin gets a payment's gateway),
   `PaymentMethodLogoProvider` (`forPaymentMethod()`; unusable → no logos and a warning log), the client provider's
   `quickpayPaymentOf()` (`forPayment()`; none → null, unusable → throws) and through it `FraudChecker` (null → no
   fraud, unusable → fails open with a warning log) and `PaymentOperationsAction` (null → 404, unusable → the inline
@@ -304,12 +311,11 @@ Quickpay goes through one scoped HTTP client with one policy**, the gateway's an
   `synchronized`), on a `Psr18Client` over the scoped client, with the SDK's Valinor mapper cache (`FileSystemCache`)
   in that directory. It throws `UnusableGatewayConfiguration` for an unusable configuration.
   `quickpayPaymentOf(PaymentInterface): ?Payment` is the payment-scoped read: the Quickpay payment (the SDK's
-  `Payment`) of a Sylius payment, `GET /payments/{id}` with a client for its gateway configuration. Null when the
-  module's `forPayment()` finds no Quickpay gateway configuration, or payum-quickpay's `Details::hasPaymentId()` finds no
-  Quickpay payment id (checked before the configuration is read, so a payment without one never throws). It throws
-  `UnusableGatewayConfiguration`, payum-quickpay's `LogicException` (`Details::paymentId()`, an id it can't read) and the
-  SDK's `QuickpayException`s; the fraud check and the operations panel each apply their own error policy. How a
-  payment's Quickpay id is read stays payum-quickpay's `Details` (architecture candidate 07).
+  `Payment`) of a Sylius payment, `GET /payments/{idOf()}` with a client for its gateway configuration. Null when the
+  Quickpay payment id module's `has()` is false (checked before the configuration is read, so a payment without one
+  never throws). It throws `UnusableGatewayConfiguration`, Payum's `LogicException` (`idOf()`, an id payum-quickpay
+  can't read) and the SDK's `QuickpayException`s; the fraud check and the operations panel each apply their own error
+  policy. Its 4th arg is `QuickpayPaymentIdProviderInterface`.
 - The gateway gets its client from the provider: `QuickpayGatewayFactoryBuilder` sets payum-quickpay's `quickpay.client`
   gateway option to a closure Payum resolves with the gateway's own config (builder defaults come before
   `payum.api`, and Payum resolves closures in order). payum-quickpay's check that the client agrees with
@@ -318,6 +324,27 @@ Quickpay goes through one scoped HTTP client with one policy**, the gateway's an
   tests the provider at the HTTP seam (Symfony's `MockHttpClient`), `tests/Functional/QuickpayHttpPolicyTest` asserts
   `timeout` and `max_duration` on a gateway operation's request and on a plugin call's request (the api key gateway
   check), and `tests/Functional/QuickpayClientProviderTest` proves the provider's clients reach the scripted Quickpay.
+
+### A payment's Quickpay payment id (`src/Quickpay/QuickpayPaymentIdProvider*`)
+Read `GLOSSARY.md` (Quickpay payment id) and `docs/adr/0006-a-payment-is-linked-to-quickpay-only-through-its-details.md`
+first. The rule from the ADR: **a Sylius payment is linked to its Quickpay payment only through its details, read
+through one module.** A payment is a Quickpay payment while its payment method has a Quickpay gateway configuration
+(`forPayment()`), never because its details carry an id: Sylius keeps a payment and its details when the customer
+switches it to another payment method, so a bank transfer chosen after the Quickpay window was opened still carries
+one. The id is read by payum-quickpay's `Details` rule. Don't read `quickpayPaymentId` anywhere else.
+- **`QuickpayPaymentIdProviderInterface`** (service `QuickpayPaymentIdProvider`, arg
+  `GatewayConfigurationProviderInterface`): `has(PaymentInterface): bool` (a Quickpay gateway's payment whose details
+  carry an id, `Details::hasPaymentId()`: present and not null, readable or not; never throws), `idOf(): int`
+  (`Details::paymentId()`: a positive int or a digit string; throws Payum's `LogicException` when `has()` is false or
+  the id can't be read), `tryIdOf(): ?int` (null for none or an unreadable id, never throws: what matching by id uses).
+- **Where an id is needed** (`quickpayPaymentOf()`, the reconciler's lock key, the processor's capture) an unreadable
+  one is an error; **where payments are matched by id** (the shared endpoint among an order's payments, the pending
+  payments among the listed ids) it never matches and never throws. Logs use `tryIdOf()`.
+- **There is no queryable link**: Sylius' `details` is a Doctrine `json` column, so no portable query finds a payment by
+  its Quickpay payment id; matching is done in PHP over a known set of payments.
+- payum-quickpay's own convert reads the id with `isset()`, which on Payum's `ArrayObject` is exactly `hasPaymentId()`.
+- `tests/Unit/Quickpay/QuickpayPaymentIdProviderTest` pins the rule (readable, missing, unreadable ids, another
+  gateway's payment).
 
 ### Gateway checks (`src/Quickpay/GatewayCheck/`)
 Read `GLOSSARY.md` (Gateway check, Verdict) first. A gateway check tests against Quickpay what a usable gateway
@@ -364,7 +391,11 @@ triggers the extension and reports what changed. So never run a status request o
 outside this module (a guard doing so inside a transition applied the transition again from within itself).
 
 `PaymentReconcilerInterface` (service `PaymentReconciler`, args `payum`, `sylius_abstraction.state_machine`,
-`lock.setono_sylius_quickpay.factory`, `doctrine`; `LoggerAwareInterface` via `setLogger()`) has three operations:
+`lock.setono_sylius_quickpay.factory`, `doctrine`, `GatewayConfigurationProviderInterface`,
+`QuickpayPaymentIdProviderInterface`; `LoggerAwareInterface` via `setLogger()`) has three operations. Each refuses a
+payment whose method has no Quickpay gateway configuration (Payum's `InvalidArgumentException`, before anything is
+locked or read): it is another gateway's, say one the customer switched to bank transfer. The gateway is
+`forPayment()->gatewayName`.
 - **`checkStatus()`, the status check** → `StatusCheck` (`targetState`: the Sylius payment state Sylius' `GetStatus`
   maps the Quickpay payment's status to, e.g. `completed`, `processing`, `unknown` — a Sylius state, never call it
   a Quickpay status; `transition`: what the extension would apply,
@@ -375,7 +406,7 @@ outside this module (a guard doing so inside a transition applied the transition
   `ReconcileResult` (`outcome`: `ReconcileOutcome` `Transitioned`/`Unchanged`/`Skipped`, `stateBefore`,
   `stateAfter`, `targetState`, null only when skipped). `Unchanged` means no state change, not nothing written: the
   details the status read refreshed (e.g. Quickpay's `balance`) are still persisted. Both run the same private
-  sequence, `reconcileWith()`: take the payment's lock (key `setono_sylius_quickpay_payment_<quickpayPaymentId>`, TTL
+  sequence, `reconcileWith()`: take the payment's lock (key `setono_sylius_quickpay_payment_<idOf()>`, TTL
   60s, not auto-released, non-blocking: held → `Skipped`, nothing read or written; a lock store error is logged and the
   payment is reconciled unguarded) → reload the payment and its order (`refresh()`; a payment the entity manager no
   longer manages is loaded afresh with `find()`), so state committed before the lock was taken is seen → begin a
@@ -438,10 +469,11 @@ windows and listing happen in `start()`; matching runs lazily as the run is iter
   `UnusableGatewayConfiguration` makes the account a `ListingFailure` (gateway names, message); the others are listed.
 - **Matching.** The pending payments are read in pages of `$pageSize` after the last id read (so payments the
   run moves on don't shift the pages), with the factory-name DQL join, states new and processing (stuck) first, then
-  authorized, each oldest first by id, and `isset($details['quickpayPaymentId'])` in PHP (how the id is read is
-  architecture candidate 07). The entity manager is cleared between pages: the reconciler loads a payment it no
-  longer manages afresh. A payment is yielded once, when its Quickpay payment id was listed or it is on the retry
-  list. The match is by Quickpay payment id, so no order prefix is involved.
+  authorized, each oldest first by id, and the Quickpay payment id module's `has()` in PHP. The entity manager is
+  cleared between pages: the reconciler loads a payment it no longer manages afresh. A payment is yielded once, when
+  its `tryIdOf()` was listed or it is on the retry list. The match is by Quickpay payment id, so no order prefix is
+  involved; an id that can't be read never matches (it is only reconciled from the retry list, where the reconciler's
+  error counts it as errored). `QuickpayPaymentIdProviderInterface` is the arg before `$pageSize`.
 - **The run**, `PendingPaymentsRun` (iterate it once): `windows()`, `failedGateways()`, `retryListSize()` (the size
   of the retry list it started with), `failingSince($payment)` (when a payment on that list first failed, else null),
   `retryLater($payment)` (for a payment that errored or was skipped; it keeps the time it first failed), `finish()`
@@ -477,11 +509,15 @@ callback arriving while the payment's lock is held is answered 204 too and runs 
 but a 2xx is no proof a callback was genuine.
 - `src/Controller/PayumNotifyController.php` **decorates Payum's notify controller** (service
   `Payum\Bundle\PayumBundle\Controller\NotifyController`, route `payum_notify_do` → `/payment/notify/{payum_token}`;
-  args `.inner`, `payum`, `PaymentReconcilerInterface`, `GatewayConfigurationProviderInterface`): the per-payment
-  `callback_url` the library mints on payment link creation, which Quickpay normally calls. It verifies the token
-  as Payum does (Payum's `HttpRequestVerifier`), and when the token's gateway is a Quickpay gateway (the module's
-  `forGatewayName()` finds its gateway configuration) it resolves the Sylius payment from the token's details through Payum's storage (404 if gone) and
-  reconciles it from the callback. A Quickpay token must **never** fall through to Payum's controller: that runs
+  args `.inner`, `payum`, `PaymentReconcilerInterface`, `GatewayConfigurationProviderInterface`; logger-aware via
+  `setLogger()`): the per-payment `callback_url` the library mints on payment link creation, which Quickpay normally
+  calls. It verifies the token as Payum does (Payum's `HttpRequestVerifier`), and when the token's gateway is a
+  Quickpay gateway (the module's `forGatewayName()` finds its gateway configuration) it resolves the Sylius payment
+  from the token's details through Payum's storage (404 if gone) and reconciles it from the callback. When that
+  payment's method is no longer a Quickpay gateway's (`forPayment()` null: the customer switched to bank transfer, then
+  paid in a still-open payment window), it answers 204 and logs a warning naming the Sylius payment, its payment
+  method's code and the Quickpay payment id the callback's body names; nothing is reconciled and the checksum isn't
+  checked. A Quickpay token must **never** fall through to Payum's controller: that runs
   `Notify` on the Sylius payment without the lock, and a forged callback would be applied and persisted before its
   400. Every other token, and Payum's token-less `doUnsafeAction`, is delegated to Payum's controller untouched.
 - `src/Controller/NotifyAction.php` is the plugin's **shared endpoint** (route `setono_sylius_quickpay_notify` →
@@ -490,27 +526,32 @@ but a 2xx is no proof a callback was genuine.
   Its candidate Sylius order numbers are payum-quickpay's `OrderId::numberIn()` of the incoming `order_id` under the
   order prefix of **each Quickpay gateway configuration** (the module's `all()`, each read through `options()`, so a
   prefix stored as a number counts too), then the raw `order_id`, without duplicates. It tries them in that order: the
-  order with that number, then `Provider/PaymentProvider::findByQuickpayPaymentId()` on it; the first candidate whose
+  order with that number, then the last of its payments whose `tryIdOf()` is the callback's id (the Quickpay payment id
+  module, arg 3; a payment switched to another method never matches); the first candidate whose
   order holds the callback's Quickpay payment wins (one prefix can start another's order id, `qp` and `qp_`), and that
   payment is reconciled from the callback. When none does (a payment made under an order prefix since changed, or
   another environment's), it answers 204 and logs a warning with `quickpayPaymentId` and `orderId` (logger-aware via
   `setLogger()`): retrying can't help. While any stored Quickpay gateway configuration is unusable,
   `UnusableGatewayConfiguration` propagates and every callback on it is answered 500 (the order might be that
-  gateway's), so Quickpay retries; the reconcile command is the backstop. Matching a callback by Quickpay payment id
-  without the order number needs a real payment ↔ Quickpay payment link (architecture candidate 07).
+  gateway's), so Quickpay retries; the reconcile command is the backstop. There is no matching by Quickpay payment id
+  without the order number (ADR 0006).
 
 `Controller/Admin/PaymentOperationsAction` (route `setono_sylius_quickpay_admin_payment_operations`,
 `GET /admin/quickpay/payments/{id}/operations`) renders the live Quickpay operation history for the
 admin order view. The panel itself is a `sylius_ui` block prepended onto
 `sylius.admin.order.show.payment_content` (guarded by `hasExtension('sylius_ui')`): a placeholder that
 fetches the route after page load, so the order page never blocks on Quickpay; failures render an
-inline retry notice (HTTP 502). The controller (args `sylius.repository.payment`, `QuickpayClientProviderInterface`,
-`twig`; logger-aware via `setLogger()`) reads the payment through the client provider's `quickpayPaymentOf()`: null
+inline retry notice (HTTP 502). The placeholder is rendered only when `setono_sylius_quickpay_has_quickpay_payment(payment)`
+(the Quickpay payment id module's `has()`) is true, and its script shows the translated `load_failed` notice with a
+retry for any answer that is neither OK nor the 502 notice, so an error page never lands in the panel. The controller
+(args `sylius.repository.payment`, `QuickpayClientProviderInterface`, `twig`, `GatewayConfigurationProviderInterface`;
+logger-aware via `setLogger()`) reads the payment through the client provider's `quickpayPaymentOf()`: null
 (not a Quickpay payment, or no Quickpay payment id) → 404; any error (Quickpay, an unusable gateway configuration, an
-id payum-quickpay can't read) → the inline notice, 502, and a warning log with `paymentId`, `gatewayName` (the
-payment's method's gateway) and the error under `exception`. `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
+id payum-quickpay can't read) → the inline notice, 502, and a warning log with `paymentId`, `gatewayName`
+(`forPayment()?->gatewayName`) and the error under `exception`. `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
 requests the route as a logged-in administrator (a `TestBrowserToken` stored in a session, as Symfony's test browser
-does; browser-kit isn't installed).
+does; browser-kit isn't installed), and renders the template with the container's Twig to check when the placeholder
+is there.
 
 `Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `GatewayChecksInterface`,
 `GatewayConfigurationProviderInterface`, `router`, `LatestOrderNumberProviderInterface`) machine-checks the README's Troubleshooting
@@ -586,9 +627,12 @@ transition is applied, so an exception aborts it identically). Only the adapter 
 transition dispatches its events, so the dual registration never double-processes. The processor
 implements `PaymentProcessorInterface` and is `LoggerAwareInterface` (wired via a `setLogger()` call with
 `on-invalid="ignore"`). It translates each transition into the corresponding Payum request
-(`Capture`/`Refund`/`Cancel`) against the gateway, but only when the operation is switched on and the payment actually
-has a `quickpayPaymentId`. A switched-off operation returns first: no gateway is built and no status checked, so not
-even an unusable gateway configuration stops its transition. Each operation is guarded with the status check
+(`Capture`/`Refund`/`Cancel`) against the gateway, but only when the operation is switched on and the payment has a
+Quickpay payment (the Quickpay payment id module's `has()`: its method has a Quickpay gateway configuration and its
+details an id; the gateway is `forPayment()->gatewayName`). A switched-off operation returns first: no gateway is
+built and no status checked, so not even an unusable gateway configuration stops its transition. A payment without a
+Quickpay payment, one switched to bank transfer after the Quickpay window was opened included, is left alone: nothing
+is built, read or sent, and its transition proceeds. Each operation is guarded with the status check
 (`PaymentReconcilerInterface::checkStatus()`, the processor's 2nd constructor argument; never a status request on the
 Sylius payment, which would make Sylius' extension apply the transition again from inside the one being applied),
 skipping operations that already happened at Quickpay, and builds the gateway only after it. `complete` runs, in
@@ -632,7 +676,8 @@ copy-able link plus a send link shaped like Sylius' resend-order-confirmation-em
 Sylius' `FlashBagProvider`, sends through `Mailer/PaymentLinkEmailManager` (the Sylius
 email-manager pattern; code `Mailer\Emails::PAYMENT_LINK`, prepended into `sylius_mailer` with
 `email/payment_link.html.twig`) in the order's locale and flashes in the `flashes` translation domain
-(`Resources/translations/flashes.*.yaml`). Both Twig functions are covered by the `Twig\Test\IntegrationTestCase`
+(`Resources/translations/flashes.*.yaml`). The Twig functions (this one, the payment method logos and
+`setono_sylius_quickpay_has_quickpay_payment`) are covered by the `Twig\Test\IntegrationTestCase`
 subclass `tests/Unit/Twig/PaymentExtensionTest` with `.test` fixtures in `tests/Unit/Twig/Fixtures/` (implement both `getFixturesDir()` for Twig < 3.13 and
 `getFixturesDirectory()`).
 

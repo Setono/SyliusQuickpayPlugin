@@ -12,6 +12,10 @@ _Avoid_: order payment, local payment
 The payment as Quickpay holds it, identified by its Quickpay payment id and linked to exactly one Sylius payment.
 _Avoid_: transaction, remote payment
 
+**Quickpay payment id**:
+Quickpay's id of a Quickpay payment, stored as `quickpayPaymentId` in the Sylius payment's details once the Quickpay payment is created. It links a Sylius payment of a Quickpay gateway to its Quickpay payment; a Sylius payment whose payment method is no longer a Quickpay gateway's has none, whatever its details still hold (Sylius keeps them when the customer switches methods). It is read by payum-quickpay's `Details` rule: present and not null, then a positive int or a digit string.
+_Avoid_: transaction id, payment reference
+
 **Order description**:
 What Quickpay is told about an order when its Quickpay payment is created: the invoice and shipping addresses, the basket, shipping and the shop system that created the payment. Its basket and shipping add up to the order total. It never changes the amount, currency or order id, but some payment methods check it: Klarna requires the basket and shipping to equal the payment's amount, and Resurs requires a basket. It is distinct from Payum's one-line payment description.
 _Avoid_: payment description, order details, basket (one part of it)
