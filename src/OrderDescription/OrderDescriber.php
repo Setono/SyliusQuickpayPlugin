@@ -107,14 +107,24 @@ final class OrderDescriber implements OrderDescriberInterface
             return new BasketItem(
                 qty: $orderItem->getQuantity(),
                 itemNo: (string) $variant->getCode(),
-                itemName: sprintf(
-                    '%s %s',
-                    (string) $orderItem->getProductName(),
-                    (string) $orderItem->getVariantName(),
-                ),
+                itemName: self::nameOf($orderItem, $variant),
                 itemPrice: $orderItem->getFullDiscountedUnitPrice(),
                 vatRate: $this->vatRateResolver->forOrderItem($orderItem),
             );
         })->toArray());
+    }
+
+    /**
+     * The item's product and variant names, joined by a space when it has both (an empty name counts as none), or its
+     * variant's code when it has neither, so a basket item is never sent without a name
+     */
+    private static function nameOf(OrderItemInterface $orderItem, ProductVariantInterface $variant): string
+    {
+        $names = array_filter(
+            [$orderItem->getProductName(), $orderItem->getVariantName()],
+            static fn (?string $name): bool => null !== $name && '' !== $name,
+        );
+
+        return [] === $names ? (string) $variant->getCode() : implode(' ', $names);
     }
 }

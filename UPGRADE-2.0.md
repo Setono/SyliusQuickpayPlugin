@@ -354,7 +354,9 @@ The service definitions changed accordingly; only a redefinition or decoration o
   every address field as optional, so the order describer now leaves out what the order lacks: the email on the
   addresses, the invoice or shipping address, or that address' country. An order item without a variant, or an address
   without a street or country, still fails: Sylius always sets them, so such an order is broken rather than missing
-  optional data.
+  optional data. A basket item's name joins the product and variant names with a space only when the item has both,
+  so an item whose variant has no name no longer ends in a space; an item with neither name is named by its variant
+  code.
 - **Every request to Quickpay gives up after 10 seconds**, the gateway's and the plugin's own alike, and none is
   retried. Before, the gateway built its own HTTP client through PSR-18 discovery: a request could wait 60 seconds
   (PHP's `default_socket_timeout`) for each idle stretch, with no limit in total, so a slow Quickpay could hang the

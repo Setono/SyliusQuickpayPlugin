@@ -164,9 +164,11 @@ ADR: **payum-quickpay owns the convert; the plugin only describes the order.** A
   payum-quickpay's value, holding the SDK's own `Address`, `BasketItem`, `Shipping` and `Shopsystem`. Each address:
   "first last" name, company, street, city, postcode, province name or else code, the country as alpha-3 (Symfony
   Intl), the phone as both phone and mobile number, the customer's email. One `BasketItem` per order item: quantity,
-  variant code, "product variant" name, the first unit's fully discounted price, the item's VAT rate. Shipping: the
-  order's shipping total and the shipping VAT rate, always sent. Shop system: `setono/sylius-quickpay-plugin` and its
-  installed version, or `unknown`. VAT rates come from `Taxation/VatRateResolver` (reads the tax adjustments, falling
+  variant code, name, the first unit's fully discounted price, the item's VAT rate. The name is the product and variant
+  names joined by a space when the item has both, the one it has otherwise (an empty name counts as none), or the
+  variant code when it has neither, so a variant without a name adds no trailing space. Shipping: the order's shipping
+  total and the shipping VAT rate, always sent. Shop system: `setono/sylius-quickpay-plugin` and its installed version,
+  or `unknown`. VAT rates come from `Taxation/VatRateResolver` (reads the tax adjustments, falling
   back to deriving the rate from the totals). A part the order lacks is left out, so the checkout still reaches the
   payment window: no customer or email → addresses without an email; no billing address → no invoice address; no
   shipping address → no shipping address; a country Symfony Intl has no alpha-3 code for → that address without a
