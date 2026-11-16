@@ -724,29 +724,30 @@ final class PendingPaymentsTest extends FunctionalTestCase
     private function lockFactoryRecordingInto(\ArrayObject $timeline): LockFactory
     {
         $quickpay = $this->quickpay();
+        $record = static function (string $what) use ($timeline, $quickpay): void {
+            $timeline[] = sprintf('%s after %d request(s)', $what, \count($quickpay->sentRequests()));
+        };
 
-        return new LockFactory(new class(new InMemoryStore(), $timeline, static fn (): int => \count($quickpay->sentRequests())) implements PersistingStoreInterface {
+        return new LockFactory(new class(new InMemoryStore(), $record) implements PersistingStoreInterface {
             /**
-             * @param \ArrayObject<int, string> $timeline
-             * @param \Closure(): int $sentRequests
+             * @param \Closure(string): void $record
              */
             public function __construct(
                 private readonly InMemoryStore $store,
-                private readonly \ArrayObject $timeline,
-                private readonly \Closure $sentRequests,
+                private readonly \Closure $record,
             ) {
             }
 
             public function save(Key $key): void
             {
                 $this->store->save($key);
-                $this->record('acquired');
+                ($this->record)('acquired');
             }
 
             public function delete(Key $key): void
             {
                 $this->store->delete($key);
-                $this->record('released');
+                ($this->record)('released');
             }
 
             public function exists(Key $key): bool
@@ -757,12 +758,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
             public function putOffExpiration(Key $key, float $ttl): void
             {
                 $this->store->putOffExpiration($key, $ttl);
-                $this->record('refreshed');
-            }
-
-            private function record(string $what): void
-            {
-                $this->timeline[] = sprintf('%s after %d request(s)', $what, ($this->sentRequests)());
+                ($this->record)('refreshed');
             }
         });
     }
