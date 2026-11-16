@@ -102,12 +102,19 @@ client gave it. Script every Quickpay call with `$this->quickpay()->respond('GET
 response, or a `MockResponse` for what PSR-7 can't express: no answer, its `error` option, or a body that breaks off)
 and assert on `$this->quickpay()->sentRequests()` (`"METHOD /path"` each); `sentRequestOptions()` gives each
 request's options in the same order, as Symfony's HTTP client resolved them (`timeout` and `max_duration` as floats,
-`normalized_headers` keyed by lowercase name, e.g. `['authorization']`). An unscripted request throws a
-`LogicException`, whichever path sent it. The gateway,
-Sylius' payment-state extension, the state machine, the
-lock and the database are real. `$this->holdLockOf($quickpayPaymentId)` holds a payment's lock (as a callback
-being handled would) until you release it. To count how often a payment transition (and so its callbacks) ran, under either
-adapter, take `$transitions = $this->recordPaymentTransitions()` before acting and assert on
+`normalized_headers` keyed by lowercase name, e.g. `['authorization']`, `query` the url's query parsed, values as
+strings). A response answers every later request to its method and path until scripted again, so a paginated list
+needs its pages scripted by query: `respond('GET', '/payments', $lastPage, ['page' => 2])` answers only requests
+carrying those parameters with those values; the response scripted for the most matching parameters wins, and one
+scripted without a query answers any query. An unscripted request throws a `LogicException`, whichever path sent it.
+The gateway, Sylius' payment-state extension, the state machine, the lock and the database are real.
+`$this->holdLockOf($quickpayPaymentId)` holds a payment's lock (as a callback being handled would) until you release
+it; `$this->holdRunLock()` holds the reconcile command's run lock (as another run reconciling payments would). In the
+`test` env the pool `setono_sylius_quickpay.reconcile` is a public array adapter, so each booted kernel starts without
+watermarks or a retry list, as a first run does, and a test reads what a run stored from the container.
+`createSyliusPayment()` takes a null Quickpay payment id (no details: a payment that never got a payment link), a
+`method:` (another payment method) and a `createdAt:`. To count how often a payment transition (and so its callbacks)
+ran, under either adapter, take `$transitions = $this->recordPaymentTransitions()` before acting and assert on
 `$transitions->getArrayCopy()`. For inventory evidence, order tracked variants:
 `$variant = $this->createTrackedVariant($code, onHand: 5, onHold: 1)` and
 `createSyliusPayment(..., orderedVariants: [$variant])` (the order then totals the payment's amount and paying it sells
@@ -192,9 +199,9 @@ gateway option means** (1.x names, defaults, normalization, validation: `Setono\
 code the gateway itself is built from), and the plugin reads a stored gateway configuration only through this module.
 Don't add a reader of `getConfig()` keys or a filter on the factory name anywhere else; a new gateway option starts in
 the library and only gets a form field and its translated save message here (ADR 0002). The one factory-name filter
-left outside the module is
-`Provider/PendingPaymentProvider`'s DQL join (`gatewayConfig.factoryName = quickpay`), a deliberate exception: it
-selects the Quickpay payments inside the database query, which the module's lookups can't do.
+left outside the module is `Reconciliation/PendingPayments`' DQL join (`gatewayConfig.factoryName = quickpay`), a
+deliberate exception: it selects the pending payments of Quickpay gateways inside the database query, which the
+module's lookups can't do.
 - **`GatewayConfigurationProviderInterface`** (service `GatewayConfigurationProvider`, arg
   `sylius.repository.gateway_config`) finds the stored Quickpay gateway configurations (factory name `quickpay`):
   `all()`, `forGatewayName()` (looked up by name among the stored configs, as Payum's dynamic registry does),
@@ -358,7 +365,48 @@ outside this module (a guard doing so inside a transition applied the transition
   `SetonoSyliusQuickpayExtension::prepend()` registers (default `flock`; service
   `lock.setono_sylius_quickpay.factory`; the README shows the multi-server override — apps redefine the resource,
   since framework.lock resources replace rather than merge). Callbacks and the reconcile command take the same
-  per-payment lock, so they never reconcile a payment at the same time.
+  per-payment lock, so they never reconcile a payment at the same time. The reconcile command's run lock comes from
+  the same resource (*Command/ReconcilePaymentsCommand* below).
+
+### Pending payments (`src/Reconciliation/PendingPayments*`)
+Read `GLOSSARY.md` (Pending payment) and `docs/adr/0005-the-reconcile-command-reads-quickpays-changes.md` first. The
+rule from the ADR: **a reconcile run reconciles the pending payments Quickpay changed since the previous run**, plus
+the ones an earlier run couldn't reconcile; a payment Quickpay hasn't changed costs no request. Selection lives in
+this module; keep budgets (`--limit`), polls of every pending payment and watermarks held back for a failed payment
+out of it (the ADR says why).
+
+`PendingPaymentsInterface` (service `PendingPayments`, args `GatewayConfigurationProviderInterface`,
+`QuickpayClientProviderInterface`, the cache pool `setono_sylius_quickpay.reconcile`, `doctrine`,
+`%sylius.model.payment.class%`, then `$pageSize` = 100) has one operation,
+`start(\DateTimeImmutable $lookbackFrom, bool $full, bool $dryRun): PendingPaymentsRun`. Accounts, windows and listing
+happen in `start()`; matching runs lazily as the run is iterated.
+- **Accounts and windows.** An account is a distinct api key among the module's `all()`; an unusable configuration is
+  a `ListingFailure` before any request. Each account gets an `AccountWindow` (`gatewayNames`, `changedSince`,
+  `sinceLastRun`): its watermark, unless there is none, it is older than `$lookbackFrom` or `$full` is set; then
+  `$lookbackFrom` with `sinceLastRun` false.
+- **Listing.** One `paginate()` per account, on `forGatewayConfiguration()` of its first gateway configuration:
+  `PaymentsQuery(minTime: changedSince, sortBy: 'id', sortDir: 'asc', extra: ['timestamp' => 'updated_at'])`, every
+  page read before the first payment is yielded (Quickpay rejects `sort_by=updated_at`). A `QuickpayException` or
+  `UnusableGatewayConfiguration` makes the account a `ListingFailure` (gateway names, message); the others are listed.
+- **Matching.** The local pending payments are read in pages of `$pageSize` after the last id read (so payments the
+  run moves on don't shift the pages), with the factory-name DQL join, states new and processing (stuck) first, then
+  authorized, each oldest first by id, and `isset($details['quickpayPaymentId'])` in PHP (how the id is read is
+  architecture candidate 07). The entity manager is cleared between pages: the reconciler loads a payment it no
+  longer manages afresh. A payment is yielded once, when its Quickpay payment id was listed or it is on the retry
+  list. The match is by Quickpay payment id, so no order prefix is involved.
+- **The run**, `PendingPaymentsRun` (iterate it once): `windows()`, `failedGateways()`, `paymentsToRetry()` (the size
+  of the retry list it started with), `failingSince($payment)` (when a payment on that list first failed, else null),
+  `retry($payment)` (for a payment that errored or was skipped; it keeps the time it first failed) and `finish()`.
+- **`finish()`** stores nothing on a dry run. Otherwise each listed account's watermark becomes the run's start
+  minus 5 minutes, whatever became of its payments; an account that failed to list keeps its old one; the retry list
+  becomes exactly the payments passed to `retry()`, so one yielded and not retried, or no longer pending, leaves it.
+- **Storage**: the PSR-6 pool `setono_sylius_quickpay.reconcile`, prepended by
+  `SetonoSyliusQuickpayExtension::prepend()` with adapter `cache.app` (apps override it under the same name; the README
+  advises a persistent adapter). Keys: `watermark_` + the first 32 hex digits of the api key's sha256 (a
+  `\DateTimeImmutable`; the api key itself is never stored) and `retry_list` (Sylius payment id → `\DateTimeImmutable`
+  it first failed). A missing item is no watermark or an empty list; losing them costs one fallback run (ADR 0005).
+- `tests/Functional/Reconciliation/PendingPaymentsTest` tests it against the test database and the scripted Quickpay,
+  reading the pool back from the container.
 
 ### Callbacks
 Callbacks arrive on two endpoints, which behave identically for the same callback
@@ -425,22 +473,42 @@ verdict with its note naming the test payment (skipped with a warning when the a
 captures immediately), for a readable configuration even when it is invalid. Non-zero exit on any failed check;
 warnings don't fail. Its output is English console text, like the other commands', so it has no translations.
 
-`Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args
-`PendingPaymentProviderInterface`, `PaymentReconcilerInterface`, `QuickpayClientProviderInterface`,
-`GatewayConfigurationProviderInterface`) is the backstop for callbacks that never arrive:
-`Provider/PendingPaymentProvider` queries Quickpay payments in state new/processing/authorized with a
-`quickpayPaymentId`, and the command reconciles each through `PaymentReconcilerInterface::reconcile()` (see
-*Reconciling payments* above). Each payment is persisted by its own reconcile (no end-of-loop flush); a changed one
-prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a skipped one is reported, and the summary is
-`N checked, N transitioned, N unchanged, N skipped, N errored` (unchanged = no state change; its refreshed details
-are still saved). It catches any `\Exception` per payment (Quickpay, Payum, a failing state-machine callback, a failed
-flush), counts it as errored and goes on with the next payment: the module saved nothing of the errored one, and the
-next run retries it; any error → non-zero exit. After a failed flush the entity manager stays closed, so the rest of
-that run errors as well (accepted: nothing is saved half-applied, and the next run, a new process, reconciles them).
-`--dry-run` uses the status check (`checkStatus()`) instead and writes nothing, printing the transition that would
-be applied. The command has no status → transition mapping of its own. Doctrine access in `PaymentReconciler` and
-`PendingPaymentProvider` goes through `setono/doctrine-orm-trait`'s `ORMTrait` (inject `ManagerRegistry`, call
-`$this->getManager(...)`) rather than injecting an entity manager.
+`Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args `PendingPaymentsInterface`,
+`PaymentReconcilerInterface`, `QuickpayClientProviderInterface`, `GatewayConfigurationProviderInterface`,
+`lock.setono_sylius_quickpay.factory`) is the backstop for callbacks that never arrive. It starts a run of the pending
+payments module (*Pending payments* above) and reconciles each payment it yields through
+`PaymentReconcilerInterface::reconcile()` (*Reconciling payments* above); selection, windows, watermarks and the
+status → transition mapping all live elsewhere.
+- **Options.** `--since` (default `7 days`, parsed as `-<period>` into the run's `$lookbackFrom`; unparseable →
+  `INVALID`) is the fallback lookback, and the fraud report's period. `--full` ignores the watermarks. `--limit` has
+  no default and only goes with `--fraud-suspected`; given to a reconciling run → `INVALID` (`--limit only applies
+  to --fraud-suspected: …`).
+- **Run lock.** A run that writes takes a non-blocking lock from `lock.setono_sylius_quickpay.factory` before
+  `start()`: key `setono_sylius_quickpay_reconcile_run` (apart from the per-payment keys), TTL 300 s, not
+  auto-released. Held → `Another run is reconciling payments; skipped.`, exit 0, nothing listed. It is refreshed after
+  each payment and released in a `finally` (a release error is a warning, `Could not release the run lock, …`; a lock
+  store error on acquire or refresh fails the run). `--dry-run` and `--fraud-suspected` take no lock.
+- **Output.** Per window: `Gateway(s) "<name>", …: the payments Quickpay changed since <Y-m-d H:i> (since the last
+  run)`, or `(no earlier run: the last <period>)`, or `(--full: the last <period>)`. Then `N payment(s) to retry` when
+  the retry list isn't empty, and a warning per failed gateway, `Gateway(s) …: could not list the payments Quickpay
+  changed: <message>`. A changed payment prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a
+  skipped one `Payment N: skipped, it is locked by a callback being handled or another run`, and the summary is
+  `N checked, N transitioned, N unchanged, N skipped, N errored` (unchanged = no state change; its refreshed details
+  are still saved).
+- **Errors.** Each payment is persisted by its own reconcile (no end-of-loop flush). The command catches any
+  `\Exception` per payment (Quickpay, Payum, a failing state-machine callback, a failed flush), counts it as errored,
+  prints it as a warning (`… (failing since <Y-m-d H:i>)` for a payment from the retry list) and goes on: the module
+  saved nothing of it. An errored or skipped payment is passed to `retry()`, and `finish()` runs before the summary.
+  After a failed flush the entity manager stays closed, so the rest of that run errors as well (accepted: nothing is
+  saved half-applied, they are all retried, and the next run, a new process, reconciles them). Non-zero exit when a
+  payment errored or a gateway failed to list.
+- `--dry-run` uses the status check (`checkStatus()`) instead and writes nothing, printing the transition that would
+  be applied; its run's `finish()` stores nothing either.
+- `tests/Functional/Command/ReconcilePaymentsCommandTest` runs the command against the test database and the scripted
+  Quickpay; the unit test only covers option parsing and the fraud report.
+
+Doctrine access in `PaymentReconciler` and `PendingPayments` goes through `setono/doctrine-orm-trait`'s `ORMTrait`
+(inject `ManagerRegistry`, call `$this->getManager(...)`) rather than injecting an entity manager.
 
 ### State machine integration
 Both Sylius 1.14 state machine adapters forward the `complete`, `refund`, and `cancel` transitions to
@@ -480,9 +548,9 @@ transition itself proceeds. The operation-history admin panel shows a fraud badg
 reconcile command has a `--fraud-suspected` report mode that queries each configured gateway's account directly
 (`PaymentsQuery`, one per gateway configuration from the module's `all()`, on the client provider's
 `forGatewayConfiguration()`), transitioning nothing; a gateway that can't be queried, an unusable gateway
-configuration included, prints a warning naming it and fails the run. `--limit` caps the payments reported across
-gateways: once reached, the gateways after it aren't queried, and the report says it stopped and names them (or
-says it may be incomplete); reaching the limit doesn't fail the run.
+configuration included, prints a warning naming it and fails the run. Without `--limit` it reports every flagged
+payment; `--limit` caps the payments reported across gateways: once reached, the gateways after it aren't queried, and
+the report says it stopped and names them (or says it may be incomplete); reaching the limit doesn't fail the run.
 
 ### Payment link (admin)
 `PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel
