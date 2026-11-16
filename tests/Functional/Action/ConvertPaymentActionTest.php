@@ -15,6 +15,7 @@ use Sylius\Component\Addressing\Model\ZoneInterface;
 use Sylius\Component\Core\Model\AddressInterface;
 use Sylius\Component\Core\Model\AdjustmentInterface;
 use Sylius\Component\Core\Model\CustomerInterface;
+use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\ShipmentInterface;
@@ -106,6 +107,37 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
             'balance' => 0,
             'callback_url' => $callbackUrl,
         ], $payment);
+    }
+
+    /**
+     * Klarna requires a payment's basket and shipping to add up to its amount. In a channel that adds the tax on top of
+     * the prices, with an order promotion whose cents split unevenly over the units and a plugin's fee on the order,
+     * each distinct unit price is a line with its tax, and the fee a line of its own
+     *
+     * @test
+     */
+    public function a_checkout_creates_the_quickpay_payment_with_a_basket_and_shipping_that_add_up_to_its_amount(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createTaxOnTopCheckoutPayment();
+        $token = $this->createCaptureToken($payment);
+
+        $this->quickpay()->respond('GET', '/payments', self::json([]));
+        $this->quickpay()->respond('POST', '/payments', self::quickpayPayment(1001, 'initial', [], balance: 0));
+        $this->quickpay()->respond('GET', '/payments/1001', self::quickpayPayment(1001, 'initial', [], balance: 0));
+        $this->quickpay()->respond('PUT', '/payments/1001/link', self::json(['url' => self::LINK_URL]));
+
+        $this->capture($token);
+
+        $body = $this->sentBody('POST /payments');
+        self::assertSame([
+            ['qty' => 1, 'item_no' => 'MUG_RED', 'item_name' => 'Mug Red', 'item_price' => 833, 'vat_rate' => 0.25],
+            ['qty' => 2, 'item_no' => 'MUG_RED', 'item_name' => 'Mug Red', 'item_price' => 834, 'vat_rate' => 0.25],
+            ['qty' => 1, 'item_no' => 'payment_fee', 'item_name' => 'Payment fee', 'item_price' => 1_000, 'vat_rate' => 0],
+        ], $body['basket'] ?? null);
+        self::assertSame(['amount' => 4_900, 'vat_rate' => 0.25], $body['shipping'] ?? null);
+        self::assertSame(833 + 2 * 834 + 1_000 + 4_900, $payment->getAmount());
     }
 
     /**
@@ -223,6 +255,47 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
      */
     private function createCheckoutPayment(bool $withShippingAddress = true): PaymentInterface
     {
+        $order = $this->createCheckoutOrder($withShippingAddress);
+        $order->addItem($this->createTaxedOrderItem('MUG_RED', 'Mug', 'Red', unitPrice: 10_000, quantity: 2, taxPerUnit: 2_000, vatRate: 0.25));
+        $order->addItem($this->createTaxedOrderItem('BOOK_HC', 'Book', 'Hardcover', unitPrice: 15_000, quantity: 1, taxPerUnit: 1_607, vatRate: 0.12));
+        $this->ship($order, price: 4_900, tax: 980, taxIncluded: true);
+
+        self::assertSame(39_900, $order->getTotal());
+
+        return $this->createPaymentOf($order);
+    }
+
+    /**
+     * The new Sylius payment of a checked-out order in a channel adding 25 % VAT on top of the prices: 3 mugs at 10.00
+     * less an order promotion of 10.01 (3.34, 3.33 and 3.33 per mug) plus VAT (1.67 each), shipped for 39.20 plus 9.80
+     * VAT, and a plugin's payment fee of 10.00 on the order. The order totals 84.01, and the payment pays it in full.
+     */
+    private function createTaxOnTopCheckoutPayment(): PaymentInterface
+    {
+        $order = $this->createCheckoutOrder();
+
+        $item = $this->createOrderItem($this->createTrackedVariant('MUG_RED', onHand: 10, onHold: 0), 1_000, 3);
+        $item->setProductName('Mug');
+        $item->setVariantName('Red');
+        foreach (array_values($item->getUnits()->toArray()) as $i => $unit) {
+            $unit->addAdjustment($this->adjustmentFactory()->createWithData(AdjustmentInterface::ORDER_PROMOTION_ADJUSTMENT, 'Black Friday', [-334, -333, -333][$i]));
+            $unit->addAdjustment($this->adjustmentFactory()->createWithData(AdjustmentInterface::TAX_ADJUSTMENT, 'VAT', 167, false, ['taxRateAmount' => 0.25]));
+        }
+        $order->addItem($item);
+
+        $this->ship($order, price: 3_920, tax: 980, taxIncluded: false);
+        $order->addAdjustment($this->adjustmentFactory()->createWithData('payment_fee', 'Payment fee', 1_000));
+
+        self::assertSame(8_401, $order->getTotal());
+
+        return $this->createPaymentOf($order);
+    }
+
+    /**
+     * A checked-out order without items or shipment, billed to Jane and, unless told otherwise, shipped to John
+     */
+    private function createCheckoutOrder(bool $withShippingAddress = true): OrderInterface
+    {
         $order = $this->createOrder($this->channel(), OrderPaymentStates::STATE_AWAITING_PAYMENT, '000000001');
 
         $customer = $this->createResource('sylius.factory.customer');
@@ -235,18 +308,28 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
             $order->setShippingAddress($this->createAddress('John', 'Doe', 'Nørregade 2', 'København K', '1165', provinceCode: 'DK-84', phoneNumber: '+4587654321'));
         }
 
-        $order->addItem($this->createTaxedOrderItem('MUG_RED', 'Mug', 'Red', unitPrice: 10_000, quantity: 2, taxPerUnit: 2_000, vatRate: 0.25));
-        $order->addItem($this->createTaxedOrderItem('BOOK_HC', 'Book', 'Hardcover', unitPrice: 15_000, quantity: 1, taxPerUnit: 1_607, vatRate: 0.12));
+        return $order;
+    }
 
+    /**
+     * Ships the order by courier, taxed with 25 % VAT as Sylius' taxation taxes shipping: a tax adjustment on the
+     * shipment carrying the rate, neutral when the price includes the tax
+     */
+    private function ship(OrderInterface $order, int $price, int $tax, bool $taxIncluded): void
+    {
         $shipment = $this->createResource('sylius.factory.shipment');
         self::assertInstanceOf(ShipmentInterface::class, $shipment);
         $shipment->setMethod($this->createShippingMethod());
         $order->addShipment($shipment);
-        $shipment->addAdjustment($this->adjustmentFactory()->createWithData(AdjustmentInterface::SHIPPING_ADJUSTMENT, 'Courier', 4_900));
-        $shipment->addAdjustment($this->adjustmentFactory()->createWithData(AdjustmentInterface::TAX_ADJUSTMENT, 'VAT', 980, true, ['taxRateAmount' => 0.25]));
+        $shipment->addAdjustment($this->adjustmentFactory()->createWithData(AdjustmentInterface::SHIPPING_ADJUSTMENT, 'Courier', $price));
+        $shipment->addAdjustment($this->adjustmentFactory()->createWithData(AdjustmentInterface::TAX_ADJUSTMENT, 'VAT', $tax, $taxIncluded, ['taxRateAmount' => 0.25]));
+    }
 
-        self::assertSame(39_900, $order->getTotal());
-
+    /**
+     * The order's new Sylius payment, paying its total in full, persisted
+     */
+    private function createPaymentOf(OrderInterface $order): PaymentInterface
+    {
         $paymentFactory = self::getContainer()->get('sylius.factory.payment');
         self::assertInstanceOf(PaymentFactoryInterface::class, $paymentFactory);
 

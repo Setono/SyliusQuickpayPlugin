@@ -28,7 +28,8 @@ use Sylius\Component\Core\Model\Shipment;
 
 /**
  * What the order describer tells Quickpay about a Sylius order, built from real Sylius models with the real VAT rate
- * resolver. The prices are pinned as they are today, including where the basket doesn't add up to the order total
+ * resolver. Wherever an order has items, its basket and shipping add up to the order total, as Klarna requires of the
+ * payment's amount
  */
 final class OrderDescriberTest extends TestCase
 {
@@ -81,12 +82,13 @@ final class OrderDescriberTest extends TestCase
                 name: 'setono/sylius-quickpay-plugin',
                 version: InstalledVersions::getPrettyVersion('setono/sylius-quickpay-plugin'),
             ),
-        ), self::describe($order));
+        ), $description = self::describe($order));
+        self::assertAddsUpToTheOrderTotal($order, $description);
     }
 
     /**
-     * Pinned as it is: each item's price is sent without the tax added on top, while shipping is sent with it, so the
-     * basket and shipping add up to less than the order total
+     * Each unit is priced with the tax added on top, as Quickpay's `item_price` includes the VAT, while shipping already
+     * includes its own
      *
      * @test
      */
@@ -99,17 +101,18 @@ final class OrderDescriberTest extends TestCase
         self::assertSame(24_900, $order->getTotal());
 
         $description = self::describe($order);
-        self::assertEquals([new BasketItem(qty: 2, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 8_000, vatRate: 0.25)], $description->basket);
+        self::assertEquals([new BasketItem(qty: 2, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 10_000, vatRate: 0.25)], $description->basket);
         self::assertEquals(new Shipping(amount: 4_900, vatRate: 0.25), $description->shipping);
+        self::assertAddsUpToTheOrderTotal($order, $description);
     }
 
     /**
-     * Pinned as it is: an item's price is its first unit's price after unit and order promotions, so an order
-     * promotion's cents spread unevenly across the units make the basket differ from the item's total
+     * Sylius spreads an order promotion over an item's units and gives the cents that don't divide evenly to some units
+     * only, so the units are described one line per distinct price, in the order the units come
      *
      * @test
      */
-    public function it_describes_an_items_price_as_its_first_units_price_after_unit_and_order_promotions(): void
+    public function it_describes_an_items_units_one_line_per_distinct_price_after_unit_and_order_promotions(): void
     {
         $order = self::order();
         $order->addItem($item = self::item('MUG_RED', 'Mug', 'Red', unitPrice: 1_000, quantity: 3));
@@ -117,10 +120,146 @@ final class OrderDescriberTest extends TestCase
         self::discount($item, AdjustmentInterface::ORDER_PROMOTION_ADJUSTMENT, -334, -333, -333);
 
         self::assertSame(1_700, $item->getTotal());
+
+        $description = self::describe($order);
+        self::assertEquals([
+            new BasketItem(qty: 1, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 566, vatRate: 0.0),
+            new BasketItem(qty: 2, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 567, vatRate: 0.0),
+        ], $description->basket);
+        self::assertAddsUpToTheOrderTotal($order, $description);
+    }
+
+    /**
+     * A unit a promotion made free is still something the customer receives
+     *
+     * @test
+     */
+    public function it_describes_a_free_unit_at_zero(): void
+    {
+        $order = self::order();
+        $order->addItem($item = self::item('MUG_RED', 'Mug', 'Red', unitPrice: 1_000, quantity: 2));
+        self::discount($item, AdjustmentInterface::ORDER_UNIT_PROMOTION_ADJUSTMENT, 0, -1_000);
+
+        $description = self::describe($order);
+        self::assertEquals([
+            new BasketItem(qty: 1, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 1_000, vatRate: 0.0),
+            new BasketItem(qty: 1, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 0, vatRate: 0.0),
+        ], $description->basket);
+        self::assertAddsUpToTheOrderTotal($order, $description);
+    }
+
+    /**
+     * An adjustment outside the units and shipping, such as a plugin's payment fee or gift card, is a line of its own,
+     * named by its label: an item's own after the item's units, the order's after every item. Its origin code, which
+     * can be a gift card's code, is never sent
+     *
+     * @test
+     */
+    public function it_describes_each_adjustment_outside_the_units_and_shipping_as_a_line(): void
+    {
+        $order = self::order();
+        $order->addItem($mug = self::item('MUG_RED', 'Mug', 'Red', unitPrice: 10_000, quantity: 2, taxPerUnit: 2_000, vatRate: 0.25));
+        $mug->addAdjustment(self::adjustment('engraving', 1_500, label: 'Engraving', details: ['taxRateAmount' => 0.25]));
+        $order->addItem(self::item('BOOK_HC', 'Book', 'Hardcover', unitPrice: 15_000, quantity: 1, taxPerUnit: 1_607, vatRate: 0.12));
+        self::ship($order, 4_900, tax: 980, vatRate: 0.25, taxIncluded: true);
+        $order->addAdjustment(self::adjustment('payment_fee', 2_500, label: 'Payment fee'));
+        $order->addAdjustment($giftCard = self::adjustment('gift_card', -5_000, label: 'Gift card'));
+        $giftCard->setOriginCode('GC-SECRET-1234');
+
+        self::assertSame(38_900, $order->getTotal());
+
+        $description = self::describe($order);
+        self::assertEquals([
+            new BasketItem(qty: 2, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 10_000, vatRate: 0.25),
+            new BasketItem(qty: 1, itemNo: 'engraving', itemName: 'Engraving', itemPrice: 1_500, vatRate: 0.25),
+            new BasketItem(qty: 1, itemNo: 'BOOK_HC', itemName: 'Book Hardcover', itemPrice: 15_000, vatRate: 0.12),
+            new BasketItem(qty: 1, itemNo: 'payment_fee', itemName: 'Payment fee', itemPrice: 2_500, vatRate: 0.0),
+            new BasketItem(qty: 1, itemNo: 'gift_card', itemName: 'Gift card', itemPrice: -5_000, vatRate: 0.0),
+        ], $description->basket);
+        self::assertAddsUpToTheOrderTotal($order, $description);
+        self::assertStringNotContainsString('GC-SECRET-1234', var_export($description, true));
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider emptyLabels
+     */
+    public function it_names_an_adjustment_line_by_its_type_when_it_has_no_label(?string $label): void
+    {
+        $order = self::order();
+        $order->addAdjustment($fee = self::adjustment('payment_fee', 2_500));
+        $fee->setLabel($label);
+
         self::assertEquals(
-            [new BasketItem(qty: 3, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 566, vatRate: 0.0)],
+            [new BasketItem(qty: 1, itemNo: 'payment_fee', itemName: 'payment_fee', itemPrice: 2_500, vatRate: 0.0)],
             self::describe($order)->basket,
         );
+    }
+
+    /**
+     * @return iterable<string, array{string|null}>
+     */
+    public static function emptyLabels(): iterable
+    {
+        yield 'no label' => [null];
+        yield 'an empty label' => [''];
+    }
+
+    /**
+     * A neutral adjustment, or one of 0, doesn't change what the customer pays, and the shipping, shipping promotion
+     * and tax adjustments on the order are what shipping already counts
+     *
+     * @test
+     */
+    public function it_describes_no_line_for_an_adjustment_that_changes_no_total_or_that_shipping_counts(): void
+    {
+        $order = self::order();
+        $order->addItem($mug = self::item('MUG_RED', 'Mug', 'Red', unitPrice: 8_000, quantity: 1, taxPerUnit: 2_000, vatRate: 0.25, taxIncluded: false));
+        $mug->addAdjustment(self::adjustment('engraving', 0, label: 'Engraving'));
+        $mug->addAdjustment(self::adjustment('engraving', 1_500, neutral: true, label: 'Engraving'));
+        self::ship($order, 3_920, tax: 980, vatRate: 0.25, taxIncluded: false);
+        $shipment = $order->getShipments()->first();
+        self::assertInstanceOf(Shipment::class, $shipment);
+        $shipment->addAdjustment(self::adjustment(AdjustmentInterface::ORDER_SHIPPING_PROMOTION_ADJUSTMENT, -1_000));
+        $order->addAdjustment(self::adjustment('payment_fee', 0, label: 'Payment fee'));
+        $order->addAdjustment(self::adjustment('payment_fee', 2_500, neutral: true, label: 'Payment fee'));
+
+        self::assertSame(13_900, $order->getTotal());
+
+        $description = self::describe($order);
+        self::assertEquals(
+            [new BasketItem(qty: 1, itemNo: 'MUG_RED', itemName: 'Mug Red', itemPrice: 10_000, vatRate: 0.25)],
+            $description->basket,
+        );
+        self::assertEquals(new Shipping(amount: 3_900, vatRate: 0.25), $description->shipping);
+        self::assertAddsUpToTheOrderTotal($order, $description);
+    }
+
+    /**
+     * A product's only variant often has no name, and checkout then stores none on the item (Sylius falls back to the
+     * variant's own name, which is empty too)
+     *
+     * @test
+     *
+     * @dataProvider emptyVariantNames
+     */
+    public function it_names_an_item_by_its_product_name_alone_when_its_variant_has_no_name(?string $variantName): void
+    {
+        $order = self::order();
+        $order->addItem($item = self::item('CAP', 'Knitted wool-blend green cap', 'Green', unitPrice: 1_000, quantity: 1));
+        $item->setVariantName($variantName);
+
+        self::assertSame('Knitted wool-blend green cap', self::describe($order)->basket[0]->itemName);
+    }
+
+    /**
+     * @return iterable<string, array{string|null}>
+     */
+    public static function emptyVariantNames(): iterable
+    {
+        yield 'no name' => [null];
+        yield 'an empty name' => [''];
     }
 
     /**
@@ -251,6 +390,19 @@ final class OrderDescriberTest extends TestCase
     }
 
     /**
+     * Each line counts its quantity times its price
+     */
+    private static function assertAddsUpToTheOrderTotal(OrderInterface $order, OrderDescription $description): void
+    {
+        $basketTotal = array_sum(array_map(
+            static fn (BasketItem $line): int => $line->qty * $line->itemPrice,
+            $description->basket,
+        ));
+
+        self::assertSame($order->getTotal(), $basketTotal + (int) $description->shipping?->amount);
+    }
+
+    /**
      * An order by jane@example.com, billed to her company in Aarhus (a province name and code) and shipped to John in
      * Copenhagen (a province code only), with no items and no shipment
      */
@@ -310,6 +462,8 @@ final class OrderDescriberTest extends TestCase
     ): OrderItemInterface {
         $variant = new ProductVariant();
         $variant->setCode($variantCode);
+        $variant->setCurrentLocale('en_US');
+        $variant->setFallbackLocale('en_US');
 
         $item = new OrderItem();
         $item->setVariant($variant);
@@ -351,13 +505,20 @@ final class OrderDescriberTest extends TestCase
     }
 
     /**
+     * An adjustment labelled by its type unless given a label
+     *
      * @param array<string, mixed> $details
      */
-    private static function adjustment(string $type, int $amount, bool $neutral = false, array $details = []): AdjustmentInterface
-    {
+    private static function adjustment(
+        string $type,
+        int $amount,
+        bool $neutral = false,
+        array $details = [],
+        ?string $label = null,
+    ): AdjustmentInterface {
         $adjustment = new Adjustment();
         $adjustment->setType($type);
-        $adjustment->setLabel($type);
+        $adjustment->setLabel($label ?? $type);
         $adjustment->setAmount($amount);
         $adjustment->setNeutral($neutral);
         $adjustment->setDetails($details);

@@ -8,6 +8,7 @@ use Doctrine\Common\Collections\ArrayCollection;
 use PHPUnit\Framework\TestCase;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver;
+use Sylius\Component\Core\Model\Adjustment;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItemInterface;
 use Sylius\Component\Core\Model\ShipmentInterface;
@@ -70,6 +71,34 @@ final class VatRateResolverTest extends TestCase
         $order->getShipments()->willReturn(new ArrayCollection());
 
         self::assertSame(0.0, (new VatRateResolver())->forShipping($order->reveal()));
+    }
+
+    /**
+     * @test
+     *
+     * @dataProvider adjustmentDetails
+     *
+     * @param array<string, mixed> $details
+     */
+    public function it_resolves_an_adjustments_rate_from_its_details_else_zero(array $details, float $expectedRate): void
+    {
+        $adjustment = new Adjustment();
+        $adjustment->setType('payment_fee');
+        $adjustment->setAmount(2_500);
+        $adjustment->setDetails($details);
+
+        self::assertSame($expectedRate, (new VatRateResolver())->forAdjustment($adjustment));
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, float}>
+     */
+    public static function adjustmentDetails(): iterable
+    {
+        yield 'a rate' => [['taxRateAmount' => 0.25], 0.25];
+        yield 'a rate stored as a string' => [['taxRateAmount' => '0.255'], 0.255];
+        yield 'no rate' => [[], 0.0];
+        yield 'a rate that is not a number' => [['taxRateAmount' => 'standard'], 0.0];
     }
 
     /**

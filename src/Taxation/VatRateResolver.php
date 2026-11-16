@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Taxation;
 use Sylius\Component\Core\Model\AdjustmentInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\OrderItemInterface;
+use Sylius\Component\Order\Model\AdjustmentInterface as BaseAdjustmentInterface;
 
 /**
  * Resolves the VAT rate Quickpay should be told about (a fraction, e.g. 0.25) from the tax
@@ -46,6 +47,15 @@ final class VatRateResolver implements VatRateResolverInterface
         }
 
         return 0.0;
+    }
+
+    /**
+     * The rate in the adjustment's details, where Sylius stores a tax adjustment's rate and a plugin may store its own,
+     * else 0: Sylius doesn't tax an adjustment outside the units and shipping
+     */
+    public function forAdjustment(BaseAdjustmentInterface $adjustment): float
+    {
+        return self::rateFromDetails($adjustment->getDetails()) ?? 0.0;
     }
 
     /**

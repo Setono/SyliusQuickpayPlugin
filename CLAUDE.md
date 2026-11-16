@@ -87,8 +87,8 @@ helper. A caller reading a Quickpay payment (the fraud check, the operations pan
 report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); a
 caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts. The order describer's
 unit test builds real Sylius orders (items, units, adjustments, addresses, customers, shipments) and uses the real VAT
-rate resolver. The convert action is glue around payum-quickpay's convert, which the library tests, so it is tested
-only functionally, through the real gateway.
+rate resolver; each case asserts that the basket and shipping add up to the order total. The convert action is glue
+around payum-quickpay's convert, which the library tests, so it is tested only functionally, through the real gateway.
 
 ### Functional suite
 `tests/Functional/` holds kernel tests against the test application's database (create it once with
@@ -173,17 +173,27 @@ ADR: **payum-quickpay owns the convert; the plugin only describes the order.** A
   `Taxation\VatRateResolverInterface`; both decoratable) `describe(OrderInterface): OrderDescription` returns
   payum-quickpay's value, holding the SDK's own `Address`, `BasketItem`, `Shipping` and `Shopsystem`. Each address:
   "first last" name, company, street, city, postcode, province name or else code, the country as alpha-3 (Symfony
-  Intl), the phone as both phone and mobile number, the customer's email. One `BasketItem` per order item: quantity,
-  variant code, "product variant" name, the first unit's fully discounted price, the item's VAT rate. Shipping: the
-  order's shipping total and the shipping VAT rate, always sent. Shop system: `setono/sylius-quickpay-plugin` and its
-  installed version, or `unknown`. VAT rates come from `Taxation/VatRateResolver` (reads the tax adjustments, falling
-  back to deriving the rate from the totals). A part the order lacks is left out, so the checkout still reaches the
-  payment window: no customer or email → addresses without an email; no billing address → no invoice address; no
-  shipping address → no shipping address; a country Symfony Intl has no alpha-3 code for → that address without a
-  country. An order item without a variant, or an address without a street or a country, still fails: Sylius always
-  sets them, so such an order is broken. The basket's item price is the first unit's price without tax added on top,
-  so in a tax-on-top channel, or with discount cents spread unevenly across units, basket + shipping doesn't sum to
-  the payment amount: today's mapping, pinned by the describer's unit test; changing it is an issue of its own.
+  Intl), the phone as both phone and mobile number, the customer's email. **The basket and shipping add up to the
+  order total** (Klarna requires basket + shipping = the payment's amount; Quickpay's `item_price` is per unit, VAT
+  included):
+  - per order item, one `BasketItem` per distinct `OrderItemUnit::getTotal()` (price + the unit's promotions + tax
+    added on top; included tax is neutral, so it is gross either way), in the order the units come: the units with
+    that total as quantity, the variant code, the product and variant names joined by a space only when both are set,
+    the unit total, the item's VAT rate (`forOrderItem()`); a unit total of 0 still gets its line;
+  - then one line per non-neutral, non-zero adjustment on the item itself, and after every item, one per such
+    adjustment on the order except the types `Order::getShippingTotal()` counts (shipping, order shipping promotion,
+    tax): quantity 1, its amount (negative for a discount or gift card), its type as item number, its label (else its
+    type) as name, never its origin code (a gift card's or coupon's code), the VAT rate from `forAdjustment()`.
+
+  It doesn't add up when the payment's amount isn't the order total (partial payments, Quickpay's auto fee) or Sylius
+  clamps a negative unit, item or order total at 0. Shipping: the order's shipping total and the shipping VAT rate,
+  always sent. Shop system: `setono/sylius-quickpay-plugin` and its installed version, or `unknown`. VAT rates come
+  from `Taxation/VatRateResolver` (reads the tax adjustments, falling back to deriving the rate from the totals; an
+  adjustment line's rate is its details' `taxRateAmount`, else 0). A part the order lacks is left out, so the checkout
+  still reaches the payment window: no customer or email → addresses without an email; no billing address → no
+  invoice address; no shipping address → no shipping address; a country Symfony Intl has no alpha-3 code for → that
+  address without a country. An order item without a variant, or an address without a street or a country, still
+  fails: Sylius always sets them, so such an order is broken.
 - **payum-quickpay's convert** owns the rest: the order id (`order_prefix` + the payment number), finding or creating
   the Quickpay payment (a never-paid one under the same order id is picked up, one with an approved operation
   refused), the currency check, the continue/cancel urls from the token, the scalar details (`quickpayPaymentId`,
