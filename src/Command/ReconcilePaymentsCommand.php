@@ -269,7 +269,7 @@ final class ReconcilePaymentsCommand extends Command
 
         foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
             if (null !== $limit && \count($rows) >= $limit) {
-                $notQueried[] = sprintf('"%s"', $gatewayConfiguration->gatewayName);
+                $notQueried[] = $gatewayConfiguration->gatewayName;
 
                 continue;
             }
@@ -315,7 +315,7 @@ final class ReconcilePaymentsCommand extends Command
             $io->warning(sprintf(
                 'The report stopped at the limit of %d payment(s) and %s. Raise --limit to see more.',
                 $limit,
-                [] === $notQueried ? 'may be incomplete' : sprintf("didn't query the gateway(s) %s", implode(', ', $notQueried)),
+                [] === $notQueried ? 'may be incomplete' : sprintf("didn't query the gateway(s) %s", self::quoted($notQueried)),
             ));
         }
 

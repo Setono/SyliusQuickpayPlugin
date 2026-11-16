@@ -17,6 +17,7 @@ use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsRun;
 use Setono\SyliusQuickpayPlugin\Reconciliation\WindowReason;
 use Setono\SyliusQuickpayPlugin\Tests\Cache\RefusingArrayAdapter;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -931,7 +932,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
      */
     private static function config(string $apiKey): array
     {
-        return ['api_key' => $apiKey, 'private_key' => self::PRIVATE_KEY];
+        return ['api_key' => $apiKey] + GatewayConfigurations::USABLE;
     }
 
     /**
