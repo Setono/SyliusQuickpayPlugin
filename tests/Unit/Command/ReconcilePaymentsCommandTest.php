@@ -23,6 +23,8 @@ use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 
 /**
  * The command's options and its fraud report. Reconciling payments is covered against the real gateway,
@@ -229,6 +231,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
             $this->reconciler->reveal(),
             $this->clientProvider->reveal(),
             $this->gatewayConfigurationProvider->reveal(),
+            new LockFactory(new InMemoryStore()),
         ));
 
         $tester = new CommandTester($application->find('setono:sylius-quickpay:reconcile-payments'));

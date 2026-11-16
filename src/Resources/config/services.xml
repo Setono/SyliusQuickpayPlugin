@@ -130,6 +130,8 @@
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
+            <!-- the run lock comes from the plugin's lock resource too, so a shared store keeps runs on different servers apart -->
+            <argument type="service" id="lock.setono_sylius_quickpay.factory"/>
 
             <tag name="console.command"/>
         </service>

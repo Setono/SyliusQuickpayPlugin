@@ -9,6 +9,8 @@ use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Component\Cache\Adapter\TraceableAdapter;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -428,6 +430,106 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * Overlapping runs, say cron starting one while the last is still going, neither ask Quickpay the same thing
+     * twice nor move the watermark against each other. A skipped run is no failure: the run going on does the work.
+     *
+     * @test
+     */
+    public function a_run_started_while_another_is_reconciling_payments_skips_and_changes_nothing(): void
+    {
+        self::bootKernel();
+
+        // An earlier run left a watermark and a payment to retry
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_PROCESSING, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->quickpay()->respond('GET', '/payments/501', new Response(500, ['Content-Type' => 'application/json'], '{"message": "Quickpay is down"}'));
+        self::assertSame(Command::FAILURE, $this->executeCommand([])->getStatusCode());
+        $stored = $this->storedRunState();
+        self::assertNotSame([], $stored);
+
+        // Quickpay captured it since
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $sent = \count($this->quickpay()->sentRequests());
+        $this->holdRunLock();
+
+        $tester = $this->executeCommand([]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertSame('Another run is reconciling payments; skipped.', trim($tester->getDisplay()));
+        self::assertSame([], \array_slice($this->quickpay()->sentRequests(), $sent));
+        self::assertSame(PaymentInterface::STATE_PROCESSING, $this->reload($payment)->getState());
+        self::assertSame($stored, $this->storedRunState());
+    }
+
+    /**
+     * However a run ends, the run after it isn't skipped
+     *
+     * @test
+     */
+    public function a_finished_run_releases_the_run_lock_so_the_next_run_reconciles(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_PROCESSING, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+
+        // A run that throws: nothing answers its list request
+        try {
+            $this->executeCommand([]);
+            self::fail('The run did not throw');
+        } catch (\LogicException $e) {
+            self::assertStringContainsString('No response scripted for "GET /payments', $e->getMessage());
+        }
+
+        // A run that fails: a payment errors
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->quickpay()->respond('GET', '/payments/501', new Response(500, ['Content-Type' => 'application/json'], '{"message": "Quickpay is down"}'));
+        self::assertSame(Command::FAILURE, $this->executeCommand([])->getStatusCode());
+
+        // A run that succeeds
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $tester = $this->executeCommand([]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('1 checked, 1 transitioned, 0 unchanged, 0 skipped, 0 errored', $tester->getDisplay());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+
+        // ...and released it too
+        $this->holdRunLock();
+    }
+
+    /**
+     * A dry run and the fraud report change nothing, so a run reconciling payments never blocks them
+     *
+     * @test
+     */
+    public function a_dry_run_and_the_fraud_report_run_while_another_run_is_reconciling_payments(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $this->holdRunLock();
+
+        $tester = $this->executeCommand(['--dry-run' => true]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString(
+            sprintf('Payment %s: "authorized", would apply "complete" (Quickpay → "completed")', (string) $payment->getId()),
+            $tester->getDisplay(),
+        );
+        self::assertSame(['GET /payments', 'GET /payments/501'], $this->quickpay()->sentRequests());
+
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('1 payment(s) flagged as fraud suspected', self::normalized($tester->getDisplay()));
+        self::assertSame(['GET /payments', 'GET /payments/501', 'GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
      * @test
      */
     public function the_limit_is_for_the_fraud_report_only(): void
@@ -552,6 +654,22 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         self::assertCount(1, $lines);
 
         return $lines[0];
+    }
+
+    /**
+     * What the runs so far stored for the next run to start from: each Quickpay account's watermark and the retry list
+     *
+     * @return array<mixed>
+     */
+    private function storedRunState(): array
+    {
+        $cache = self::getContainer()->get('setono_sylius_quickpay.reconcile');
+        if ($cache instanceof TraceableAdapter) {
+            $cache = $cache->getPool();
+        }
+        self::assertInstanceOf(ArrayAdapter::class, $cache);
+
+        return $cache->getValues();
     }
 
     private static function normalized(string $display): string
