@@ -130,9 +130,11 @@ customer whose checkout fails. A valid key whose API user lacks the `/ping` perm
 `/payments` read instead, so a locked-down API user never blocks saving; neither does an unreachable
 Quickpay — the check fails open on anything but an explicit rejection, and logs at info level why the key couldn't be
 verified. With the API key accepted, an **Agreement id** is looked up on the account as well, and refused if Quickpay
-doesn't find it — checkout would otherwise fail when it creates the payment link with that agreement. It fails open the
-same way: an API user without the `/agreements` permission, or an unreachable Quickpay, never blocks saving, and why the
-agreement couldn't be verified is logged at info level. Fixtures, the console and writes straight to the database skip
+doesn't find it. Quickpay accepts a payment link with an agreement id it doesn't know, so without this check the mistake
+only shows when a customer's payment window fails to open. The lookup needs the API user's permission to read
+agreements (`GET /agreements/:id`); grant it, or the check can't tell. It fails open the same way as the API key: an
+API user without the `/agreements` permission, or an unreachable Quickpay, never blocks saving, and why the agreement
+couldn't be checked is logged at info level (the doctor prints it as a warning). Fixtures, the console and writes straight to the database skip
 this validation.
 
 **Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway

@@ -339,8 +339,9 @@ The service definitions changed accordingly; only a redefinition or decoration o
   prints the same case as a warning, `Could not check the api key: <Quickpay's error>`.
 - **Saving refuses an agreement id the Quickpay account doesn't have.** Once Quickpay accepts the api key, saving a
   Quickpay payment method with an agreement id reads that agreement from Quickpay, and a 404 refuses the save with an
-  error on the agreement field in the admin's language. Before, only the doctor found it, and checkout failed when it
-  created the payment link with that agreement id. When the api user may not read agreements (401/403) or Quickpay
+  error on the agreement field in the admin's language. Before, only the doctor found it: Quickpay accepts a payment link
+  with an agreement id it doesn't know, so the mistake only showed when a customer's payment window failed to open. The
+  check needs the api user's permission to read agreements. When the api user may not read agreements (401/403) or Quickpay
   answers with another error, the payment method is saved and the reason is logged at info level. Without an agreement
   id, Quickpay isn't asked. Fixtures, the console and direct database writes are still not validated.
 - **`doctor --live` prints the payment link permission check as one line.** It passes (✔), fails (✖) or, when
