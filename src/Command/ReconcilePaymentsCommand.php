@@ -193,10 +193,12 @@ final class ReconcilePaymentsCommand extends Command
 
                         break;
                     case ReconcileOutcome::Skipped:
-                        // Whoever holds its lock may fail to reconcile it, so the next run makes sure
+                        // Only a callback holds a payment's lock while a run writes: the run lock keeps other runs
+                        // out, and a dry run's status check takes no payment lock. The callback may fail to reconcile
+                        // it, so the next run makes sure
                         ++$skipped;
                         $run->retryLater($payment);
-                        $io->writeln(self::describe($payment, 'skipped, it is locked by a callback being handled or another run'));
+                        $io->writeln(self::describe($payment, 'skipped, a callback is reconciling it'));
 
                         break;
                 }

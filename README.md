@@ -359,7 +359,7 @@ changed is listed with its state before and after and the state Sylius maps its 
 
 ```
 Payment 42: "new" -> "authorized" (Quickpay → "authorized")
-Payment 43: skipped, it is locked by a callback being handled or another run
+Payment 43: skipped, a callback is reconciling it
 
  [OK] 3 checked, 1 transitioned, 1 unchanged, 1 skipped, 0 errored
 ```
@@ -615,11 +615,11 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
   then lets Quickpay capture the money at authorization. The admin form shows it as "Immediately". Open the payment
   method in the admin, choose the capture mode you want and save it: the mode is then stored, and the warning goes.
 
-- `Payment 42: skipped, it is locked by a callback being handled or another run`
+- `Payment 42: skipped, a callback is reconciling it`
 
-  The reconciliation command found the payment's lock held: a callback for it was being handled at that moment,
-  or another run of the command was reconciling it. Nothing was changed, and every later run retries the payment
-  until it reconciles.
+  The reconcile command found the payment's lock held: a callback for it was being handled at that moment (another
+  run of the command can't hold it, since runs reconcile one at a time). Nothing was changed, and every later run
+  retries the payment until it reconciles.
   A lock is never left behind for long: a `flock` lock is released with the process holding it, and a lock in a
   shared store expires after 60 seconds.
 

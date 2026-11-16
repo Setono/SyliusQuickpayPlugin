@@ -492,7 +492,8 @@ status → transition mapping all live elsewhere.
   run)`, or `(no earlier run: the last <period>)`, or `(--full: the last <period>)`. Then `N payment(s) to retry` when
   the retry list isn't empty, and a warning per failed gateway, `Gateway(s) …: could not list the payments Quickpay
   changed: <message>`. A changed payment prints `Payment N: "<before>" -> "<after>" (Quickpay → "<target state>")`, a
-  skipped one `Payment N: skipped, it is locked by a callback being handled or another run`, and the summary is
+  skipped one `Payment N: skipped, a callback is reconciling it` (only a callback can hold a payment's lock while a
+  run writes: the run lock keeps other runs out, and a dry run's status check takes no payment lock), and the summary is
   `N checked, N transitioned, N unchanged, N skipped, N errored` (unchanged = no state change; its refreshed details
   are still saved).
 - **Errors.** Each payment is persisted by its own reconcile (no end-of-loop flush). The command catches any

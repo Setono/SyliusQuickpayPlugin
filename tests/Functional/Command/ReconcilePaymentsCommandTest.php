@@ -49,7 +49,7 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
             $display,
         );
         self::assertStringNotContainsString(sprintf('Payment %s:', (string) $unchanged->getId()), $display);
-        self::assertStringContainsString(sprintf('Payment %s: skipped', (string) $locked->getId()), $display);
+        self::assertStringContainsString(sprintf('Payment %s: skipped, a callback is reconciling it', (string) $locked->getId()), $display);
         self::assertStringContainsString('4 checked, 1 transitioned, 1 unchanged, 1 skipped, 1 errored', $display);
 
         // The run kept going after the error, and the transitioned payment was persisted with its order
