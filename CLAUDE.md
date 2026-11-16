@@ -14,8 +14,8 @@ client (`Setono\Quickpay\Client\*`), request/response DTOs (`Setono\Quickpay\Req
 state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
-base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.2`, the first release with the
-public `GatewayOptions`; the SDK is stable, `^1.3`).
+base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.3`, the first release whose
+convert takes an order description; the SDK is stable, `^1.3`).
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
@@ -84,7 +84,10 @@ flag with nothing decrypted, as Doctrine loads it), `USABLE` the two required ga
 helper. A caller reading a Quickpay payment (the fraud check, the operations panel) doubles
 `QuickpayClientProviderInterface` and returns the SDK's `Payment` objects or throws, never an SDK client (the fraud
 report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); a
-caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts.
+caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts. The order describer's
+unit test builds real Sylius orders (items, units, adjustments, addresses, customers, shipments) and uses the real VAT
+rate resolver. The convert action is glue around payum-quickpay's convert, which the library tests, so it is tested
+only functionally, through the real gateway.
 
 ### Functional suite
 `tests/Functional/` holds kernel tests against the test application's database (create it once with
@@ -110,7 +113,11 @@ adapter, take `$transitions = $this->recordPaymentTransitions()` before acting a
 `createSyliusPayment(..., orderedVariants: [$variant])` (the order then totals the payment's amount and paying it sells
 one unit of each); read the committed counts with `$this->inventoryOf($variant)`. To store another payment method with
 its gateway configuration as given (an unusable one, say, or another factory's), use
-`$this->createPaymentMethod($code, $config, factoryName: 'offline')`; its gateway is named after its code. A variant with fewer units on hold
+`$this->createPaymentMethod($code, $config, factoryName: 'offline')`; its gateway is named after its code. To build an
+order of your own, as a checkout needs one with addresses, taxes and a shipment, use `channel()`,
+`createOrder($channel, $paymentState, $number)`, `createOrderItem($variant, $unitPrice, $quantity)`,
+`quickpayPaymentMethod()` and `createResource($factoryId)` (`ConvertPaymentActionTest::createCheckoutPayment()` is
+one); a Quickpay request's JSON body is its `sentRequestOptions()` entry's `body`. A variant with fewer units on hold
 than ordered makes Sylius' sale throw mid-transition, a real failing state-machine callback. `$this->reconciler()` is
 the module as wired; `transitioningQuickpayStatuses` is the shared Quickpay status → transition data provider.
 `self::quickpayCallback($quickpayPaymentId)` builds Quickpay's signed callback for
@@ -126,24 +133,57 @@ resource is an in-memory store, shared within the test process only.
 
 ## Architecture
 
-The payment lifecycle is implemented with **Payum's action pattern**. The plugin overrides exactly one library
-action: `src/Action/ConvertPaymentAction.php`, registered in `src/Resources/config/services.xml` with
-`<tag name="payum.action" factory="quickpay">` (tagged actions are consulted before the factory defaults, so it
-shadows the library's own convert action). Everything else — authorize (payment-link creation + notify-token
-minting), capture, refund, cancel, status (balance-aware), notify (HMAC validation) — is handled by the library's
-2.x actions.
-
-- **`ConvertPaymentAction`** — turns a Sylius payment into a Quickpay payment. On first run it builds SDK DTOs
-  (`Address` incl. company name, `BasketItem` per order item, `Shipping`) and calls
-  `$this->api->payments()->create(new CreatePaymentRequest(...))`, then stores the scalar `quickpayPaymentId` +
-  `order_id` in the Sylius payment's `details` along with `amount`, `currency` and continue/cancel URLs. The
-  Payum `Convert` source is Payum's *synthetic* payment; the real Sylius order is resolved via the token identity
-  through `$this->payum->getStorage(...)`. Per-item and shipping VAT rates come from
-  `Taxation/VatRateResolver` (reads the tax adjustments, falling back to deriving the rate from the totals).
+The payment lifecycle is implemented with **Payum's action pattern**, by payum-quickpay's 2.x actions: convert
+(finding or creating the Quickpay payment), authorize (payment-link creation + notify-token minting), capture, refund,
+cancel, status (balance-aware), notify (HMAC validation). The plugin shadows none of them (ADR 0004). Its one Payum
+action, `src/Action/ConvertPaymentAction.php` (registered in `src/Resources/config/services.xml` with
+`<tag name="payum.action" factory="quickpay">`), takes Sylius' convert of the Sylius payment, which no library action
+supports, and hands the library's convert the order description (*Convert and the order description* below).
 
 Services use **FQCN ids** in `services.xml`, with an interface → class alias for every `*Interface` the plugin
 defines (`PaymentReconcilerInterface`, `GatewayConfigurationProviderInterface`, `PaymentProcessorInterface`,
 `PaymentProviderInterface`, `QuickpayClientProviderInterface`, ...) — inject the interface, alias resolution does the rest.
+
+### Convert and the order description (`src/Action/`, `src/OrderDescription/`)
+Read `GLOSSARY.md` (Order description) and `docs/adr/0004-payum-quickpay-owns-the-convert.md` first. The rule from the
+ADR: **payum-quickpay owns the convert; the plugin only describes the order.** A checkout's convert passes three steps:
+- **Sylius' convert of the Sylius payment.** On a new payment, Sylius' `CapturePaymentAction` and
+  `AuthorizePaymentAction` first execute `Convert` to `array` with the Sylius payment itself as the source, fall back
+  to a synthetic Payum payment only on `RequestNotSupportedException`, and store the result as the payment's details.
+  `Action/ConvertPaymentAction` (args `OrderDescriberInterface`, `sylius.payment_description_provider`) supports
+  exactly that first attempt, a Sylius core payment as the source. The library's convert supports only Payum payment
+  models, which a Sylius payment isn't, so the two never compete, Payum's action order doesn't matter, and the
+  fallback never runs for a Quickpay gateway. The action builds payum-quickpay's `Model\DescribedPayment` as Sylius'
+  fallback builds its synthetic payment (number = order number, total = payment amount, currency = order currency,
+  client email and id = the customer's, Payum's description from Sylius' payment description provider, details = the
+  Sylius payment's), sets the describer's order description on it, executes `Convert` of it on the gateway with the
+  request's token, and returns that result. It reads the order from the payment, so it needs no token (without one,
+  the library sets no continue/cancel urls).
+- **The order describer.** `OrderDescription\OrderDescriberInterface` (service `OrderDescriber`, arg
+  `Taxation\VatRateResolverInterface`; both decoratable) `describe(OrderInterface): OrderDescription` returns
+  payum-quickpay's value, holding the SDK's own `Address`, `BasketItem`, `Shipping` and `Shopsystem`. Each address:
+  "first last" name, company, street, city, postcode, province name or else code, the country as alpha-3 (Symfony
+  Intl), the phone as both phone and mobile number, the customer's email. One `BasketItem` per order item: quantity,
+  variant code, "product variant" name, the first unit's fully discounted price, the item's VAT rate. Shipping: the
+  order's shipping total and the shipping VAT rate, always sent. Shopsystem: `setono/sylius-quickpay-plugin` and its
+  installed version, or `unknown`. VAT rates come from `Taxation/VatRateResolver` (reads the tax adjustments, falling
+  back to deriving the rate from the totals). A part the order lacks is left out, so the checkout still reaches the
+  payment window: no customer or email → addresses without an email; no billing address → no invoice address; no
+  shipping address → no shipping address; a country Symfony Intl has no alpha-3 code for → that address without a
+  country. An order item without a variant still fails: Sylius always sets one, so such an order is broken. The
+  basket's item price is the first unit's price without tax added on top, so in a tax-on-top channel, or with discount
+  cents spread unevenly across units, basket + shipping doesn't sum to the payment amount: today's mapping, pinned by
+  the describer's unit test; changing it is an issue of its own.
+- **payum-quickpay's convert** owns the rest: the order id (`order_prefix` + the payment number), finding or creating
+  the Quickpay payment (a never-paid one under the same order id is picked up, one with an approved operation
+  refused), the currency check, the continue/cancel urls from the token, the scalar details (`quickpayPaymentId`,
+  `order_id`, `amount`, `currency`, the urls) and the exceptions. It sends the order description only when it creates
+  the Quickpay payment: a picked-up payment, or one whose details already carry a `quickpayPaymentId`, keeps the
+  description it was created with, and no update is sent. See its README, *Describing the order*.
+
+`tests/Functional/Action/ConvertPaymentActionTest` runs the whole path: a checkout's `Capture` with a token through the
+real gateway (the create request's body, the stored details, the redirect to the payment window), a picked-up
+payment, and a convert without a token. `tests/Unit/OrderDescription/OrderDescriberTest` pins the mapping.
 
 ### Gateway configuration (`src/GatewayConfiguration/`)
 Read `GLOSSARY.md` (Gateway configuration, Gateway option, Capture mode) and
@@ -536,7 +576,10 @@ in that folder) and need `assets:install` in the host app.
 - The plugin never applies a payment transition (ADR 0001). To bring a Sylius payment in line with Quickpay,
   reconcile it (`PaymentReconcilerInterface`); to read Quickpay's status without side effects, use the status check.
   Don't execute a status request or `Notify` on a Sylius payment anywhere else.
-- New Payum behavior = a new class in `src/Action/` tagged `payum.action factory="quickpay"` in `services.xml`.
+- New Payum behavior = a new class in `src/Action/` tagged `payum.action factory="quickpay"` in `services.xml`,
+  supporting only requests no payum-quickpay action supports (the convert: a Sylius payment as the source), so each
+  library action stays the only one for its requests (ADR 0004). What Quickpay is told when a payment is created goes
+  through the order describer; a part payum-quickpay's `OrderDescription` can't carry yet starts in the library.
   Services are wired explicitly in `services.xml` (no autowiring/autoconfiguration in this bundle).
 - `composer.lock` is gitignored — this is a plugin, so no lockfile is committed.
 - `PaymentProcessorInterface` is adapter-agnostic (`(PaymentInterface $payment, string $transition)`), fed
