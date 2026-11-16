@@ -146,6 +146,28 @@ final class GatewayChecksTest extends TestCase
     }
 
     /**
+     * The connection drops after Quickpay's headers arrived. Which error the SDK reports depends on the HTTP client's
+     * version: an incomplete response when reading the body throws, a body that isn't JSON when the client hands over
+     * what arrived. Either way the answer proves nothing.
+     *
+     * @test
+     */
+    public function it_leaves_an_api_key_undetermined_when_quickpays_answer_breaks_off(): void
+    {
+        $this->quickpay->respond('GET', '/ping', new MockResponse((static function (): \Generator {
+            yield '{"msg": "Pong';
+
+            throw new \RuntimeException('Connection reset by peer');
+        })(), ['http_code' => 200, 'response_headers' => ['Content-Type' => 'application/json']]));
+
+        $verdict = $this->checks()->apiKey(GatewayConfigurations::of());
+
+        self::assertSame(VerdictOutcome::Undetermined, $verdict->outcome);
+        self::assertStringContainsString('[GET https://api.quickpay.net/ping]', (string) $verdict->reason);
+        self::assertSame(['GET /ping'], $this->quickpay->sentRequests());
+    }
+
+    /**
      * Quickpay's errors other than a refusal, each with the message the SDK reports it with (for the /ping request)
      *
      * @return iterable<string, array{ResponseInterface|MockResponse, string}>
@@ -167,15 +189,6 @@ final class GatewayChecksTest extends TestCase
         yield 'an answer that is not JSON' => [
             new Response(200, ['Content-Type' => 'text/html'], '<html>Maintenance</html>'),
             'Could not decode response body as JSON [GET https://api.quickpay.net/ping]: Syntax error.',
-        ];
-        // The connection drops after Quickpay's headers arrived: the SDK reports it as an incomplete response
-        yield 'an answer that breaks off' => [
-            new MockResponse((static function (): \Generator {
-                yield '{"msg": "Pong';
-
-                throw new \RuntimeException('Connection reset by peer');
-            })(), ['http_code' => 200, 'response_headers' => ['Content-Type' => 'application/json']]),
-            'The response body could not be read in full [GET https://api.quickpay.net/ping] (status code: 200): Unable to read stream contents: Connection reset by peer',
         ];
     }
 
