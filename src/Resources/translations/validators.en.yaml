@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'The deprecated "auto_capture" option must be true or false. Leave it out and choose the capture mode instead.'
             branding_id: 'Enter a positive whole number, or leave the field empty.'
             language: 'The "language" option must be text, for example a language code such as "en" or "da".'
-            order_prefix: 'Enter text, or leave the field empty.'
+            order_prefix: 'Enter at most 19 letters, digits, spaces, ".", "_" or "-", or leave the field empty.'
             payment_methods: 'Enter payment methods separated by commas, or leave the field empty.'
             private_key: 'Enter the private key of your account (Settings → Integration in the Quickpay manager).'
             synchronized: 'This must be on or off (true or false).'
         invalid_gateway_option: 'The Quickpay gateway doesn''t accept the value of the gateway option "{{ option }}".'
+        order_id:
+            refused: 'With this prefix, order {{ number }} would get the Quickpay order id "{{ order_id }}", which Quickpay refuses: it accepts 4 to 20 letters, digits, spaces, ".", "_" or "-".'
         unreadable: 'The gateway configuration can''t be read, as happens when it is encrypted. Encrypting gateway configurations is not supported.'

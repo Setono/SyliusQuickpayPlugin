@@ -15,13 +15,12 @@ use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
 use Symfony\Component\Form\FormInterface;
-use Symfony\Component\Validator\Constraints\Length;
 
 /**
  * Saving the payment method validates the whole gateway configuration by the gateway's own rules, in the admin and the
  * Admin API alike, and puts each error on its field
  * ({@see \Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfiguration}), so the fields carry no
- * constraints of their own but the order prefix's length
+ * constraints of their own: the order prefix included, which is checked by the order id it gives the store's latest order
  *
  * @extends AbstractType<array<string, mixed>>
  */
@@ -83,12 +82,6 @@ final class GatewayConfigurationType extends AbstractType
                 'required' => false,
                 'attr' => [
                     'placeholder' => 'qp_',
-                ],
-                'constraints' => [
-                    new Length([
-                        'max' => 11,
-                        'groups' => 'sylius',
-                    ]),
                 ],
             ])
             // Presentation

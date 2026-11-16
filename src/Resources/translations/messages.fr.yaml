@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Opérations synchrones'
                 synchronized_help: 'Exécuter la capture, le remboursement et l''annulation de manière synchrone au lieu de s''appuyer sur le callback Quickpay'
                 order_prefix: 'Préfixe de commande'
-                order_prefix_help: 'Ajouté devant les numéros de commande pour former l''ID de commande Quickpay — doit être unique par projet et environnement partageant le même compte Quickpay, 11 caractères maximum'
+                order_prefix_help: 'Ajouté devant les numéros de commande pour former l''ID de commande Quickpay — doit être unique par projet et environnement partageant le même compte Quickpay. Uniquement des lettres, chiffres, espaces, ".", "_" et "-" ; préfixe et numéro de commande ensemble, 20 caractères maximum'
                 branding_id: 'ID de branding'
                 branding_id_help: 'Facultatif : l''ID du branding de la fenêtre de paiement à utiliser'
     ui:

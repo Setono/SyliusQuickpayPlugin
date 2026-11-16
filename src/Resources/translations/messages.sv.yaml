@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Synkrona operationer'
                 synchronized_help: 'Utför debitering, återbetalning och annullering synkront i stället för att förlita sig på Quickpay-callbacket'
                 order_prefix: 'Orderprefix'
-                order_prefix_help: 'Sätts före ordernummer och bildar Quickpay-order-id — måste vara unikt per projekt och miljö som delar samma Quickpay-konto, och högst 11 tecken'
+                order_prefix_help: 'Sätts före ordernummer och bildar Quickpay-order-id — måste vara unikt per projekt och miljö som delar samma Quickpay-konto. Endast bokstäver, siffror, mellanslag, ".", "_" och "-"; prefix och ordernummer tillsammans högst 20 tecken'
                 branding_id: 'Branding-id'
                 branding_id_help: 'Valfritt: id för den betalningsfönster-branding som ska användas'
     ui:

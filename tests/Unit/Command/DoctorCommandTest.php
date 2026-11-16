@@ -11,6 +11,7 @@ use Prophecy\Prophecy\ObjectProphecy;
 use Setono\SyliusQuickpayPlugin\Command\DoctorCommand;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
@@ -36,6 +37,9 @@ final class DoctorCommandTest extends TestCase
     /** @var ObjectProphecy<RouterInterface> */
     private ObjectProphecy $router;
 
+    /** @var ObjectProphecy<LatestOrderNumberProviderInterface> */
+    private ObjectProphecy $latestOrderNumberProvider;
+
     protected function setUp(): void
     {
         $this->gatewayChecks = $this->prophesize(GatewayChecksInterface::class);
@@ -47,6 +51,9 @@ final class DoctorCommandTest extends TestCase
 
         $this->router = $this->prophesize(RouterInterface::class);
         $this->router->getRouteCollection()->willReturn(self::routes(true));
+
+        $this->latestOrderNumberProvider = $this->prophesize(LatestOrderNumberProviderInterface::class);
+        $this->latestOrderNumberProvider->getLatestOrderNumber()->willReturn('000000123');
     }
 
     /**
@@ -254,11 +261,11 @@ final class DoctorCommandTest extends TestCase
     }
 
     /**
-     * The order prefix checks need no gateway, only the order prefix
+     * The order id check needs no gateway, only the order prefix
      *
      * @test
      */
-    public function it_checks_the_order_prefix_of_an_unusable_gateway_configuration(): void
+    public function it_checks_the_order_id_of_an_unusable_gateway_configuration(): void
     {
         $this->configureGateways(GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_way_too_long_', 'use_authorize' => true]));
 
@@ -266,24 +273,26 @@ final class DoctorCommandTest extends TestCase
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         self::assertStringContainsString('The "private_key" option is required', $tester->getDisplay());
-        self::assertStringContainsString('The order prefix "qp_way_too_long_" is 16 characters', $tester->getDisplay());
+        self::assertStringContainsString('The Quickpay order id "qp_way_too_long_000000123" (25 characters) is not one Quickpay accepts', $tester->getDisplay());
         self::assertStringContainsString('2 check(s) failed', $tester->getDisplay());
     }
 
     /**
+     * payum-quickpay's violation already says what is wrong with the order prefix, and no order id can be built from it
+     *
      * @test
      */
-    public function it_warns_when_a_usable_and_an_unusable_gateway_configuration_share_an_order_prefix(): void
+    public function it_skips_the_order_id_check_for_an_order_prefix_the_gateway_rejects(): void
     {
-        $this->configureGateways(
-            GatewayConfigurations::of(self::healthyConfig(), 'quickpay_a'),
-            GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_', 'use_authorize' => true], 'quickpay_b'),
-            GatewayConfigurations::encrypted('quickpay_c'),
-        );
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp#'])));
 
         $tester = $this->executeCommand();
 
-        self::assertStringContainsString('Gateways "quickpay_a", "quickpay_b" share the order prefix "qp_"', $tester->getDisplay());
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('The "order_prefix" option must be at most 19 letters', $tester->getDisplay());
+        self::assertStringNotContainsString('order id of the latest order', $tester->getDisplay());
+        self::assertStringNotContainsString('is not one Quickpay accepts', $tester->getDisplay());
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
     }
 
     /**
@@ -391,20 +400,111 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
-    public function it_fails_when_the_order_prefix_is_too_long(): void
+    public function it_passes_the_order_id_the_order_prefix_gives_the_latest_order(): void
     {
-        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_way_too_long_'])));
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $tester = $this->executeCommand();
 
-        self::assertSame(Command::FAILURE, $tester->getStatusCode());
-        self::assertStringContainsString('keep it to 11 or less', $tester->getDisplay());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertDisplayHasLine('✔ The order id of the latest order, "qp_000000123", is one Quickpay accepts', $tester);
     }
 
     /**
      * @test
      */
-    public function it_warns_when_two_gateways_share_an_order_prefix(): void
+    public function it_fails_when_the_order_prefix_gives_the_latest_order_an_order_id_quickpay_refuses(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_shop_2026_'])));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertDisplayHasLine(
+            '✖ The Quickpay order id "qp_shop_2026_000000123" (22 characters) is not one Quickpay accepts: 4–20 characters of '
+            . 'letters, digits, space, ".", "_" and "-". It is built from the order prefix "qp_shop_2026_" and the payment '
+            . 'number "000000123" — adjust the prefix so the two together fit. The number is the latest order\'s, and checkout '
+            . 'fails until the two fit.',
+            $tester,
+        );
+    }
+
+    /**
+     * A store numbering its orders its own way: no prefix fits a number Quickpay refuses
+     *
+     * @test
+     */
+    public function it_fails_when_the_latest_order_number_holds_a_character_quickpay_refuses(): void
+    {
+        $this->latestOrderNumberProvider->getLatestOrderNumber()->willReturn('2026/123');
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString('The Quickpay order id "qp_2026/123" (11 characters) is not one Quickpay accepts', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_checks_sylius_default_first_order_number_while_there_are_no_orders(): void
+    {
+        $this->latestOrderNumberProvider->getLatestOrderNumber()->willReturn(null);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertDisplayHasLine('✔ No orders yet: a Sylius order number like "000000001" gives the order id "qp_000000001", which Quickpay accepts', $tester);
+    }
+
+    /**
+     * @test
+     */
+    public function it_fails_with_sylius_default_first_order_number_while_there_are_no_orders(): void
+    {
+        $this->latestOrderNumberProvider->getLatestOrderNumber()->willReturn(null);
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'qp_shop_2026_'])));
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString(
+            'The Quickpay order id "qp_shop_2026_000000001" (22 characters) is not one Quickpay accepts',
+            $tester->getDisplay(),
+        );
+        self::assertStringContainsString(
+            'There are no orders yet, so the number is Sylius\' default first order number, and checkout fails until the two fit.',
+            $tester->getDisplay(),
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function it_reads_the_latest_order_number_once_for_every_gateway(): void
+    {
+        $this->configureGateways(
+            GatewayConfigurations::of(self::healthyConfig(), 'quickpay_a'),
+            GatewayConfigurations::of(self::healthyConfig(['order_prefix' => 'shop_']), 'quickpay_b'),
+        );
+
+        $this->latestOrderNumberProvider->getLatestOrderNumber()->shouldBeCalledOnce()->willReturn('000000123');
+
+        $tester = $this->executeCommand();
+
+        self::assertDisplayHasLine('✔ The order id of the latest order, "qp_000000123", is one Quickpay accepts', $tester);
+        self::assertDisplayHasLine('✔ The order id of the latest order, "shop_000000123", is one Quickpay accepts', $tester);
+    }
+
+    /**
+     * Within one store a shared order prefix means a shared order id only for the same order, which payum-quickpay picks
+     * up; gateways on different accounts never collide
+     *
+     * @test
+     */
+    public function it_does_not_warn_when_two_gateways_share_an_order_prefix(): void
     {
         $this->configureGateways(
             GatewayConfigurations::of(self::healthyConfig(), 'quickpay_a'),
@@ -414,7 +514,7 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('share the order prefix "qp_"', $tester->getDisplay());
+        self::assertStringNotContainsString('share the order prefix', $tester->getDisplay());
     }
 
     /**
@@ -530,7 +630,8 @@ final class DoctorCommandTest extends TestCase
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('No order prefix configured', $tester->getDisplay());
+        self::assertDisplayHasLine('✔ The order id of the latest order, "000000123", is one Quickpay accepts', $tester);
+        self::assertDisplayHasLine('✔ No order prefix configured — make sure order numbers are unique on the Quickpay account', $tester);
     }
 
     /**
@@ -538,6 +639,8 @@ final class DoctorCommandTest extends TestCase
      */
     public function it_warns_when_no_quickpay_gateway_is_configured(): void
     {
+        $this->latestOrderNumberProvider->getLatestOrderNumber()->shouldNotBeCalled();
+
         $tester = $this->executeCommand();
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
@@ -591,6 +694,7 @@ final class DoctorCommandTest extends TestCase
             $this->gatewayChecks->reveal(),
             $this->gatewayConfigurationProvider->reveal(),
             $this->router->reveal(),
+            $this->latestOrderNumberProvider->reveal(),
         ));
 
         $tester = new CommandTester($application->find('setono:sylius-quickpay:doctor'));

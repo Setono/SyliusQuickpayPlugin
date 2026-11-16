@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Command;
 
+use Setono\Payum\Quickpay\Exception\InvalidOrderId;
 use Setono\Payum\Quickpay\GatewayOptions;
+use Setono\Payum\Quickpay\OrderId;
 use Setono\Quickpay\Callback\CallbackValidator;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
@@ -24,7 +27,8 @@ use Symfony\Component\Routing\RouterInterface;
  * Runs the checks that otherwise surface as support cases (see the README's Troubleshooting
  * section) against every configured Quickpay gateway: its gateway options, read through the
  * gateway configuration module by the rules the gateway is built from, then the api key and
- * private key, the api user's permissions, the agreement, the order prefix, and the notify route.
+ * private key, the api user's permissions, the agreement, the order id the order prefix gives the latest
+ * order, and the notify route.
  * Read-only unless --live is passed.
  */
 #[AsCommand(
@@ -33,18 +37,13 @@ use Symfony\Component\Routing\RouterInterface;
 )]
 final class DoctorCommand extends Command
 {
-    /**
-     * Quickpay limits the order id to 20 characters and Sylius order numbers use 9, so a longer
-     * prefix eventually produces "order_id must have length between 4 and 20" at checkout
-     */
-    private const MAX_ORDER_PREFIX_LENGTH = 11;
-
     private int $failures = 0;
 
     public function __construct(
         private readonly GatewayChecksInterface $gatewayChecks,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly RouterInterface $router,
+        private readonly LatestOrderNumberProviderInterface $latestOrderNumberProvider,
     ) {
         parent::__construct();
     }
@@ -76,13 +75,14 @@ final class DoctorCommand extends Command
             $this->warn($io, 'No Quickpay payment methods are configured yet — nothing else to check');
         }
 
-        $this->checkDuplicateOrderPrefixes($io, $gateways);
+        // The order id check of every gateway uses the same order: the store numbers its orders one way
+        $latestOrderNumber = [] === $gateways ? null : $this->latestOrderNumberProvider->getLatestOrderNumber();
 
         foreach ($gateways as [$gatewayConfiguration, $options]) {
             $io->section(sprintf('Gateway "%s"', $gatewayConfiguration->gatewayName));
 
             if ($options instanceof UnusableGatewayConfiguration) {
-                $this->reportUnusable($io, $gatewayConfiguration, $options);
+                $this->reportUnusable($io, $gatewayConfiguration, $options, $latestOrderNumber);
 
                 continue;
             }
@@ -98,7 +98,7 @@ final class DoctorCommand extends Command
             );
             $this->checkPrivateKey($io, $options->privateKey);
             $this->checkAgreement($io, $gatewayConfiguration, $apiKeyAccepted);
-            $this->checkOrderPrefix($io, $options->orderPrefix);
+            $this->checkOrderId($io, $options->orderPrefix, $latestOrderNumber);
 
             if ($live) {
                 $this->checkPaymentLinkPermission($io, $gatewayConfiguration, $apiKeyAccepted);
@@ -144,7 +144,7 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * One failed check per gateway option the gateway rejects, and the order prefix checks, which need no gateway.
+     * One failed check per gateway option the gateway rejects, and the order id check, which needs no gateway.
      * The checks against Quickpay are skipped: the gateway can't be built, and their errors would only follow from
      * the configuration's.
      */
@@ -152,6 +152,7 @@ final class DoctorCommand extends Command
         SymfonyStyle $io,
         GatewayConfiguration $gatewayConfiguration,
         UnusableGatewayConfiguration $unusable,
+        ?string $latestOrderNumber,
     ): void {
         // Nothing can be said about the stored options of an unreadable configuration
         if ($unusable->isUnreadable()) {
@@ -163,30 +164,13 @@ final class DoctorCommand extends Command
 
             $this->checkStoredOptions($io, $gatewayConfiguration);
 
-            $orderPrefix = self::orderPrefixOf($gatewayConfiguration);
+            $orderPrefix = $gatewayConfiguration->orderPrefix();
             if (null !== $orderPrefix) {
-                $this->checkOrderPrefix($io, $orderPrefix);
+                $this->checkOrderId($io, $orderPrefix, $latestOrderNumber);
             }
         }
 
         $this->warn($io, 'Skipped the checks against Quickpay of this gateway — they need a gateway configuration the gateway can be built from');
-    }
-
-    /**
-     * The order prefix the gateway sends, read even from a configuration the gateway rejects. Null when the
-     * configuration is unreadable, or the gateway rejects the order prefix itself, which its violation reports.
-     */
-    private static function orderPrefixOf(GatewayConfiguration $gatewayConfiguration): ?string
-    {
-        try {
-            $options = $gatewayConfiguration->optionsWithRejectedAsStored();
-        } catch (UnusableGatewayConfiguration) {
-            return null;
-        }
-
-        $orderPrefix = $options->values['order_prefix'] ?? null;
-
-        return !$options->isRejected('order_prefix') && is_string($orderPrefix) ? $orderPrefix : null;
     }
 
     /**
@@ -200,34 +184,6 @@ final class DoctorCommand extends Command
 
         if (!$gatewayConfiguration->isCaptureModeSet()) {
             $this->warn($io, 'The capture mode is not set, so checkout captures immediately — choose a capture mode on the payment method in the admin');
-        }
-    }
-
-    /**
-     * Two gateways sharing a prefix on the same account produce the same Quickpay order id for the
-     * same order, and "order_id already exists" for whichever payment reaches Quickpay second. Compared across every
-     * readable configuration, usable or not: an unusable one keeps its order prefix once it is fixed.
-     *
-     * @param list<array{GatewayConfiguration, GatewayOptions|UnusableGatewayConfiguration}> $gateways
-     */
-    private function checkDuplicateOrderPrefixes(SymfonyStyle $io, array $gateways): void
-    {
-        $byPrefix = [];
-        foreach ($gateways as [$gatewayConfiguration]) {
-            $orderPrefix = self::orderPrefixOf($gatewayConfiguration);
-            if (null !== $orderPrefix && '' !== $orderPrefix) {
-                $byPrefix[$orderPrefix][] = $gatewayConfiguration->gatewayName;
-            }
-        }
-
-        foreach ($byPrefix as $prefix => $gatewayNames) {
-            if (\count($gatewayNames) > 1) {
-                $this->warn($io, sprintf(
-                    'Gateways %s share the order prefix "%s" — their Quickpay order ids can collide',
-                    implode(', ', array_map(static fn (string $gatewayName): string => sprintf('"%s"', $gatewayName), $gatewayNames)),
-                    $prefix,
-                ));
-            }
         }
     }
 
@@ -270,22 +226,36 @@ final class DoctorCommand extends Command
         );
     }
 
-    private function checkOrderPrefix(SymfonyStyle $io, string $prefix): void
+    /**
+     * The Quickpay order id the order prefix gives the store's latest order, by payum-quickpay's rule
+     * (`OrderId::of()`), so an order number format of the store's own counts too. Without an order yet, Sylius'
+     * default first order number stands in.
+     */
+    private function checkOrderId(SymfonyStyle $io, string $orderPrefix, ?string $latestOrderNumber): void
     {
-        if (\strlen($prefix) > self::MAX_ORDER_PREFIX_LENGTH) {
+        $orderNumber = $latestOrderNumber ?? LatestOrderNumberProviderInterface::STAND_IN_ORDER_NUMBER;
+
+        try {
+            $orderId = OrderId::of($orderPrefix, $orderNumber);
+        } catch (InvalidOrderId $e) {
             $this->fail($io, sprintf(
-                'The order prefix "%s" is %d characters — keep it to %d or less, or Quickpay rejects the order id at checkout',
-                $prefix,
-                \strlen($prefix),
-                self::MAX_ORDER_PREFIX_LENGTH,
+                '%s %s, and checkout fails until the two fit.',
+                $e->getMessage(),
+                null === $latestOrderNumber
+                    ? 'There are no orders yet, so the number is Sylius\' default first order number'
+                    : 'The number is the latest order\'s',
             ));
 
             return;
         }
 
-        $this->ok($io, '' === $prefix
-            ? 'No order prefix configured — make sure order numbers are unique on the Quickpay account'
-            : sprintf('The order prefix "%s" is within Quickpay\'s length limit', $prefix));
+        $this->ok($io, null === $latestOrderNumber
+            ? sprintf('No orders yet: a Sylius order number like "%s" gives the order id "%s", which Quickpay accepts', $orderNumber, $orderId)
+            : sprintf('The order id of the latest order, "%s", is one Quickpay accepts', $orderId));
+
+        if ('' === $orderPrefix) {
+            $this->ok($io, 'No order prefix configured — make sure order numbers are unique on the Quickpay account');
+        }
     }
 
     /**

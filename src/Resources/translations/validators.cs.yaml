@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'Zastaralá volba "auto_capture" musí být true nebo false. Vynechte ji a místo toho zvolte okamžik stržení platby.'
             branding_id: 'Zadejte kladné celé číslo, nebo pole ponechte prázdné.'
             language: 'Volba "language" musí být text, například kód jazyka jako "en" nebo "da".'
-            order_prefix: 'Zadejte text, nebo pole ponechte prázdné.'
+            order_prefix: 'Zadejte nejvýše 19 písmen, číslic, mezer, ".", "_" nebo "-", nebo pole ponechte prázdné.'
             payment_methods: 'Zadejte platební metody oddělené čárkami, nebo pole ponechte prázdné.'
             private_key: 'Zadejte soukromý klíč vašeho účtu (Nastavení → Integrace v Quickpay manageru).'
             synchronized: 'Tato hodnota musí být zapnutá, nebo vypnutá (true nebo false).'
         invalid_gateway_option: 'Platební brána Quickpay nepřijímá hodnotu volby platební brány "{{ option }}".'
+        order_id:
+            refused: 'S touto předponou by objednávka {{ number }} dostala Quickpay ID objednávky "{{ order_id }}", které Quickpay odmítá: přijímá 4 až 20 písmen, číslic, mezer, ".", "_" nebo "-".'
         unreadable: 'Konfiguraci platební brány nelze přečíst, k čemuž dochází, když je zašifrovaná. Šifrování konfigurací platebních bran není podporováno.'

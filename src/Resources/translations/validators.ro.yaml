@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'Opțiunea învechită "auto_capture" trebuie să fie true sau false. Omite-o și alege în schimb momentul încasării.'
             branding_id: 'Introdu un număr întreg pozitiv sau lasă câmpul gol.'
             language: 'Opțiunea "language" trebuie să fie text, de exemplu un cod de limbă precum "en" sau "da".'
-            order_prefix: 'Introdu text sau lasă câmpul gol.'
+            order_prefix: 'Introdu cel mult 19 litere, cifre, spații, ".", "_" sau "-", sau lasă câmpul gol.'
             payment_methods: 'Introdu metodele de plată separate prin virgulă sau lasă câmpul gol.'
             private_key: 'Introdu cheia privată a contului tău (Setări → Integrare în managerul Quickpay).'
             synchronized: 'Această valoare trebuie să fie activată sau dezactivată (true sau false).'
         invalid_gateway_option: 'Gateway-ul Quickpay nu acceptă valoarea opțiunii de gateway "{{ option }}".'
+        order_id:
+            refused: 'Cu acest prefix, comanda {{ number }} ar primi ID-ul de comandă Quickpay "{{ order_id }}", pe care Quickpay îl refuză: acceptă între 4 și 20 de litere, cifre, spații, ".", "_" sau "-".'
         unreadable: 'Configurația gateway-ului nu poate fi citită, așa cum se întâmplă când este criptată. Criptarea configurațiilor gateway-ului nu este acceptată.'

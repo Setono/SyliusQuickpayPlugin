@@ -359,6 +359,24 @@ final class GatewayChecksTest extends TestCase
     }
 
     /**
+     * The test payment's number is "dr" and six hex digits, 8 characters, so a long order prefix the gateway accepts
+     * leaves no room for its order id: the check proves nothing and creates nothing
+     *
+     * @test
+     */
+    public function it_leaves_the_payment_link_permission_undetermined_when_the_order_prefix_leaves_no_room_for_a_test_payment(): void
+    {
+        $verdict = $this->checks()->paymentLinkPermission(GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_']));
+
+        self::assertSame(VerdictOutcome::Undetermined, $verdict->outcome);
+        self::assertMatchesRegularExpression(
+            '/^the order prefix "qp_shop_2026_" leaves no room for a test payment: Quickpay refuses the order id "qp_shop_2026_dr[0-9a-f]{6}"$/',
+            (string) $verdict->reason,
+        );
+        self::assertSame([], $this->quickpay->sentRequests());
+    }
+
+    /**
      * @test
      */
     public function it_creates_no_test_payment_for_an_unusable_gateway_configuration(): void

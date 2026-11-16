@@ -39,6 +39,43 @@ final class PaymentMethodFormTest extends FunctionalTestCase
     }
 
     /**
+     * The order prefix field carries no length of its own: an order prefix too long for the store's latest order is one
+     * error on the field, as payum-quickpay's rule finds it, and a long one that fits the store's own numbers saves
+     *
+     * @test
+     *
+     * @dataProvider orderPrefixes
+     *
+     * @param array<string, int> $expected
+     */
+    public function it_puts_an_order_id_quickpay_refuses_on_the_order_prefix_field(string $latestOrderNumber, string $orderPrefix, array $expected): void
+    {
+        self::bootKernel();
+        $this->createOrder($this->channel(), 'awaiting_payment', $latestOrderNumber);
+        $this->entityManager()->flush();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $errors = $this->submit($this->createPaymentMethod('quickpay_dk', []), [
+            'api_key' => 'the-api-key',
+            'private_key' => 'the-private-key',
+            'order_prefix' => $orderPrefix,
+        ]);
+
+        self::assertSame($expected, $errors);
+    }
+
+    /**
+     * @return iterable<string, array{string, string, array<string, int>}>
+     */
+    public static function orderPrefixes(): iterable
+    {
+        yield 'too long for the latest order' => ['000000123', 'qp_shop_2026_', ['gatewayConfig.config.order_prefix' => 1]];
+        yield 'longer than 11, fitting the store\'s own numbers' => ['1234', 'qp_shop_2026_', []];
+        yield 'a character Quickpay refuses' => ['000000123', 'qp#', ['gatewayConfig.config.order_prefix' => 1]];
+    }
+
+    /**
      * @test
      */
     public function it_puts_the_rejection_of_the_api_key_on_the_api_key_field(): void

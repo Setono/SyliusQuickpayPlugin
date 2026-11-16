@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Synkroniset toiminnot'
                 synchronized_help: 'Suorita veloitus, hyvitys ja peruutus synkronisesti sen sijaan, että luotettaisiin Quickpayn callback-kutsuun'
                 order_prefix: 'Tilauksen etuliite'
-                order_prefix_help: 'Lisätään tilausnumeroiden eteen Quickpay-tilaustunnukseksi — oltava yksilöllinen projektia ja ympäristöä kohden samalla Quickpay-tilillä, enintään 11 merkkiä'
+                order_prefix_help: 'Lisätään tilausnumeroiden eteen Quickpay-tilaustunnukseksi — oltava yksilöllinen projektia ja ympäristöä kohden samalla Quickpay-tilillä. Vain kirjaimia, numeroita, välilyöntejä, ".", "_" ja "-"; etuliite ja tilausnumero yhteensä enintään 20 merkkiä'
                 branding_id: 'Branding-tunnus'
                 branding_id_help: 'Valinnainen: käytettävän maksuikkunabrändäyksen tunnus'
     ui:
