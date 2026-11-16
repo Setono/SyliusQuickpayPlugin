@@ -291,7 +291,8 @@ mapping applies.
   aliased by the interface. `describe(OrderInterface): OrderDescription` returns what Quickpay is told about a Sylius
   order when its Quickpay payment is created, as payum-quickpay's `Setono\Payum\Quickpay\Model\OrderDescription`: the
   invoice and shipping addresses, the basket, shipping and the plugin as the shopsystem. It holds the mapping the
-  convert action had, unchanged. Decorate it to change what Quickpay is told; the VAT rate resolver stays decoratable.
+  convert action had, except that it leaves out what an order lacks (see *Behavioural changes*). Decorate it to change
+  what Quickpay is told; the VAT rate resolver stays decoratable.
 
 ### Changed constructors
 
@@ -326,9 +327,16 @@ The service definitions changed accordingly; only a redefinition or decoration o
   is one of payum-quickpay's `LogicException`s now, where it failed an assertion). The order is read from the Sylius
   payment instead of through the Payum token and storage, so a `Convert` of a Sylius payment without a token works,
   without return urls. A `Convert` of a Payum payment on a Quickpay gateway goes to payum-quickpay's convert and sends
-  no order description. Quickpay is told the same about the order as before. The describer gets the VAT rate resolver
-  through `VatRateResolverInterface`, so a decorator of that alias applies now too; before, the convert action only got
-  a decorator of the `VatRateResolver` service.
+  no order description. Quickpay is told the same about the order as before, but for what an order lacks (next item).
+  The describer gets the VAT rate resolver through `VatRateResolverInterface`, so a decorator of that alias applies now
+  too; before, the convert action only got a decorator of the `VatRateResolver` service.
+- **An order missing optional data still reaches the payment window.** Before, the checkout of an order without a
+  customer, without a billing or shipping address, or with an address in a country Symfony Intl has no alpha-3 code for
+  (such as Kosovo, `XK`) failed in the convert action, an error page instead of the payment window. Quickpay takes
+  every address field as optional, so the order describer now leaves out what the order lacks: the email on the
+  addresses, the invoice or shipping address, or that address' country. An order item without a variant, or an address
+  without a street or country, still fails: Sylius always sets them, so such an order is broken rather than missing
+  optional data.
 - **Every request to Quickpay gives up after 10 seconds**, the gateway's and the plugin's own alike, and none is
   retried. Before, the gateway built its own HTTP client through PSR-18 discovery: a request could wait 60 seconds
   (PHP's `default_socket_timeout`) for each idle stretch, with no limit in total, so a slow Quickpay could hang the
