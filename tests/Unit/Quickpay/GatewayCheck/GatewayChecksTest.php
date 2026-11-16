@@ -14,6 +14,7 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguratio
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProvider;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\TemporaryCacheDir;
@@ -529,10 +530,13 @@ final class GatewayChecksTest extends TestCase
 
     private function checks(): GatewayChecks
     {
+        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class)->reveal();
+
         return new GatewayChecks(new QuickpayClientProvider(
             new MockHttpClient($this->quickpay),
             $this->cacheDir,
-            $this->prophesize(GatewayConfigurationProviderInterface::class)->reveal(),
+            $gatewayConfigurationProvider,
+            new QuickpayPaymentIdProvider($gatewayConfigurationProvider),
         ));
     }
 

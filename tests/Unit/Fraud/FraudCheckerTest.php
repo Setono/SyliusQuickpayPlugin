@@ -14,8 +14,11 @@ use Setono\Quickpay\Exception\InternalServerErrorException;
 use Setono\Quickpay\Response\Payment\Metadata;
 use Setono\Quickpay\Response\Payment\Payment as QuickpayPayment;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudChecker;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProvider;
+use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -114,7 +117,11 @@ final class FraudCheckerTest extends TestCase
             $quickpayPaymentOf->willReturn($quickpayPayment);
         }
 
-        return new FraudChecker($quickpayClientProvider->reveal());
+        // Every Sylius payment is a Quickpay gateway's, so its Quickpay payment id is logged as payum-quickpay reads it
+        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $gatewayConfigurationProvider->forPayment(Argument::type(PaymentInterface::class))->willReturn(GatewayConfigurations::of());
+
+        return new FraudChecker($quickpayClientProvider->reveal(), new QuickpayPaymentIdProvider($gatewayConfigurationProvider->reveal()));
     }
 
     private static function quickpayPayment(?Metadata $metadata): QuickpayPayment

@@ -28,12 +28,12 @@ interface QuickpayClientProviderInterface
 
     /**
      * The Quickpay payment of the Sylius payment, read from Quickpay with a client for the payment's gateway
-     * configuration. Null when the Sylius payment has no Quickpay payment: its method has no Quickpay gateway configuration
-     * (the gateway configuration module's `forPayment()`), or its details carry no Quickpay payment id (payum-quickpay's
-     * `Details`). Each caller applies its own error policy to what it throws.
+     * configuration. Null when the Sylius payment has no Quickpay payment ({@see QuickpayPaymentIdProviderInterface::has()}:
+     * its method has no Quickpay gateway configuration, or its details carry no Quickpay payment id). Each caller applies
+     * its own error policy to what it throws.
      *
      * @throws UnusableGatewayConfiguration for the payment's gateway configuration
-     * @throws LogicException when the details carry a Quickpay payment id payum-quickpay can't read
+     * @throws LogicException when its Quickpay payment id can't be read
      * @throws QuickpayException when Quickpay doesn't answer with the payment
      */
     public function quickpayPaymentOf(PaymentInterface $payment): ?Payment;

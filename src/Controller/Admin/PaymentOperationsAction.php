@@ -6,9 +6,9 @@ namespace Setono\SyliusQuickpayPlugin\Controller\Admin;
 
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -30,6 +30,7 @@ final class PaymentOperationsAction implements LoggerAwareInterface
         private readonly PaymentRepositoryInterface $paymentRepository,
         private readonly QuickpayClientProviderInterface $quickpayClientProvider,
         private readonly Environment $twig,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
     ) {
     }
 
@@ -44,10 +45,9 @@ final class PaymentOperationsAction implements LoggerAwareInterface
             $quickpayPayment = $this->quickpayClientProvider->quickpayPaymentOf($payment);
         } catch (\Throwable $e) {
             // An unusable gateway configuration renders the same inline notice as an unreachable Quickpay
-            $method = $payment->getMethod();
             $this->logger?->warning(sprintf('Could not load the operation history from Quickpay: %s', $e->getMessage()), [
                 'paymentId' => $id,
-                'gatewayName' => $method instanceof PaymentMethodInterface ? $method->getGatewayConfig()?->getGatewayName() : null,
+                'gatewayName' => $this->gatewayConfigurationProvider->forPayment($payment)?->gatewayName,
                 'exception' => $e,
             ]);
 

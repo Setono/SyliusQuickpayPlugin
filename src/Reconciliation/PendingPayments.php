@@ -16,6 +16,7 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\Lock\Exception\ExceptionInterface as LockExceptionInterface;
 use Symfony\Component\Lock\LockFactory;
@@ -70,6 +71,7 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
         private readonly LockFactory $lockFactory,
         ManagerRegistry $managerRegistry,
         private readonly string $paymentClass,
+        private readonly QuickpayPaymentIdProviderInterface $quickpayPaymentIdProvider,
         private readonly int $pageSize = 100,
     ) {
         $this->managerRegistry = $managerRegistry;
@@ -290,8 +292,10 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
                     continue;
                 }
 
-                $quickpayPaymentId = $payment->getDetails()['quickpayPaymentId'] ?? null;
-                $changed = is_scalar($quickpayPaymentId) && isset($quickpayPaymentIds[(int) $quickpayPaymentId]);
+                // An id that can't be read never matches: the payment is reconciled only from the retry list, where
+                // the reconciler's error counts it as errored without ending the run
+                $quickpayPaymentId = $this->quickpayPaymentIdProvider->tryIdOf($payment);
+                $changed = null !== $quickpayPaymentId && isset($quickpayPaymentIds[$quickpayPaymentId]);
                 if (!$changed && !isset($retryList[$id])) {
                     continue;
                 }
@@ -351,7 +355,7 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
 
                 // A payment without a Quickpay payment id never got a payment link, so there is no Quickpay payment
                 // to reconcile it with
-                if (isset($payment->getDetails()['quickpayPaymentId'])) {
+                if ($this->quickpayPaymentIdProvider->has($payment)) {
                     yield $id => $payment;
                 }
             }

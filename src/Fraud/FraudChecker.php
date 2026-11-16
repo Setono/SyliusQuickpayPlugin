@@ -7,14 +7,17 @@ namespace Setono\SyliusQuickpayPlugin\Fraud;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 
 final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
 {
     use LoggerAwareTrait;
 
-    public function __construct(private readonly QuickpayClientProviderInterface $quickpayClientProvider)
-    {
+    public function __construct(
+        private readonly QuickpayClientProviderInterface $quickpayClientProvider,
+        private readonly QuickpayPaymentIdProviderInterface $quickpayPaymentIdProvider,
+    ) {
     }
 
     public function isFraudSuspected(PaymentInterface $payment): bool
@@ -26,7 +29,7 @@ final class FraudChecker implements FraudCheckerInterface, LoggerAwareInterface
             // an unreachable Quickpay: the question cannot be answered, and a configuration problem never blocks a
             // capture
             $this->logger?->warning(sprintf('Could not check the Quickpay payment for suspected fraud: %s', $e->getMessage()), [
-                'quickpayPaymentId' => $payment->getDetails()['quickpayPaymentId'] ?? null,
+                'quickpayPaymentId' => $this->quickpayPaymentIdProvider->tryIdOf($payment),
                 'paymentId' => $payment->getId(),
             ]);
 

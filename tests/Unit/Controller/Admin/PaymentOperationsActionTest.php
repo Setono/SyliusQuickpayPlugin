@@ -13,6 +13,7 @@ use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\UnauthorizedException;
 use Setono\Quickpay\Response\Payment\Payment as QuickpayPayment;
 use Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
@@ -20,6 +21,7 @@ use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentMethod;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Twig\Environment;
 
@@ -69,7 +71,7 @@ final class PaymentOperationsActionTest extends TestCase
 
         $this->expectException(NotFoundHttpException::class);
 
-        (new PaymentOperationsAction($paymentRepository->reveal(), $quickpayClientProvider->reveal(), $this->prophesize(Environment::class)->reveal()))(1);
+        (new PaymentOperationsAction($paymentRepository->reveal(), $quickpayClientProvider->reveal(), $this->prophesize(Environment::class)->reveal(), $this->gatewayConfigurationProvider()))(1);
     }
 
     /**
@@ -137,6 +139,15 @@ final class PaymentOperationsActionTest extends TestCase
             $quickpayPaymentOf->willReturn($quickpayPayment);
         }
 
-        return new PaymentOperationsAction($paymentRepository->reveal(), $quickpayClientProvider->reveal(), $twig);
+        return new PaymentOperationsAction($paymentRepository->reveal(), $quickpayClientProvider->reveal(), $twig, $this->gatewayConfigurationProvider());
+    }
+
+    /**
+     * The real gateway configuration module: the payment's method carries its gateway configuration, so no other one
+     * is stored
+     */
+    private function gatewayConfigurationProvider(): GatewayConfigurationProvider
+    {
+        return new GatewayConfigurationProvider($this->createStub(RepositoryInterface::class));
     }
 }

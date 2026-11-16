@@ -20,6 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\SessionFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Twig\Environment;
 
 /**
  * The operations panel on the admin's order page: the Quickpay payment's operation history, which the order page
@@ -27,6 +28,48 @@ use Symfony\Component\Security\Core\User\UserInterface;
  */
 final class PaymentOperationsPanelTest extends FunctionalTestCase
 {
+    /**
+     * The order page holds the panel only for a payment with a Quickpay payment, so it never asks the route for one
+     * without
+     *
+     * @test
+     *
+     * @dataProvider paymentsOnTheOrderPage
+     */
+    public function the_order_page_holds_the_panel_only_for_a_payment_with_a_quickpay_payment(string $case, bool $panel): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID, quickpayPaymentId: 501);
+        if ('a null Quickpay payment id' === $case) {
+            $payment->setDetails(['quickpayPaymentId' => null]);
+        }
+        if ('switched to an offline method' === $case) {
+            // The customer opened the Quickpay window, then switched to bank transfer: Sylius kept the details
+            $payment->setMethod($this->createPaymentMethod('bank_transfer', [], factoryName: 'offline'));
+        }
+        $this->entityManager()->flush();
+
+        $twig = self::getContainer()->get('twig');
+        self::assertInstanceOf(Environment::class, $twig);
+        $html = $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_quickpay.html.twig', ['payment' => $payment]);
+
+        self::assertSame($panel, str_contains($html, 'setono-quickpay-operations'), $html);
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function paymentsOnTheOrderPage(): iterable
+    {
+        yield 'a Quickpay payment' => ['a Quickpay payment', true];
+
+        yield 'a null Quickpay payment id' => ['a null Quickpay payment id', false];
+
+        yield 'switched to an offline method' => ['switched to an offline method', false];
+    }
+
     /**
      * @test
      */

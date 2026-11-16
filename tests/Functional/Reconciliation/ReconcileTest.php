@@ -11,6 +11,8 @@ use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\QuickpayException;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
@@ -384,24 +386,36 @@ final class ReconcileTest extends FunctionalTestCase
     }
 
     /**
+     * A payment whose method has no Quickpay gateway configuration is another gateway's, whatever its details still
+     * carry: the reconciler refuses it before it locks or reads anything
+     *
      * @test
+     *
+     * @dataProvider paymentsOfNoQuickpayGateway
+     *
+     * @param 'checkStatus'|'reconcile'|'reconcileFromCallback' $operation
      */
-    public function a_payment_without_a_gateway_fails_with_an_error_saying_so_and_leaves_the_lock_free(): void
+    public function a_payment_of_no_quickpay_gateway_is_refused_with_an_error_saying_so_and_leaves_the_lock_free(string $case, string $operation): void
     {
         self::bootKernel();
 
-        // Its payment method was taken off the payment after the Quickpay payment was created
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
-        $payment->setMethod(null);
+        // The customer switched to bank transfer after the Quickpay payment was created, and Sylius kept the details;
+        // or the payment method was taken off the payment
+        $payment->setMethod('switched to an offline method' === $case ? $this->createPaymentMethod('bank_transfer', [], factoryName: 'offline') : null);
         $this->entityManager()->flush();
 
         try {
-            $this->reconciler()->reconcile($payment);
-            self::fail('A payment without a gateway was reconciled');
+            match ($operation) {
+                'checkStatus' => $this->reconciler()->checkStatus($payment),
+                'reconcile' => $this->reconciler()->reconcile($payment),
+                'reconcileFromCallback' => $this->reconciler()->reconcileFromCallback($payment),
+            };
+            self::fail('Another gateway\'s payment was reconciled');
         } catch (InvalidArgumentException $e) {
             // Payum's own error type, so callers handle it like any other Payum error, and a message they can
             // put the payment's id in front of
-            self::assertSame('The payment has no payment method with a gateway', $e->getMessage());
+            self::assertSame('The payment is not a payment of a Quickpay gateway: its payment method has no Quickpay gateway configuration', $e->getMessage());
         }
 
         self::assertSame([], $this->quickpay()->sentRequests());
@@ -409,6 +423,18 @@ final class ReconcileTest extends FunctionalTestCase
 
         // Nothing is left holding the payment's lock
         $this->holdLockOf(501);
+    }
+
+    /**
+     * @return iterable<string, array{string, 'checkStatus'|'reconcile'|'reconcileFromCallback'}>
+     */
+    public static function paymentsOfNoQuickpayGateway(): iterable
+    {
+        foreach (['switched to an offline method', 'without a payment method'] as $case) {
+            foreach (['checkStatus', 'reconcile', 'reconcileFromCallback'] as $operation) {
+                yield sprintf('%s, %s', $case, $operation) => [$case, $operation];
+            }
+        }
     }
 
     /**
@@ -421,7 +447,12 @@ final class ReconcileTest extends FunctionalTestCase
         $managerRegistry = self::getContainer()->get('doctrine');
         self::assertInstanceOf(ManagerRegistry::class, $managerRegistry);
 
-        $reconciler = new PaymentReconciler($this->payum(), $stateMachine, new LockFactory($store), $managerRegistry);
+        $gatewayConfigurationProvider = self::getContainer()->get(GatewayConfigurationProviderInterface::class);
+        self::assertInstanceOf(GatewayConfigurationProviderInterface::class, $gatewayConfigurationProvider);
+        $quickpayPaymentIdProvider = self::getContainer()->get(QuickpayPaymentIdProviderInterface::class);
+        self::assertInstanceOf(QuickpayPaymentIdProviderInterface::class, $quickpayPaymentIdProvider);
+
+        $reconciler = new PaymentReconciler($this->payum(), $stateMachine, new LockFactory($store), $managerRegistry, $gatewayConfigurationProvider, $quickpayPaymentIdProvider);
         if (null !== $logger) {
             $reconciler->setLogger($logger);
         }
