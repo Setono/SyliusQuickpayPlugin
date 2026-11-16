@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'Den udfasede indstilling "auto_capture" skal være true eller false. Udelad den, og vælg hævningstidspunktet i stedet.'
             branding_id: 'Indtast et positivt heltal, eller lad feltet være tomt.'
             language: 'Indstillingen "language" skal være tekst, f.eks. en sprogkode som "en" eller "da".'
-            order_prefix: 'Indtast tekst, eller lad feltet være tomt.'
+            order_prefix: 'Indtast højst 19 bogstaver, cifre, mellemrum, ".", "_" eller "-", eller lad feltet være tomt.'
             payment_methods: 'Indtast betalingsmetoder adskilt af kommaer, eller lad feltet være tomt.'
             private_key: 'Indtast din kontos private nøgle (Indstillinger → Integration i Quickpay manageren).'
             synchronized: 'Dette skal være til eller fra (true eller false).'
         invalid_gateway_option: 'Quickpay-gatewayen accepterer ikke værdien af gateway-indstillingen "{{ option }}".'
+        order_id:
+            refused: 'Med dette præfiks ville ordre {{ number }} få Quickpay-ordre-id''et "{{ order_id }}", som Quickpay afviser: det accepterer 4 til 20 bogstaver, cifre, mellemrum, ".", "_" eller "-".'
         unreadable: 'Gateway-konfigurationen kan ikke læses, som det sker, når den er krypteret. Kryptering af gateway-konfigurationer understøttes ikke.'

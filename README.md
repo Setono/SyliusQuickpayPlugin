@@ -116,7 +116,7 @@ out the gateway configuration:
 | Api key | The API key of the **API user** in your Quickpay manager (*Settings* → *Users*) |
 | Private key | The private key of your merchant account (*Settings* → *Integration*) |
 | Agreement id | *(optional)* Which agreement the payment window runs on. Leave empty to use your account's default Payment Window agreement — set it only if your account has several agreements and the window should use a specific one |
-| Order prefix | Prepended to order numbers sent to Quickpay as the `order_id` — must be **unique per project and environment** sharing the same Quickpay account (see [Troubleshooting](#troubleshooting)), and 11 characters or less |
+| Order prefix | Prepended to order numbers sent to Quickpay as the `order_id` — must be **unique per project and environment** sharing the same Quickpay account (see [Troubleshooting](#troubleshooting)). Letters, digits, spaces, `.`, `_` and `-` only, and the `order_id` — prefix and order number together — at most 20 characters: with Sylius' default 9-digit order numbers, a prefix of 11 characters or less. Saving checks it against your latest order's number |
 | Payment methods | Which payment methods the Quickpay payment window offers, e.g. `creditcard` or `mobilepay` — see the [Quickpay documentation](https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods) |
 | Capture mode | When the money is taken. **On completion** (default) only authorizes the payment at checkout and captures it when the payment is completed in Sylius (e.g. when the order is shipped) — what shops that may not capture before dispatch need. **Immediately** lets Quickpay capture the moment the card is authorized — useful for digital products |
 | Synchronized operations | Run capture, refund and cancel synchronously instead of relying on the Quickpay callback |
@@ -292,9 +292,12 @@ https://your-shop.example/payment/quickpay/notify
 ```
 
 That endpoint resolves the payment from the callback body (`order_id` → your order prefix → the Sylius payment)
-precisely because one static url cannot carry a Payum token. It strips the order prefix of every Quickpay payment
-method, so while one of them has a gateway configuration the gateway can't be built from (written by fixtures, the
-Admin API or the database directly), it answers every callback with a 500 and Quickpay retries it once that is fixed.
+precisely because one static url cannot carry a Payum token. It reads the order number under the order prefix of every
+Quickpay payment method, and tries each until an order holds the callback's Quickpay payment. When none does, as for a
+payment made under an order prefix you have since changed, it answers 204 (retrying can't help) and logs a warning
+naming the `order_id` and the Quickpay payment id: that payment is left to you. While one of the payment methods has a
+gateway configuration the gateway can't be built from (written by fixtures, the Admin API or the database directly),
+it answers every callback with a 500 and Quickpay retries it once that is fixed.
 A Quickpay account has exactly one such url, so when
 several environments share an account, only the one it points at receives those callbacks — the others can rely on
 the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries undelivered callbacks 24 times with
@@ -535,9 +538,10 @@ bin/console setono:sylius-quickpay:doctor --live   # also checks the payment lin
 ```
 
 For every configured Quickpay gateway it verifies the api key against Quickpay, self-tests the private
-key's checksum computation, checks that a configured agreement id exists on the account, and validates
-the order prefix length — plus, across gateways, that no two share a prefix, and that the notify route
-is registered at all. With `--live` it also creates a money-less test payment and attempts the payment
+key's checksum computation, checks that a configured agreement id exists on the account, and checks that the
+`order_id` the order prefix gives your latest order (Sylius' default first order number `000000001` while there are
+no orders) is one Quickpay accepts, by payum-quickpay's own rule, so an order number format of your own counts too —
+plus that the notify route is registered at all. With `--live` it also creates a money-less test payment and attempts the payment
 link `PUT` the checkout depends on, catching a missing *Create or update payment link* permission before
 a customer does (the test payment remains visible on the account, and the check's line names its id and order id; it
 never carries money). The command
@@ -553,8 +557,8 @@ means the gateway can be built:
 
 - every gateway option the gateway would reject is a failed check of its own, e.g. a missing api key or private key,
   an agreement or branding id that isn't a positive whole number, or a `synchronized` that isn't a yes/no value. Only
-  the checks against Quickpay are then skipped for that gateway, since their errors would only follow from these: its
-  order prefix is still checked for length and compared with the other gateways' prefixes;
+  the checks against Quickpay are then skipped for that gateway, since their errors would only follow from these: the
+  `order_id` its order prefix gives your latest order is still checked;
 - an encrypted gateway configuration is a failed check saying encryption isn't supported (see
   [Configuration](#configuration));
 - the agreement it looks up is the one the gateway sends: an empty agreement id means the account's default
@@ -597,15 +601,21 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
 
   Quickpay requires the `order_id` to be unique across everything sharing the account, and the `order_id` is
   your order number with the payment method's *Order prefix* prepended. Change the prefix to a string unique
-  per project **and** environment, e.g. `qp_<project>_<date>_`, whenever:
+  per project **and** environment, short enough to leave room for your order numbers (11 characters with Sylius'
+  default 9-digit numbers), e.g. `<project initials><date>_` such as `ab261116_`, whenever:
 
   - you recreate a development database, so order numbers start over and collide with the ones already sent
     to Quickpay — bump the `<date>` part;
   - several projects or environments share the same Quickpay (developer) account credentials.
 
-- `Validation error: order_id must have length between 4 and 20`
+- `Validation error: order_id must have length between 4 and 20`, `The Quickpay order id "…" is not one Quickpay
+  accepts` at checkout or from the doctor, or the payment method's *Order prefix* refused when saving
 
-  Shorten the *Order prefix* of your Quickpay payment method to 11 characters or less.
+  The `order_id` is the *Order prefix* followed by the order number, and Quickpay accepts 4–20 letters, digits,
+  spaces, `.`, `_` and `-`. Saving the payment method checks the `order_id` your latest order would get, and so does
+  the doctor. Shorten the prefix (11 characters or less with Sylius' default 9-digit order numbers) or remove other
+  characters from it. If your order numbers themselves hold other characters (a custom order number generator), no
+  prefix helps: Quickpay refuses every such `order_id`.
 
 - `The "branding_id" option must be a positive integer (or an integer string), got 'Our brand'` from the doctor, or
   any other `The "<option>" option ...` failure

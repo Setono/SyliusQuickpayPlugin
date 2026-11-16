@@ -121,6 +121,24 @@ final class GatewayConfiguration
     }
 
     /**
+     * The order prefix the gateway sends, read even when payum-quickpay rejects other options, for checking the
+     * Quickpay order id (see GLOSSARY.md) a configuration that may still need fixing gives. Null when the
+     * configuration is unreadable, or payum-quickpay rejects the order prefix itself, which its violation reports.
+     */
+    public function orderPrefix(): ?string
+    {
+        try {
+            $options = $this->optionsWithRejectedAsStored();
+        } catch (UnusableGatewayConfiguration) {
+            return null;
+        }
+
+        $orderPrefix = $options->values['order_prefix'] ?? null;
+
+        return !$options->isRejected('order_prefix') && is_string($orderPrefix) ? $orderPrefix : null;
+    }
+
+    /**
      * The capture mode checkout uses. It is Sylius' `use_authorize` gateway option, which payum-quickpay
      * never reads ({@see CaptureMode::fromUseAuthorize()}). An authorization is then captured on completion,
      * unless the deprecated `auto_capture`, read by payum-quickpay's rule, makes Quickpay capture it right away.

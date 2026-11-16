@@ -11,6 +11,10 @@
             <argument type="service" id="sylius.repository.order"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
+
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
         </service>
 
         <!-- Payum's per-payment notify url, the callback url Quickpay normally calls -->
@@ -105,9 +109,19 @@
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"
                  alias="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks"/>
 
+        <!-- Order id -->
+        <service id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProvider">
+            <argument type="service" id="doctrine"/>
+            <argument>%sylius.model.order.class%</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProvider"/>
+
         <!-- Validator -->
         <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface"/>
 
             <call method="setLogger">
                 <argument type="service" id="logger" on-invalid="ignore"/>
@@ -121,6 +135,7 @@
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
             <argument type="service" id="router"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface"/>
 
             <tag name="console.command"/>
         </service>

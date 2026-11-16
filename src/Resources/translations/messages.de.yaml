@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Synchrone Vorgänge'
                 synchronized_help: 'Erfassung, Erstattung und Stornierung synchron ausführen, statt auf den Quickpay-Callback zu warten'
                 order_prefix: 'Bestellpräfix'
-                order_prefix_help: 'Wird Bestellnummern vorangestellt und bildet die Quickpay-Bestell-ID — muss je Projekt und Umgebung mit demselben Quickpay-Konto eindeutig sein, höchstens 11 Zeichen'
+                order_prefix_help: 'Wird Bestellnummern vorangestellt und bildet die Quickpay-Bestell-ID — muss je Projekt und Umgebung mit demselben Quickpay-Konto eindeutig sein. Nur Buchstaben, Ziffern, Leerzeichen, ".", "_" und "-"; Präfix und Bestellnummer zusammen höchstens 20 Zeichen'
                 branding_id: 'Branding-ID'
                 branding_id_help: 'Optional: die ID des zu verwendenden Zahlungsfenster-Brandings'
     ui:

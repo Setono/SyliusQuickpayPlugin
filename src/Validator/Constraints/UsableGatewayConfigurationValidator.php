@@ -7,8 +7,11 @@ namespace Setono\SyliusQuickpayPlugin\Validator\Constraints;
 use Payum\Core\Model\GatewayConfigInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
+use Setono\Payum\Quickpay\Exception\InvalidOrderId;
+use Setono\Payum\Quickpay\OrderId;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\Verdict;
 use Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\VerdictOutcome;
@@ -21,8 +24,10 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
 {
     use LoggerAwareTrait;
 
-    public function __construct(private readonly GatewayChecksInterface $gatewayChecks)
-    {
+    public function __construct(
+        private readonly GatewayChecksInterface $gatewayChecks,
+        private readonly LatestOrderNumberProviderInterface $latestOrderNumberProvider,
+    ) {
     }
 
     public function validate(mixed $value, Constraint $constraint): void
@@ -61,10 +66,14 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
                 ]);
             }
 
+            $this->validateOrderId($constraint, $gatewayConfiguration);
+
             // The api key is checked once the gateway would be built: a key the library rejects already has its
             // violation, and a configuration refused anyway isn't worth a round trip to Quickpay
             return;
         }
+
+        $this->validateOrderId($constraint, $gatewayConfiguration);
 
         $apiKeyVerdict = $this->gatewayChecks->apiKey($gatewayConfiguration);
         $this->applyVerdict(
@@ -88,6 +97,34 @@ final class UsableGatewayConfigurationValidator extends ConstraintValidator impl
             sprintf('Accepted agreement %d of the Quickpay gateway "%s", whose check is undetermined', $options->agreementId, $gatewayConfiguration->gatewayName),
             $gatewayConfiguration->gatewayName,
         );
+    }
+
+    /**
+     * The Quickpay order id the order prefix gives the store's latest order, by payum-quickpay's rule
+     * (`OrderId::of()`), so a prefix too long for the store's order numbers, or an order number format Quickpay
+     * refuses, is caught here rather than by every checkout. Without an order yet, Sylius' default first order number
+     * stands in. A prefix payum-quickpay rejects already has its violation.
+     */
+    private function validateOrderId(UsableGatewayConfiguration $constraint, GatewayConfiguration $gatewayConfiguration): void
+    {
+        $orderPrefix = $gatewayConfiguration->orderPrefix();
+        if (null === $orderPrefix) {
+            return;
+        }
+
+        try {
+            OrderId::of(
+                $orderPrefix,
+                $this->latestOrderNumberProvider->getLatestOrderNumber() ?? LatestOrderNumberProviderInterface::STAND_IN_ORDER_NUMBER,
+            );
+        } catch (InvalidOrderId $e) {
+            $this->context->buildViolation($constraint->orderIdMessage)
+                ->setParameter('{{ order_id }}', $e->orderId)
+                ->setParameter('{{ number }}', $e->number)
+                ->atPath('config[order_prefix]')
+                ->addViolation()
+            ;
+        }
     }
 
     /**

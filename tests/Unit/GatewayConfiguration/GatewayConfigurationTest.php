@@ -139,6 +139,31 @@ final class GatewayConfigurationTest extends TestCase
     }
 
     /**
+     * The order prefix the gateway sends, for checking the order id it gives the store's orders
+     *
+     * @test
+     *
+     * @dataProvider orderPrefixes
+     */
+    public function it_reads_the_order_prefix_the_gateway_sends_even_when_it_rejects_other_options(GatewayConfiguration $gatewayConfiguration, ?string $expected): void
+    {
+        self::assertSame($expected, $gatewayConfiguration->orderPrefix());
+    }
+
+    /**
+     * @return iterable<string, array{GatewayConfiguration, string|null}>
+     */
+    public static function orderPrefixes(): iterable
+    {
+        yield 'a usable configuration' => [GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_']), 'qp_'];
+        yield 'none' => [GatewayConfigurations::of(GatewayConfigurations::USABLE), ''];
+        yield 'one stored as a number' => [GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => 2026]), '2026'];
+        yield 'a configuration the gateway rejects for another option' => [GatewayConfigurations::of(['api_key' => 'the-api-key', 'order_prefix' => 'qp_']), 'qp_'];
+        yield 'an order prefix the gateway rejects' => [GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => 'qp#']), null];
+        yield 'an unreadable configuration' => [GatewayConfigurations::encrypted(), null];
+    }
+
+    /**
      * @test
      *
      * @dataProvider rejectedCaptureModes

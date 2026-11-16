@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Synchronized operations'
                 synchronized_help: 'Run capture, refund and cancel synchronously instead of relying on the Quickpay callback'
                 order_prefix: 'Order prefix'
-                order_prefix_help: 'Prepended to order numbers to form the Quickpay order id — must be unique per project and environment sharing the same Quickpay account, and 11 characters or less'
+                order_prefix_help: 'Prepended to order numbers to form the Quickpay order id — must be unique per project and environment sharing the same Quickpay account. Letters, digits, spaces, ".", "_" and "-" only; prefix and order number together at most 20 characters'
                 branding_id: 'Branding id'
                 branding_id_help: 'Optional: the id of the payment window branding to use'
     ui:

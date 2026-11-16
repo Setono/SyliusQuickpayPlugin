@@ -23,7 +23,7 @@
     "psr/cache": "^2.0 || ^3.0",
     "psr/log": "^1.1 || ^2.0 || ^3.0",
     "setono/doctrine-orm-trait": "^1.4",
-    "setono/payum-quickpay": "^2.0.0-rc.3",
+    "setono/payum-quickpay": "^2.0.0-rc.4",
     "setono/quickpay-php-sdk": "^1.3",
     "sylius/core": "^1.0",
     "sylius/core-bundle": "^1.0",

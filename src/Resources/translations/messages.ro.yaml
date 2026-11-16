@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Operațiuni sincrone'
                 synchronized_help: 'Execută capturarea, rambursarea și anularea sincron în loc să se bazeze pe callback-ul Quickpay'
                 order_prefix: 'Prefix comandă'
-                order_prefix_help: 'Adăugat înaintea numerelor de comandă pentru a forma ID-ul de comandă Quickpay — trebuie să fie unic per proiect și mediu care folosesc același cont Quickpay, maximum 11 caractere'
+                order_prefix_help: 'Adăugat înaintea numerelor de comandă pentru a forma ID-ul de comandă Quickpay — trebuie să fie unic per proiect și mediu care folosesc același cont Quickpay. Doar litere, cifre, spații, ".", "_" și "-"; prefixul și numărul comenzii împreună, maximum 20 de caractere'
                 branding_id: 'ID branding'
                 branding_id_help: 'Opțional: ID-ul branding-ului ferestrei de plată de folosit'
     ui:

@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'Az elavult "auto_capture" beállítás értéke csak true vagy false lehet. Hagyd el, és helyette válaszd ki a terhelés időpontját.'
             branding_id: 'Adj meg egy pozitív egész számot, vagy hagyd üresen a mezőt.'
             language: 'A "language" beállításnak szövegnek kell lennie, például egy nyelvkódnak, mint az "en" vagy a "da".'
-            order_prefix: 'Adj meg szöveget, vagy hagyd üresen a mezőt.'
+            order_prefix: 'Adj meg legfeljebb 19 betűt, számjegyet, szóközt, ".", "_" vagy "-" karaktert, vagy hagyd üresen a mezőt.'
             payment_methods: 'Add meg a fizetési módokat vesszővel elválasztva, vagy hagyd üresen a mezőt.'
             private_key: 'Add meg a fiókod privát kulcsát (Beállítások → Integráció a Quickpay managerben).'
             synchronized: 'Ennek be- vagy kikapcsoltnak kell lennie (true vagy false).'
         invalid_gateway_option: 'A Quickpay fizetési átjáró nem fogadja el a(z) "{{ option }}" átjáróbeállítás értékét.'
+        order_id:
+            refused: 'Ezzel az előtaggal a(z) {{ number }} rendelés Quickpay rendelésazonosítója "{{ order_id }}" lenne, amelyet a Quickpay elutasít: 4–20 betűt, számjegyet, szóközt, ".", "_" vagy "-" karaktert fogad el.'
         unreadable: 'A fizetési átjáró konfigurációja nem olvasható, ahogy az titkosítás esetén történik. A fizetési átjárók konfigurációjának titkosítása nem támogatott.'

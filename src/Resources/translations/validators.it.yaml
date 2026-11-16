@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'L''opzione deprecata "auto_capture" deve essere true o false. Omettila e scegli invece il momento dell''addebito.'
             branding_id: 'Inserisci un numero intero positivo oppure lascia il campo vuoto.'
             language: 'L''opzione "language" deve essere un testo, ad esempio un codice lingua come "en" o "da".'
-            order_prefix: 'Inserisci del testo oppure lascia il campo vuoto.'
+            order_prefix: 'Inserisci al massimo 19 lettere, cifre, spazi, ".", "_" o "-", oppure lascia il campo vuoto.'
             payment_methods: 'Inserisci i metodi di pagamento separati da virgole oppure lascia il campo vuoto.'
             private_key: 'Inserisci la chiave privata del tuo account (Impostazioni → Integrazione nel manager Quickpay).'
             synchronized: 'Questo valore deve essere attivo o disattivo (true o false).'
         invalid_gateway_option: 'Il gateway Quickpay non accetta il valore dell''opzione del gateway "{{ option }}".'
+        order_id:
+            refused: 'Con questo prefisso, l''ordine {{ number }} avrebbe l''ID ordine Quickpay "{{ order_id }}", che Quickpay rifiuta: accetta da 4 a 20 lettere, cifre, spazi, ".", "_" o "-".'
         unreadable: 'Impossibile leggere la configurazione del gateway, come accade quando è crittografata. La crittografia delle configurazioni del gateway non è supportata.'
