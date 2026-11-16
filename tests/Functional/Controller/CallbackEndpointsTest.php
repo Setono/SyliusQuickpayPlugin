@@ -62,28 +62,49 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     }
 
     /**
+     * Under the capture mode "immediately", Quickpay sends the authorize and the capture callback moments apart. The
+     * authorize callback holds the payment's lock, having read the payment before the capture, when the capture
+     * callback arrives: it is answered 409, so Quickpay retries it, and the retry reconciles from a fresh read
+     *
      * @test
      *
      * @dataProvider callbackEndpoints
      */
-    public function a_duplicate_arriving_while_the_callback_is_handled_is_answered_with_a_2xx_and_changes_nothing(string $endpoint): void
+    public function a_callback_arriving_while_the_payments_lock_is_held_is_answered_with_a_409_and_its_retry_reconciles_the_payment(string $endpoint): void
     {
         self::bootKernel();
 
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $transitions = $this->recordPaymentTransitions();
+        // Quickpay retries a callback on the url it was given
+        $callbackUrl = $this->callbackUrlOf($payment);
 
-        // The original callback, being handled elsewhere, holds the payment's lock
-        $this->holdLockOf(501);
+        $details = $payment->getDetails();
+        // The authorize callback, being handled elsewhere, holds the payment's lock
+        $lock = $this->holdLockOf(501);
 
-        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment);
+        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment, $callbackUrl);
 
-        // Quickpay considers it delivered and stops retrying
-        self::assertTrue($response->isSuccessful(), (string) $response->getContent());
+        self::assertSame(409, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame('', $response->getContent());
         self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame([], $transitions->getArrayCopy());
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+        // Equal, not identical: MySQL's JSON type stores the keys in an order of its own
+        self::assertEquals($details, $payment->getDetails());
+
+        $lock->release();
+
+        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment, $callbackUrl);
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());
     }
 
     /**
@@ -102,6 +123,34 @@ final class CallbackEndpointsTest extends FunctionalTestCase
 
         self::assertSame(400, $response->getStatusCode());
         self::assertSame([], $this->quickpay()->sentRequests());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+    }
+
+    /**
+     * The payment's lock is taken before the callback's checksum is checked, so a forged callback arriving while it is
+     * held is answered like a genuine one: 409, having run nothing
+     *
+     * @test
+     *
+     * @dataProvider callbackEndpoints
+     */
+    public function a_forged_callback_arriving_while_the_payments_lock_is_held_is_answered_with_a_409_and_runs_nothing(string $endpoint): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $transitions = $this->recordPaymentTransitions();
+        $this->holdLockOf(501);
+
+        $response = $this->deliver(self::quickpayCallback(501, privateKey: 'not-the-private-key'), $endpoint, $payment);
+
+        self::assertSame(409, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame('', $response->getContent());
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame([], $transitions->getArrayCopy());
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
@@ -311,8 +360,7 @@ final class CallbackEndpointsTest extends FunctionalTestCase
         self::assertTrue($controller instanceof PayumNotifyController || $controller instanceof NotifyAction);
         $controller->setLogger($logger);
 
-        $callback = self::quickpayCallback(501);
-        $response = self::$kernel->handle(self::PAYMENT_CALLBACK_URL === $endpoint ? self::sentTo($callbackUrl, $callback) : $callback);
+        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment, $callbackUrl);
 
         self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
         self::assertSame([[
@@ -334,12 +382,13 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     }
 
     /**
-     * Delivers Quickpay's callback about the payment to one of the callback endpoints
+     * Delivers Quickpay's callback about the payment to one of the callback endpoints: to the payment's callback url,
+     * the one given (as Quickpay retries a callback on the url it was given) or else a newly minted one
      */
-    private function deliver(Request $callback, string $endpoint, PaymentInterface $payment): Response
+    private function deliver(Request $callback, string $endpoint, PaymentInterface $payment, ?string $callbackUrl = null): Response
     {
         if (self::PAYMENT_CALLBACK_URL === $endpoint) {
-            $callback = self::sentTo($this->callbackUrlOf($payment), $callback);
+            $callback = self::sentTo($callbackUrl ?? $this->callbackUrlOf($payment), $callback);
         }
 
         return self::$kernel->handle($callback);
