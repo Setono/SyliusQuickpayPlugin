@@ -290,7 +290,7 @@ mapping applies.
   `Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriber` (constructor `(VatRateResolverInterface $vatRateResolver)`),
   aliased by the interface. `describe(OrderInterface): OrderDescription` returns what Quickpay is told about a Sylius
   order when its Quickpay payment is created, as payum-quickpay's `Setono\Payum\Quickpay\Model\OrderDescription`: the
-  invoice and shipping addresses, the basket, shipping and the plugin as the shopsystem. It holds the mapping the
+  invoice and shipping addresses, the basket, shipping and the plugin as the shop system. It holds the mapping the
   convert action had, except that it leaves out what an order lacks (see *Behavioural changes*). Decorate it to change
   what Quickpay is told; the VAT rate resolver stays decoratable.
 

@@ -9,7 +9,7 @@ use Sylius\Component\Core\Model\OrderInterface;
 
 /**
  * Describes a Sylius order to Quickpay: what payum-quickpay sends about it (the invoice and shipping addresses, the
- * basket, shipping and the shopsystem) when it creates the order's Quickpay payment. Decorate it to change what
+ * basket, shipping and the shop system) when it creates the order's Quickpay payment. Decorate it to change what
  * Quickpay is told.
  *
  * What the order lacks is left out, since Quickpay takes every address field as optional: without a customer's email

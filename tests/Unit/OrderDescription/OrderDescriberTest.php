@@ -35,7 +35,8 @@ final class OrderDescriberTest extends TestCase
     /**
      * Each address is named "first last", with its province name rather than its code when it has both, its phone as
      * both phone and mobile, its country as alpha-3 and the customer's email. Each item is its quantity, variant code,
-     * "product variant" name, price and VAT rate, and the plugin names itself and its installed version as the shopsystem
+     * "product variant" name, price and VAT rate, and the plugin names itself and its installed version as the shop
+     * system
      *
      * @test
      */
