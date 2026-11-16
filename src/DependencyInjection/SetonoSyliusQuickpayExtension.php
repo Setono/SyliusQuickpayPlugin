@@ -86,13 +86,26 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
 
         if ($container->hasExtension('framework')) {
             // A named lock resource for the per-payment lock reconciling a Sylius payment takes, so callbacks
-            // and the reconcile command never reconcile the same payment at once. The application overrides
-            // the store by redefining the resource (framework.lock resources replace, not merge), e.g.
+            // and the reconcile command never reconcile the same payment at once, and for the reconcile command's
+            // run lock, so only one run writes at a time. The application overrides the store by redefining the
+            // resource (framework.lock resources replace, not merge), e.g.
             // `framework: { lock: { setono_sylius_quickpay: '%env(LOCK_DSN)%' } }`
             $container->prependExtensionConfig('framework', [
                 'lock' => [
                     'resources' => [
                         'setono_sylius_quickpay' => ['flock'],
+                    ],
+                ],
+            ]);
+
+            // Where the reconcile command keeps what the next run starts from: each Quickpay account's watermark and
+            // the payments to retry. On cache.app it is gone after a deploy that clears the cache, which costs a run
+            // looking back the whole --since period; the application points it at a persistent adapter in its own
+            // framework config under the same name, e.g. `framework: { cache: { pools: { setono_sylius_quickpay.reconcile: { adapter: cache.adapter.redis } } } }`
+            $container->prependExtensionConfig('framework', [
+                'cache' => [
+                    'pools' => [
+                        'setono_sylius_quickpay.reconcile' => ['adapter' => 'cache.app'],
                     ],
                 ],
             ]);

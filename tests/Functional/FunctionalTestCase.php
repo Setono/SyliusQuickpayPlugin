@@ -10,6 +10,7 @@ use Payum\Core\GatewayInterface;
 use Payum\Core\Payum;
 use Psr\Http\Message\ResponseInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient;
 use SM\Event\SMEvents;
 use SM\Event\TransitionEvent;
@@ -138,6 +139,22 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
+     * Takes the lock a reconcile run that writes takes, as another run reconciling payments right now would. It
+     * stays held until released, even when the returned lock isn't kept. Like a payment's lock, it is shared with
+     * the booted container only.
+     */
+    protected function holdRunLock(): LockInterface
+    {
+        $lockFactory = self::getContainer()->get('lock.setono_sylius_quickpay.factory');
+        self::assertInstanceOf(LockFactory::class, $lockFactory);
+
+        $lock = $lockFactory->createLock(PendingPayments::RUN_LOCK_KEY, autoRelease: false);
+        self::assertTrue($lock->acquire(), 'The run lock is already held');
+
+        return $lock;
+    }
+
+    /**
      * Records each payment transition Sylius applies from now on, by name, under either state machine
      * adapter. A transition is recorded once it has run with all its callbacks, so a transition applied
      * twice, e.g. from inside itself, shows up twice
@@ -210,15 +227,21 @@ abstract class FunctionalTestCase extends KernelTestCase
      * holds one unit of each, priced so the order totals the payment's amount, and paying the order sells
      * those units.
      *
+     * Without a Quickpay payment id the payment has no details, like one that never got a payment link (the
+     * payment Sylius opens after a failed one, say). The payment is paid with the shared Quickpay payment method
+     * unless another is given ({@see self::createPaymentMethod()}), and created now unless another time is given.
+     *
      * @param list<ProductVariantInterface> $orderedVariants
      */
     protected function createSyliusPayment(
         string $state,
         string $orderPaymentState,
-        int $quickpayPaymentId,
+        ?int $quickpayPaymentId,
         int $amount = 10_000,
         string $orderNumber = '000000001',
         array $orderedVariants = [],
+        ?PaymentMethodInterface $method = null,
+        ?\DateTimeInterface $createdAt = null,
     ): PaymentInterface {
         $order = $this->createOrder($this->channel(), $orderPaymentState, $orderNumber);
         foreach ($orderedVariants as $variant) {
@@ -231,14 +254,19 @@ abstract class FunctionalTestCase extends KernelTestCase
 
         $payment = $paymentFactory->createWithAmountAndCurrencyCode($amount, self::CURRENCY);
         self::assertInstanceOf(PaymentInterface::class, $payment);
-        $payment->setMethod($this->quickpayPaymentMethod());
+        $payment->setMethod($method ?? $this->quickpayPaymentMethod());
         $payment->setState($state);
-        $payment->setDetails([
-            'quickpayPaymentId' => $quickpayPaymentId,
-            'order_id' => self::ORDER_PREFIX . (string) $order->getNumber(),
-            'amount' => $amount,
-            'currency' => self::CURRENCY,
-        ]);
+        if (null !== $quickpayPaymentId) {
+            $payment->setDetails([
+                'quickpayPaymentId' => $quickpayPaymentId,
+                'order_id' => self::ORDER_PREFIX . (string) $order->getNumber(),
+                'amount' => $amount,
+                'currency' => self::CURRENCY,
+            ]);
+        }
+        if (null !== $createdAt) {
+            $payment->setCreatedAt($createdAt);
+        }
         $order->addPayment($payment);
 
         $this->entityManager()->persist($payment);

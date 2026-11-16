@@ -28,6 +28,10 @@ _Avoid_: sync (Payum's Sync only refreshes the stored payment details), poll
 Reading a Quickpay payment's status without changing the Sylius payment in any way.
 _Avoid_: peek, sync
 
+**Pending payment**:
+A Sylius payment of a Quickpay gateway that is new, processing or authorized and linked to a Quickpay payment, however old it is. A new or processing one is stuck; an authorized one mostly waits for its order to ship.
+_Avoid_: non-final payment, open payment
+
 **Gateway configuration**:
 The settings a Quickpay gateway is built from (api key, private key, order prefix, ...), stored with a payment method and edited in the admin.
 _Avoid_: gateway config, payment method settings, credentials
