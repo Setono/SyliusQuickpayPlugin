@@ -138,6 +138,22 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
+     * Takes the lock a reconcile run that writes takes, as another run reconciling payments right now would. It
+     * stays held until released, even when the returned lock isn't kept. Like a payment's lock, it is shared with
+     * the booted container only.
+     */
+    protected function holdRunLock(): LockInterface
+    {
+        $lockFactory = self::getContainer()->get('lock.setono_sylius_quickpay.factory');
+        self::assertInstanceOf(LockFactory::class, $lockFactory);
+
+        $lock = $lockFactory->createLock('setono_sylius_quickpay_reconcile_run', autoRelease: false);
+        self::assertTrue($lock->acquire(), 'The run lock is already held');
+
+        return $lock;
+    }
+
+    /**
      * Records each payment transition Sylius applies from now on, by name, under either state machine
      * adapter. A transition is recorded once it has run with all its callbacks, so a transition applied
      * twice, e.g. from inside itself, shows up twice
