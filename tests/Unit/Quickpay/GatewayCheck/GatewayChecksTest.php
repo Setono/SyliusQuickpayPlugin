@@ -168,15 +168,14 @@ final class GatewayChecksTest extends TestCase
             new Response(200, ['Content-Type' => 'text/html'], '<html>Maintenance</html>'),
             'Could not decode response body as JSON [GET https://api.quickpay.net/ping]: Syntax error.',
         ];
-        // The connection drops after Quickpay's headers arrived: the SDK reads the body outside its transport error
-        // handling, so the PSR-7 stream's own error reaches the check
+        // The connection drops after Quickpay's headers arrived: the SDK reports it as an incomplete response
         yield 'an answer that breaks off' => [
             new MockResponse((static function (): \Generator {
                 yield '{"msg": "Pong';
 
                 throw new \RuntimeException('Connection reset by peer');
             })(), ['http_code' => 200, 'response_headers' => ['Content-Type' => 'application/json']]),
-            'Unable to read stream contents: Connection reset by peer',
+            'The response body could not be read in full [GET https://api.quickpay.net/ping] (status code: 200): Unable to read stream contents: Connection reset by peer',
         ];
     }
 

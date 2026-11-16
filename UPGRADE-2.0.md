@@ -17,7 +17,7 @@ changed since `v2.0.0-alpha.2`.
   versions in your **root** `composer.json`:
 
   ```bash
-  composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
+  composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.3
   ```
 
 ## Gateway configuration stored in the database

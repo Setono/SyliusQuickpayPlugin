@@ -24,7 +24,7 @@ The plugin 2.x line and the `setono/payum-quickpay` gateway it builds on are sti
 so your project must allow the pre-release versions explicitly:
 
 ```bash
-composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.2
+composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.3
 ```
 
 If your project does not already provide PSR-17 factories:

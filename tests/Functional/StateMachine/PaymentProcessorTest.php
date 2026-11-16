@@ -20,6 +20,7 @@ use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Sylius\Component\Payment\PaymentTransitions;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 /**
  * When an admin completes, refunds or cancels a Sylius payment, the plugin carries the operation out at
@@ -232,6 +233,28 @@ final class PaymentProcessorTest extends FunctionalTestCase
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0));
         $this->quickpay()->respond('POST', '/payments/501/cancel', self::quickpayError(400, 'Transaction in wrong state for this operation'));
+
+        $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
+
+        self::assertSame(['POST /payments/501/cancel'], $this->operationsSentToQuickpay());
+        self::assertSame(PaymentInterface::STATE_CANCELLED, $this->reload($payment)->getState());
+    }
+
+    /**
+     * @test
+     */
+    public function it_cancels_a_payment_whose_cancel_answer_from_quickpay_breaks_off(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0));
+        // The connection drops after Quickpay's headers arrived
+        $this->quickpay()->respond('POST', '/payments/501/cancel', new MockResponse((static function (): \Generator {
+            yield '{"id": 501, "state": "ne';
+
+            throw new \RuntimeException('Connection reset by peer');
+        })(), ['http_code' => 202, 'response_headers' => ['Content-Type' => 'application/json']]));
 
         $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
 

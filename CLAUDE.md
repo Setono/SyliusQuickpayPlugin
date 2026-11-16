@@ -15,7 +15,7 @@ state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
 base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.2`, the first release with the
-public `GatewayOptions`; the SDK is stable, `^1.2`).
+public `GatewayOptions`; the SDK is stable, `^1.3`).
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed.
@@ -251,10 +251,8 @@ exceptions or interpret Quickpay's status codes themselves.
   verdict to an admin words it in their language itself (save validation's translated violations).
 - Classification lives here once, in `GatewayChecks::ask()`, which sends one request of a check and takes the verdicts
   for an accepted request, a refusal (401/403) and, for the agreement, a 404: a refusal is evidence; any other SDK
-  error (`QuickpayException`: transport errors, a body that isn't JSON or doesn't map included) is undetermined, with
-  the error's message as the reason, and so is the PSR-7 body's plain `\RuntimeException` when an answer breaks off
-  after its headers arrived (the SDK reads the body outside its transport error handling, so it doesn't wrap that
-  one). Anything else propagates.
+  error (`QuickpayException`: transport errors, an answer that breaks off after its headers arrived, a body that isn't
+  JSON or doesn't map included) is undetermined, with the error's message as the reason. Anything else propagates.
 - **Api key**: `/ping` accepted → passed. `/ping` refused with 401/403 → a one-item `/payments` read decides, because
   Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
   permission (verified live): accepted → passed with the note that the api user lacks `/ping`; 401/403 → failed.

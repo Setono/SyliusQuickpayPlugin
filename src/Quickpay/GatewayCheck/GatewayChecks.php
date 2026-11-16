@@ -93,7 +93,7 @@ final class GatewayChecks implements GatewayChecksInterface
 
         try {
             $client->payments()->deleteLink($testPayment->id);
-        } catch (QuickpayException|\RuntimeException) {
+        } catch (QuickpayException) {
             // Deleting the link only tidies up: the test payment stays on the account either way, so whatever
             // Quickpay answers, the verdict stands
         }
@@ -105,8 +105,7 @@ final class GatewayChecks implements GatewayChecksInterface
      * Sends one request of a check and classifies Quickpay's answer, so a check states only what its answers mean:
      * the verdict for an accepted request, for a refusal (401/403) and, where the check knows one, for a 404. Any other
      * error proves nothing: the verdict is undetermined, with the error's message as the reason and the given note.
-     * Such an error is one of the SDK's, or the PSR-7 body's \RuntimeException when an answer breaks off after its
-     * headers arrived: the SDK reads the body outside its transport error handling, so that one isn't wrapped.
+     * Every error of a Quickpay answer is the SDK's, an answer that breaks off after its headers arrived included.
      *
      * The verdict closures aren't guarded by this classification: a request one of them sends goes through its own.
      *
@@ -134,7 +133,7 @@ final class GatewayChecks implements GatewayChecksInterface
             }
 
             return $notFound();
-        } catch (QuickpayException|\RuntimeException $e) {
+        } catch (QuickpayException $e) {
             return Verdict::undetermined($e->getMessage(), $note);
         }
 
