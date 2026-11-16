@@ -170,10 +170,10 @@ ADR: **payum-quickpay owns the convert; the plugin only describes the order.** A
   back to deriving the rate from the totals). A part the order lacks is left out, so the checkout still reaches the
   payment window: no customer or email → addresses without an email; no billing address → no invoice address; no
   shipping address → no shipping address; a country Symfony Intl has no alpha-3 code for → that address without a
-  country. An order item without a variant still fails: Sylius always sets one, so such an order is broken. The
-  basket's item price is the first unit's price without tax added on top, so in a tax-on-top channel, or with discount
-  cents spread unevenly across units, basket + shipping doesn't sum to the payment amount: today's mapping, pinned by
-  the describer's unit test; changing it is an issue of its own.
+  country. An order item without a variant, or an address without a street or a country, still fails: Sylius always
+  sets them, so such an order is broken. The basket's item price is the first unit's price without tax added on top,
+  so in a tax-on-top channel, or with discount cents spread unevenly across units, basket + shipping doesn't sum to
+  the payment amount: today's mapping, pinned by the describer's unit test; changing it is an issue of its own.
 - **payum-quickpay's convert** owns the rest: the order id (`order_prefix` + the payment number), finding or creating
   the Quickpay payment (a never-paid one under the same order id is picked up, one with an approved operation
   refused), the currency check, the continue/cancel urls from the token, the scalar details (`quickpayPaymentId`,
