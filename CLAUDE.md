@@ -372,8 +372,8 @@ outside this module (a guard doing so inside a transition applied the transition
 Read `GLOSSARY.md` (Pending payment) and `docs/adr/0005-the-reconcile-command-reads-quickpays-changes.md` first. The
 rule from the ADR: **a reconcile run reconciles the pending payments Quickpay changed since the previous run**, plus
 the ones an earlier run couldn't reconcile; a payment Quickpay hasn't changed costs no request. Selection lives in
-this module; keep budgets (`--limit`), polls of every pending payment and watermarks held back for a failed payment
-out of it (the ADR says why).
+this module; keep budgets (`--limit`), reconciling every pending payment every run and watermarks held back for a
+failed payment out of it (the ADR says why).
 
 `PendingPaymentsInterface` (service `PendingPayments`, args `GatewayConfigurationProviderInterface`,
 `QuickpayClientProviderInterface`, the cache pool `setono_sylius_quickpay.reconcile`, `doctrine`,
@@ -388,7 +388,7 @@ happen in `start()`; matching runs lazily as the run is iterated.
   `PaymentsQuery(minTime: changedSince, sortBy: 'id', sortDir: 'asc', extra: ['timestamp' => 'updated_at'])`, every
   page read before the first payment is yielded (Quickpay rejects `sort_by=updated_at`). A `QuickpayException` or
   `UnusableGatewayConfiguration` makes the account a `ListingFailure` (gateway names, message); the others are listed.
-- **Matching.** The local pending payments are read in pages of `$pageSize` after the last id read (so payments the
+- **Matching.** The pending payments are read in pages of `$pageSize` after the last id read (so payments the
   run moves on don't shift the pages), with the factory-name DQL join, states new and processing (stuck) first, then
   authorized, each oldest first by id, and `isset($details['quickpayPaymentId'])` in PHP (how the id is read is
   architecture candidate 07). The entity manager is cleared between pages: the reconciler loads a payment it no

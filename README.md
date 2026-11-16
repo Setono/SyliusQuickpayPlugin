@@ -253,7 +253,7 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
   and fails open: an unreachable Quickpay, or an unusable gateway configuration, never blocks the payment flow. It costs one extra API call per
   automatic capture, which is why it is off by default.
 - A **report mode** on the reconciliation command that asks Quickpay for every payment flagged in the period,
-  regardless of its local state — report only, nothing is transitioned. A gateway it can't query, because Quickpay
+  whatever the state of its Sylius payment — report only, nothing is transitioned. A gateway it can't query, because Quickpay
   fails or its gateway configuration is unusable, is reported by name and makes the run exit non-zero:
 
 ```bash

@@ -90,7 +90,7 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $processing = $this->payment(PaymentInterface::STATE_PROCESSING, 503);
         $secondAuthorized = $this->payment(PaymentInterface::STATE_AUTHORIZED, 504);
         $secondNew = $this->payment(PaymentInterface::STATE_NEW, 505);
-        // Quickpay lists its changes by id, whatever the order of the local payments
+        // Quickpay lists its changes by id, whatever the order of the Sylius payments
         $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(505, 504, 503, 502, 501));
 
         self::assertSame(
@@ -665,8 +665,8 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
-     * Starts a run of the module as the container wires it, or of one reading the given number of local pending
-     * payments at a time
+     * Starts a run of the module as the container wires it, or of one reading the given number of pending payments
+     * at a time
      *
      * @param positive-int|null $pageSize
      */
@@ -680,8 +680,8 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
-     * The module as the container wires it, or one reading the given number of local pending payments at a time, on
-     * the given lock factory or the given cache pool
+     * The module as the container wires it, or one reading the given number of pending payments at a time, on the
+     * given lock factory or the given cache pool
      *
      * @param positive-int|null $pageSize
      */

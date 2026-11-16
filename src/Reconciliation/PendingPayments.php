@@ -61,7 +61,7 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
      * @param CacheItemPoolInterface $cache where the watermarks and the retry list are kept, the cache pool
      *        `setono_sylius_quickpay.reconcile`
      * @param class-string<PaymentInterface> $paymentClass
-     * @param positive-int $pageSize how many local pending payments are read from the database at a time
+     * @param positive-int $pageSize how many pending payments are read from the database at a time
      */
     public function __construct(
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
@@ -264,9 +264,9 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
     }
 
     /**
-     * The local pending payments whose Quickpay payment is among the given ones, or that are to be retried, read from
-     * the database a page at a time: stuck ones first, then authorized ones, each oldest first. A payment to retry
-     * that is no longer pending isn't yielded.
+     * The pending payments whose Quickpay payment is among the given ones, or that are to be retried, read from the
+     * database a page at a time: stuck ones first, then authorized ones, each oldest first. A payment to retry that is
+     * no longer pending isn't yielded.
      *
      * @param array<int, true> $quickpayPaymentIds
      * @param array<int, \DateTimeImmutable> $retryList

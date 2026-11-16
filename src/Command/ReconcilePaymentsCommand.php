@@ -254,9 +254,9 @@ final class ReconcilePaymentsCommand extends Command
     }
 
     /**
-     * Unlike reconciliation, which walks the local pending payments, this asks Quickpay directly:
+     * Unlike reconciling, which reconciles the pending payments Quickpay changed, this only reports:
      * every configured Quickpay gateway is queried for payments flagged fraud suspected within the
-     * period, regardless of their local state. Report only — nothing is transitioned or persisted.
+     * period, whatever the state of their Sylius payments. Nothing is transitioned or persisted.
      * A gateway that can't be queried, its gateway configuration unusable included, is reported and
      * fails the run, so a gap in the report is never silent. Neither is a limit: without one, every
      * flagged payment is reported; with one, it caps the payments reported across gateways, and once
