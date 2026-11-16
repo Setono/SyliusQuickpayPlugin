@@ -143,20 +143,23 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
-     * Quickpay lists a page at a time, by id, and a page short of the page size is the last
+     * Quickpay lists a page of 100 at a time, by id, and a page short of that is the last
      *
      * @test
      */
     public function it_lists_every_page_of_quickpay_changes(): void
     {
         $onFirstPage = $this->payment(PaymentInterface::STATE_NEW, 501);
-        $onSecondPage = $this->payment(PaymentInterface::STATE_NEW, 621);
-        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, ...range(602, 620)), ['page' => 1]);
-        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(621), ['page' => 2]);
+        $onSecondPage = $this->payment(PaymentInterface::STATE_NEW, 701);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, ...range(602, 700)), ['page' => 1]);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(701), ['page' => 2]);
 
         self::assertSame([$onFirstPage->getId(), $onSecondPage->getId()], self::idsOf($this->start()));
         self::assertSame(['GET /payments', 'GET /payments'], $this->quickpay()->sentRequests());
-        self::assertSame(['1', '2'], array_map(static fn (array $query): mixed => $query['page'] ?? null, $this->sentQueries()));
+        self::assertSame(
+            [['1', '100'], ['2', '100']],
+            array_map(static fn (array $query): array => [$query['page'] ?? null, $query['page_size'] ?? null], $this->sentQueries()),
+        );
     }
 
     /**

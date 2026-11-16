@@ -29,6 +29,12 @@ final class PendingPayments implements PendingPaymentsInterface
     private const RETRY_LIST_KEY = 'retry_list';
 
     /**
+     * How many changed payments a list request asks Quickpay for (it accepts 100, verified live), rather than the
+     * SDK's 20: every page is a request, and a fallback run may list tens of pages
+     */
+    private const LIST_PAGE_SIZE = 100;
+
+    /**
      * @param CacheItemPoolInterface $cache where the watermarks are kept, the cache pool `setono_sylius_quickpay.reconcile`
      * @param class-string<PaymentInterface> $paymentClass
      * @param positive-int $pageSize how many local pending payments are read from the database at a time
@@ -82,6 +88,7 @@ final class PendingPayments implements PendingPaymentsInterface
                     sortBy: 'id',
                     sortDir: 'asc',
                     extra: ['timestamp' => 'updated_at'],
+                    pageSize: self::LIST_PAGE_SIZE,
                 ));
 
                 foreach ($payments as $payment) {
