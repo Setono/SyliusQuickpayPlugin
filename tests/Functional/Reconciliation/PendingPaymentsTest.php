@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 use Doctrine\Persistence\ManagerRegistry;
 use Nyholm\Psr7\Response;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
@@ -18,11 +19,13 @@ use Setono\SyliusQuickpayPlugin\Reconciliation\WindowReason;
 use Setono\SyliusQuickpayPlugin\Tests\Cache\RefusingArrayAdapter;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Cache\Adapter\TraceableAdapter;
+use Symfony\Component\Lock\Exception\LockReleasingException;
 use Symfony\Component\Lock\Key;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\PersistingStoreInterface;
@@ -625,6 +628,44 @@ final class PendingPaymentsTest extends FunctionalTestCase
         }
 
         $this->holdRunLock();
+    }
+
+    /**
+     * A run lock that can't be released expires with its TTL, so the run still finishes, and a warning says until when
+     * the next runs are skipped
+     *
+     * @test
+     */
+    public function a_run_whose_run_lock_cannot_be_released_finishes_and_logs_a_warning(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+        $pendingPayments = $this->pendingPayments(lockFactory: new LockFactory(new class() extends InMemoryStore {
+            public function delete(Key $key): void
+            {
+                throw new LockReleasingException('The lock store is unavailable');
+            }
+        }));
+        self::assertInstanceOf(PendingPayments::class, $pendingPayments);
+        $logger = new RecordingLogger();
+        $pendingPayments->setLogger($logger);
+
+        $run = $pendingPayments->start(new \DateTimeImmutable('-7 days'), false, false);
+        self::idsOf($run);
+        // As the reconcile command does: finished, then released in a `finally`
+        self::assertTrue($run->finish());
+        $run->release();
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertSame(
+            'Could not release the run lock, so reconcile runs are skipped until it expires within 300 seconds: The lock store is unavailable',
+            $message,
+        );
+        self::assertSame(['exception'], array_keys($context));
+        self::assertInstanceOf(LockReleasingException::class, $context['exception']);
+        self::assertSame('The lock store is unavailable', $context['exception']->getMessage());
     }
 
     /**
