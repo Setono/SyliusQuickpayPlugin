@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'La opción obsoleta "auto_capture" debe ser true o false. Omítala y elija en su lugar el momento de la captura.'
             branding_id: 'Introduzca un número entero positivo o deje el campo vacío.'
             language: 'La opción "language" debe ser un texto, por ejemplo un código de idioma como "en" o "da".'
-            order_prefix: 'Introduzca un texto o deje el campo vacío.'
+            order_prefix: 'Introduzca como máximo 19 letras, dígitos, espacios, ".", "_" o "-", o deje el campo vacío.'
             payment_methods: 'Introduzca los métodos de pago separados por comas o deje el campo vacío.'
             private_key: 'Introduzca la clave privada de su cuenta (Ajustes → Integración en el manager de Quickpay).'
             synchronized: 'Este valor debe estar activado o desactivado (true o false).'
         invalid_gateway_option: 'La pasarela de Quickpay no acepta el valor de la opción de pasarela "{{ option }}".'
+        order_id:
+            refused: 'Con este prefijo, el pedido {{ number }} tendría el ID de pedido de Quickpay "{{ order_id }}", que Quickpay rechaza: acepta de 4 a 20 letras, dígitos, espacios, ".", "_" o "-".'
         unreadable: 'No se puede leer la configuración de la pasarela, como ocurre cuando está cifrada. No se admite el cifrado de las configuraciones de pasarela.'

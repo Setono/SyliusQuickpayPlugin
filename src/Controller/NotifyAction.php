@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Controller;
 
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
+use Setono\Payum\Quickpay\OrderId;
 use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
@@ -21,8 +24,10 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  * The shared callback endpoint: finds the Sylius payment a Quickpay callback is about and reconciles it
  * from the callback (see GLOSSARY.md) @see https://learn.quickpay.net/tech-talk/api/callback/
  */
-final class NotifyAction
+final class NotifyAction implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     /**
      * @param OrderRepositoryInterface<OrderInterface> $orderRepository
      */
@@ -54,16 +59,18 @@ final class NotifyAction
 
         $quickpayPaymentId = (int) $data['id'];
 
-        $order = $this->resolveOrder($data['order_id']);
+        $payment = $this->findPayment($data['order_id'], $quickpayPaymentId);
 
-        if (null === $order) {
+        // Retrying can't help: the lookup gives the same answer every time. A payment made under an order prefix
+        // since changed, or another environment's payment on the same account, ends here.
+        if (null === $payment) {
+            $this->logger?->warning(sprintf(
+                'No Sylius payment matches the callback of Quickpay payment %d with order id "%s", so nothing was reconciled. Was the order prefix of its payment method changed?',
+                $quickpayPaymentId,
+                $data['order_id'],
+            ), ['quickpayPaymentId' => $quickpayPaymentId, 'orderId' => $data['order_id']]);
+
             return new Response('', 204);
-        }
-
-        $payment = $this->paymentProvider->findByQuickpayPaymentId($order, $quickpayPaymentId);
-
-        if (!$payment instanceof PaymentInterface) {
-            throw new BadRequestHttpException();
         }
 
         // A payment skipped because its lock is held is answered like a reconciled one: the lock's holder,
@@ -74,12 +81,22 @@ final class NotifyAction
         return new Response('', 204);
     }
 
-    private function resolveOrder(string $orderId): ?OrderInterface
+    /**
+     * The Sylius payment of the Quickpay payment: the first candidate order number whose order holds it
+     *
+     * @throws UnusableGatewayConfiguration
+     */
+    private function findPayment(string $orderId, int $quickpayPaymentId): ?PaymentInterface
     {
-        foreach ($this->resolveOrderNumberCandidates($orderId) as $orderNumber) {
+        foreach ($this->orderNumberCandidates($orderId) as $orderNumber) {
             $order = $this->orderRepository->findOneByNumber($orderNumber);
-            if ($order instanceof OrderInterface) {
-                return $order;
+            if (!$order instanceof OrderInterface) {
+                continue;
+            }
+
+            $payment = $this->paymentProvider->findByQuickpayPaymentId($order, $quickpayPaymentId);
+            if ($payment instanceof PaymentInterface) {
+                return $payment;
             }
         }
 
@@ -87,10 +104,10 @@ final class NotifyAction
     }
 
     /**
-     * The Quickpay order_id was built by prepending the order_prefix of whichever Quickpay gateway
-     * created the payment, so the candidates are the incoming order_id stripped of each configured
-     * gateway's prefix — the values actually used at creation time, not an env var that may have
-     * drifted since.
+     * The Quickpay order id (see GLOSSARY.md) is the order prefix of whichever Quickpay gateway created the
+     * payment followed by the order number, so the candidates are the number payum-quickpay's
+     * `OrderId::numberIn()` reads under each gateway's current prefix. One prefix can start another's
+     * (`qp` and `qp_`), so each candidate is only a guess until its order holds the payment.
      *
      * A gateway configuration whose order prefix can't be read fails the callback, so Quickpay retries
      * it: the order might be that gateway's.
@@ -99,19 +116,18 @@ final class NotifyAction
      *
      * @throws UnusableGatewayConfiguration
      */
-    private function resolveOrderNumberCandidates(string $orderId): array
+    private function orderNumberCandidates(string $orderId): array
     {
         $candidates = [];
 
         foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
-            $prefix = $gatewayConfiguration->options()->orderPrefix;
-            if ('' !== $prefix && str_starts_with($orderId, $prefix)) {
-                $candidates[] = substr($orderId, \strlen($prefix));
+            $orderNumber = OrderId::numberIn($orderId, $gatewayConfiguration->options()->orderPrefix);
+            if (null !== $orderNumber) {
+                $candidates[] = $orderNumber;
             }
         }
 
-        // Covers prefixless configurations and payments created under a prefix that no longer
-        // matches any configured gateway
+        // The order id itself, last: a payment created without a prefix by a gateway that has one now
         $candidates[] = $orderId;
 
         return array_values(array_unique($candidates));

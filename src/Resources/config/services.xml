@@ -11,6 +11,10 @@
             <argument type="service" id="sylius.repository.order"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
+
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
         </service>
 
         <!-- Payum's per-payment notify url, the callback url Quickpay normally calls -->
@@ -35,14 +39,6 @@
 
         <service id="Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface"
                  alias="Setono\SyliusQuickpayPlugin\Provider\PaymentProvider"/>
-
-        <service id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider">
-            <argument type="service" id="doctrine"/>
-            <argument>%sylius.model.payment.class%</argument>
-        </service>
-
-        <service id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"
-                 alias="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider"/>
 
         <service id="Setono\SyliusQuickpayPlugin\Controller\Admin\PaymentOperationsAction" public="true">
             <argument type="service" id="sylius.repository.payment"/>
@@ -113,9 +109,19 @@
         <service id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"
                  alias="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecks"/>
 
+        <!-- Order id -->
+        <service id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProvider">
+            <argument type="service" id="doctrine"/>
+            <argument>%sylius.model.order.class%</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface"
+                 alias="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProvider"/>
+
         <!-- Validator -->
         <service id="Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface"/>
 
             <call method="setLogger">
                 <argument type="service" id="logger" on-invalid="ignore"/>
@@ -129,12 +135,13 @@
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck\GatewayChecksInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
             <argument type="service" id="router"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProviderInterface"/>
 
             <tag name="console.command"/>
         </service>
 
         <service id="Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand">
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
@@ -169,6 +176,24 @@
 
         <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"
                  alias="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler"/>
+
+        <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
+            <!-- the cache pool the plugin prepends onto framework.cache -->
+            <argument type="service" id="setono_sylius_quickpay.reconcile"/>
+            <!-- the run lock comes from the plugin's lock resource, so a shared store keeps runs on different servers apart -->
+            <argument type="service" id="lock.setono_sylius_quickpay.factory"/>
+            <argument type="service" id="doctrine"/>
+            <argument>%sylius.model.payment.class%</argument>
+
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments"/>
 
         <!-- Fraud -->
         <service id="Setono\SyliusQuickpayPlugin\Fraud\FraudChecker">

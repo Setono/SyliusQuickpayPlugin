@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'Vanhentuneen "auto_capture"-asetuksen on oltava true tai false. Jätä se pois ja valitse sen sijaan veloitusajankohta.'
             branding_id: 'Anna positiivinen kokonaisluku tai jätä kenttä tyhjäksi.'
             language: '"language"-asetuksen on oltava tekstiä, esimerkiksi kielikoodi kuten "en" tai "da".'
-            order_prefix: 'Anna tekstiä tai jätä kenttä tyhjäksi.'
+            order_prefix: 'Anna enintään 19 kirjainta, numeroa, välilyöntiä, ".", "_" tai "-", tai jätä kenttä tyhjäksi.'
             payment_methods: 'Anna maksutavat pilkuilla erotettuina tai jätä kenttä tyhjäksi.'
             private_key: 'Anna tilisi yksityinen avain (Asetukset → Integraatio Quickpay-hallinnassa).'
             synchronized: 'Tämän on oltava päällä tai pois päältä (true tai false).'
         invalid_gateway_option: 'Quickpay-maksuyhdyskäytävä ei hyväksy maksuyhdyskäytävän asetuksen "{{ option }}" arvoa.'
+        order_id:
+            refused: 'Tällä etuliitteellä tilaus {{ number }} saisi Quickpay-tilaustunnuksen "{{ order_id }}", jonka Quickpay hylkää: se hyväksyy 4–20 kirjainta, numeroa, välilyöntiä, ".", "_" tai "-".'
         unreadable: 'Maksuyhdyskäytävän asetuksia ei voi lukea, kuten käy, kun ne on salattu. Maksuyhdyskäytävän asetusten salausta ei tueta.'

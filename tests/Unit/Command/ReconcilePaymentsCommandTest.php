@@ -13,9 +13,9 @@ use Setono\Quickpay\Client\ClientInterface;
 use Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
@@ -32,8 +32,8 @@ final class ReconcilePaymentsCommandTest extends TestCase
 {
     use ProphecyTrait;
 
-    /** @var ObjectProphecy<PendingPaymentProviderInterface> */
-    private ObjectProphecy $pendingPaymentProvider;
+    /** @var ObjectProphecy<PendingPaymentsInterface> */
+    private ObjectProphecy $pendingPayments;
 
     /** @var ObjectProphecy<PaymentReconcilerInterface> */
     private ObjectProphecy $reconciler;
@@ -46,7 +46,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->pendingPaymentProvider = $this->prophesize(PendingPaymentProviderInterface::class);
+        $this->pendingPayments = $this->prophesize(PendingPaymentsInterface::class);
         $this->reconciler = $this->prophesize(PaymentReconcilerInterface::class);
         $this->clientProvider = $this->prophesize(QuickpayClientProviderInterface::class);
         $this->gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
@@ -55,34 +55,29 @@ final class ReconcilePaymentsCommandTest extends TestCase
     /**
      * @test
      */
-    public function it_passes_the_parsed_options_to_the_provider(): void
-    {
-        $this->pendingPaymentProvider->findPending(
-            Argument::that(static function (\DateTimeImmutable $since): bool {
-                $expected = new \DateTimeImmutable('-12 hours');
-
-                return abs($since->getTimestamp() - $expected->getTimestamp()) < 60;
-            }),
-            25,
-        )->shouldBeCalledOnce()->willReturn([]);
-
-        $tester = $this->executeCommand(['--since' => '12 hours', '--limit' => '25']);
-
-        $tester->assertCommandIsSuccessful();
-        self::assertStringContainsString('0 checked', $tester->getDisplay());
-    }
-
-    /**
-     * @test
-     */
     public function it_rejects_an_unparsable_since_option(): void
     {
-        $this->pendingPaymentProvider->findPending(Argument::cetera())->shouldNotBeCalled();
+        $this->pendingPayments->start(Argument::cetera())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--since' => 'not-a-period']);
 
         self::assertSame(Command::INVALID, $tester->getStatusCode());
         self::assertStringContainsString('Cannot parse "not-a-period"', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
+    public function it_rejects_a_fraud_report_limit_that_is_no_whole_number_of_payments(): void
+    {
+        $this->gatewayConfigurationProvider->all()->shouldNotBeCalled();
+
+        foreach (['0', 'ten', '2.5'] as $limit) {
+            $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => $limit]);
+
+            self::assertSame(Command::INVALID, $tester->getStatusCode());
+            self::assertStringContainsString(sprintf('Cannot use "%s" as --limit', $limit), $tester->getDisplay());
+        }
     }
 
     /**
@@ -94,7 +89,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
         $this->gatewayConfigurationProvider->all()->willReturn([$gatewayConfiguration]);
         $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->willReturn(self::clientAnswering('qp_000000123'));
 
-        $this->pendingPaymentProvider->findPending(Argument::cetera())->shouldNotBeCalled();
+        $this->pendingPayments->start(Argument::cetera())->shouldNotBeCalled();
         $this->reconciler->reconcile(Argument::cetera())->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--fraud-suspected' => true]);
@@ -230,7 +225,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
     {
         $application = new Application();
         $application->add(new ReconcilePaymentsCommand(
-            $this->pendingPaymentProvider->reveal(),
+            $this->pendingPayments->reveal(),
             $this->reconciler->reveal(),
             $this->clientProvider->reveal(),
             $this->gatewayConfigurationProvider->reveal(),

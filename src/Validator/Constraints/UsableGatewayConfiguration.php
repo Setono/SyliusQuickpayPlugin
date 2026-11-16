@@ -22,6 +22,12 @@ final class UsableGatewayConfiguration extends Constraint
     public string $unreadableMessage = 'setono_sylius_quickpay.gateway_configuration.unreadable';
 
     /**
+     * Shown when the order prefix gives the store's latest order a Quickpay order id Quickpay refuses;
+     * `{{ order_id }}` is that order id, `{{ number }}` the order number
+     */
+    public string $orderIdMessage = 'setono_sylius_quickpay.gateway_configuration.order_id.refused';
+
+    /**
      * The message for each gateway option payum-quickpay can reject, keyed by the option's name, saying what the option
      * accepts. An option missing here, one a later payum-quickpay adds, gets $invalidOptionMessage until it has its own.
      *

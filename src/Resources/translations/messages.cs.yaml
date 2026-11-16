@@ -20,7 +20,7 @@ setono_sylius_quickpay:
                 synchronized: 'Synchronní operace'
                 synchronized_help: 'Provádět stržení, vrácení a zrušení synchronně místo spoléhání na callback Quickpay'
                 order_prefix: 'Předpona objednávky'
-                order_prefix_help: 'Předřazuje se číslům objednávek a tvoří Quickpay ID objednávky — musí být jedinečná pro každý projekt a prostředí sdílející stejný Quickpay účet, nejvýše 11 znaků'
+                order_prefix_help: 'Předřazuje se číslům objednávek a tvoří Quickpay ID objednávky — musí být jedinečná pro každý projekt a prostředí sdílející stejný Quickpay účet. Pouze písmena, číslice, mezery, ".", "_" a "-"; předpona a číslo objednávky dohromady nejvýše 20 znaků'
                 branding_id: 'ID brandingu'
                 branding_id_help: 'Volitelné: ID brandingu platebního okna, který se má použít'
     ui:

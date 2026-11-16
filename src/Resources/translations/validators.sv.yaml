@@ -10,9 +10,11 @@ setono_sylius_quickpay:
             auto_capture: 'Den föråldrade inställningen "auto_capture" måste vara true eller false. Utelämna den och välj tidpunkt för debitering i stället.'
             branding_id: 'Ange ett positivt heltal, eller lämna fältet tomt.'
             language: 'Inställningen "language" måste vara text, till exempel en språkkod som "en" eller "da".'
-            order_prefix: 'Ange text, eller lämna fältet tomt.'
+            order_prefix: 'Ange högst 19 bokstäver, siffror, mellanslag, ".", "_" eller "-", eller lämna fältet tomt.'
             payment_methods: 'Ange betalningsmetoder separerade med kommatecken, eller lämna fältet tomt.'
             private_key: 'Ange ditt kontos privata nyckel (Inställningar → Integration i Quickpay-managern).'
             synchronized: 'Detta måste vara på eller av (true eller false).'
         invalid_gateway_option: 'Quickpay-gatewayen accepterar inte värdet för gateway-inställningen "{{ option }}".'
+        order_id:
+            refused: 'Med det här prefixet skulle order {{ number }} få Quickpay-order-id "{{ order_id }}", som Quickpay avvisar: det accepterar 4 till 20 bokstäver, siffror, mellanslag, ".", "_" eller "-".'
         unreadable: 'Gateway-konfigurationen kan inte läsas, vilket händer när den är krypterad. Kryptering av gateway-konfigurationer stöds inte.'

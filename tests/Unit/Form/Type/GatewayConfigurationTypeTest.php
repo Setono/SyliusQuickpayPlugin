@@ -120,12 +120,13 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     }
 
     /**
-     * Saving the payment method validates the gateway configuration by the gateway's own rules (see
-     * tests/Functional/Form/PaymentMethodFormTest), so the order prefix's length is the only constraint of the form's own
+     * Saving the payment method validates the gateway configuration by the gateway's own rules and checks the order id
+     * the order prefix gives the store's latest order (see tests/Functional/Form/PaymentMethodFormTest), so the form has
+     * no constraint of its own: not even on an order prefix too long for Sylius' default order numbers
      *
      * @test
      */
-    public function it_is_invalid_only_when_the_order_prefix_is_too_long(): void
+    public function it_has_no_constraint_of_its_own(): void
     {
         $form = $this->factory->create(GatewayConfigurationType::class, null, [
             'validation_groups' => ['sylius'],
@@ -139,9 +140,7 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
             'payment_methods' => '',
         ]);
 
-        self::assertFalse($form->isValid());
-        self::assertCount(1, $form->getErrors(true));
-        self::assertCount(1, $form->get('order_prefix')->getErrors());
+        self::assertTrue($form->isValid());
     }
 
     /**

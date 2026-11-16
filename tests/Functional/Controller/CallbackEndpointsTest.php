@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Controller;
 
+use Psr\Log\LogLevel;
+use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Setono\SyliusQuickpayPlugin\Tests\Payum\OfflineNotifyAction;
 use Sylius\Component\Core\Factory\PaymentMethodFactoryInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
+use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpFoundation\Request;
@@ -123,6 +127,68 @@ final class CallbackEndpointsTest extends FunctionalTestCase
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
         self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+    }
+
+    /**
+     * One gateway's order prefix can start another's order id: under the prefix "q", the order id "qp_000000001" reads
+     * as order "p_000000001". Each candidate order is only a guess until it holds the payment.
+     *
+     * @test
+     */
+    public function the_shared_endpoint_tries_every_candidate_order_until_one_holds_the_payment(): void
+    {
+        self::bootKernel();
+
+        // Listed before the payment's own gateway configuration, so its candidate is tried first
+        $this->createPaymentMethod('quickpay_a', ['api_key' => 'the-a-api-key', 'private_key' => self::PRIVATE_KEY, 'order_prefix' => 'q']);
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->createOrder($this->channel(), OrderPaymentStates::STATE_AWAITING_PAYMENT, 'p_000000001');
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $response = self::$kernel->handle(self::quickpayCallback(501));
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());
+    }
+
+    /**
+     * A payment made under an order prefix since changed: no candidate order holds it. Retrying can't help, so it is
+     * answered 204, and the store's log says which payment was left out.
+     *
+     * @test
+     */
+    public function the_shared_endpoint_answers_a_callback_no_payment_matches_with_a_204_and_a_warning(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        // The payment method's order prefix, changed since the payment was made
+        $paymentMethod = $payment->getMethod();
+        self::assertInstanceOf(PaymentMethodInterface::class, $paymentMethod);
+        $paymentMethod->getGatewayConfig()?->setConfig(['api_key' => 'the-api-key', 'private_key' => self::PRIVATE_KEY, 'order_prefix' => 'shop_']);
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $transitions = $this->recordPaymentTransitions();
+
+        $logger = new RecordingLogger();
+        $notifyAction = self::getContainer()->get(NotifyAction::class);
+        self::assertInstanceOf(NotifyAction::class, $notifyAction);
+        $notifyAction->setLogger($logger);
+
+        $response = self::$kernel->handle(self::quickpayCallback(501));
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([[
+            LogLevel::WARNING,
+            'No Sylius payment matches the callback of Quickpay payment 501 with order id "qp_000000001", so nothing was reconciled. Was the order prefix of its payment method changed?',
+            ['quickpayPaymentId' => 501, 'orderId' => 'qp_000000001'],
+        ]], $logger->records);
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame([], $transitions->getArrayCopy());
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $this->reload($payment)->getState());
     }
 
     /**

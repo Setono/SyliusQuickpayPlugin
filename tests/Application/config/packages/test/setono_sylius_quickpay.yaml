@@ -5,6 +5,14 @@ framework:
     http_client:
         mock_response_factory: Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient
 
+    # The reconcile command's watermarks and retry list live in memory, so each booted kernel starts with none, as a
+    # first run would; public, so a test can see what a run stored
+    cache:
+        pools:
+            setono_sylius_quickpay.reconcile:
+                adapter: cache.adapter.array
+                public: true
+
 services:
     Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient:
         public: true
@@ -13,6 +21,11 @@ services:
     # else in the container consumes it
     Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface:
         alias: Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler
+        public: true
+
+    # ...and the pending payments of a reconcile run likewise
+    Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface:
+        alias: Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments
         public: true
 
     # ...and the gateway configuration module likewise

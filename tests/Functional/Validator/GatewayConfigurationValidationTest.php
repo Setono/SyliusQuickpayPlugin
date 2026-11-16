@@ -155,6 +155,127 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
+     * payum-quickpay rejects an order prefix that can never start a Quickpay order id; the admin reads what the field
+     * accepts, and no order id is checked
+     *
+     * @test
+     *
+     * @dataProvider orderPrefixesQuickpayRefuses
+     */
+    public function it_refuses_an_order_prefix_that_can_never_start_an_order_id(string $orderPrefix): void
+    {
+        self::bootKernel();
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => $orderPrefix]);
+
+        self::assertSame([
+            'gatewayConfig.config[order_prefix]' => 'Enter at most 19 letters, digits, spaces, ".", "_" or "-", or leave the field empty.',
+        ], $this->messagesOf($paymentMethod));
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function orderPrefixesQuickpayRefuses(): iterable
+    {
+        yield 'a character Quickpay refuses' => ['qp#'];
+        yield 'a character outside ASCII' => ['øl_'];
+        yield 'longer than 19' => ['qp_shop_2026_11_16_x'];
+    }
+
+    /**
+     * The order id the order prefix gives the store's latest order is checked by payum-quickpay's own rule, and the
+     * api key is still checked
+     *
+     * @test
+     */
+    public function it_refuses_an_order_prefix_too_long_for_the_latest_order_number(): void
+    {
+        self::bootKernel();
+        $this->createNumberedOrders('000000122', '000000123');
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_']);
+
+        self::assertSame([
+            'gatewayConfig.config[order_prefix]' => 'With this prefix, order 000000123 would get the Quickpay order id "qp_shop_2026_000000123", which Quickpay refuses: it accepts 4 to 20 letters, digits, spaces, ".", "_" or "-".',
+        ], $this->messagesOf($paymentMethod));
+        self::assertSame(['GET /ping'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * A store numbering its orders its own way is held to its own numbers, not to Sylius' 9 digits
+     *
+     * @test
+     */
+    public function it_accepts_an_order_prefix_that_fits_the_stores_own_order_numbers(): void
+    {
+        self::bootKernel();
+        $this->createNumberedOrders('1234');
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_']);
+
+        self::assertSame([], $this->violationsOf($paymentMethod));
+    }
+
+    /**
+     * An order number format with a character Quickpay refuses makes every order id one it refuses
+     *
+     * @test
+     */
+    public function it_refuses_an_order_prefix_whatever_it_is_when_the_latest_order_number_has_a_character_quickpay_refuses(): void
+    {
+        self::bootKernel();
+        $this->createNumberedOrders('2026/123');
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_']);
+
+        self::assertSame(['gatewayConfig.config[order_prefix]'], array_keys($this->violationsOf($paymentMethod)));
+    }
+
+    /**
+     * Before the first order, Sylius' default first order number stands in
+     *
+     * @test
+     */
+    public function it_checks_sylius_default_first_order_number_while_there_are_no_orders(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        self::assertSame([], $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_26_'])));
+        self::assertSame([
+            'gatewayConfig.config[order_prefix]' => 'With this prefix, order 000000001 would get the Quickpay order id "qp_shop_2026_000000001", which Quickpay refuses: it accepts 4 to 20 letters, digits, spaces, ".", "_" or "-".',
+        ], $this->messagesOf($this->createPaymentMethod('quickpay_se', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_'])));
+    }
+
+    /**
+     * The order id needs only the order prefix, so a configuration refused for another option gets its order id
+     * checked too: fixing one field keeps the other error visible
+     *
+     * @test
+     */
+    public function it_checks_the_order_id_of_a_configuration_refused_for_another_option(): void
+    {
+        self::bootKernel();
+
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', ['api_key' => 'the-api-key', 'order_prefix' => 'qp_shop_2026_']);
+
+        self::assertEqualsCanonicalizing([
+            'gatewayConfig.config[private_key]',
+            'gatewayConfig.config[order_prefix]',
+        ], array_keys($this->violationsOf($paymentMethod)));
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
      * Quickpay answers 401 on /ping for a valid key whose api user lacks the /ping permission too, so only a
      * rejected /payments read as well rejects the key
      *
@@ -394,8 +515,8 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
     /**
      * Every refusal is shown in the admin's language: a message per gateway option payum-quickpay rejects, the
-     * fallback for an option without one, a rejected api key, an agreement Quickpay doesn't find and an unreadable
-     * configuration
+     * fallback for an option without one, a rejected api key, an agreement Quickpay doesn't find, an order id Quickpay
+     * refuses and an unreadable configuration
      *
      * @test
      *
@@ -409,6 +530,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
         $this->quickpay()->respond('GET', '/agreements/12345', new Response(404, ['Content-Type' => 'application/json'], '{"message":"Not found"}'));
         $agreementNotFound = array_values($this->violationsOf($this->createPaymentMethod('quickpay_de', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345])));
+        $orderIdRefused = array_values($this->violationsOf($this->createPaymentMethod('quickpay_pl', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_'])));
 
         $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
         $this->quickpay()->respond('GET', '/payments', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
@@ -440,9 +562,10 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
             ...array_values($this->violationsOf($rejectedApiKey)),
             ...array_values($this->violationsOf($unreadable)),
             ...$agreementNotFound,
+            ...$orderIdRefused,
         ];
-        self::assertCount(13, $violations);
-        self::assertCount(13, array_unique(array_map(
+        self::assertCount(14, $violations);
+        self::assertCount(14, array_unique(array_map(
             static fn (ConstraintViolationInterface $violation): string => $violation->getMessageTemplate(),
             $violations,
         )), 'Each gateway option has a message of its own');
@@ -465,6 +588,19 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
             yield $locale => [$locale];
         }
+    }
+
+    /**
+     * Orders carrying the numbers, in the order given, so the last is the latest
+     */
+    private function createNumberedOrders(string ...$numbers): void
+    {
+        $channel = $this->channel();
+        foreach ($numbers as $number) {
+            $this->createOrder($channel, 'awaiting_payment', $number);
+        }
+
+        $this->entityManager()->flush();
     }
 
     /**

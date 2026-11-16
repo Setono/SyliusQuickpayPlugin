@@ -157,6 +157,14 @@ if you make those and want the store to notice. The README's *Callbacks* section
   email on the addresses, the invoice or shipping address, or that address' country. An order item without a
   variant, or an address without a street or country, still fails: Sylius always sets them, so such an order is
   broken rather than missing optional data.
+- **The basket and shipping Quickpay is told add up to the order total.** 1.x sent one basket line per order item
+  priced at its first unit's price after promotions, without the tax added on top, so in a channel adding the tax on
+  top of its prices, or when an order promotion's cents split unevenly over an item's units, the basket and shipping
+  added up to less or more than the payment's amount; Klarna rejects such a payment. Each line is now a unit price
+  with its VAT, one line per distinct unit price of an item, and each adjustment outside the units and shipping (a
+  plugin's payment fee or gift card, say) is a line of its own, named by its label, with the VAT rate from
+  `VatRateResolverInterface::forAdjustment()`. A line's name no longer ends in a space when the variant has no name,
+  and a line whose product and variant both have no name is named by its variant code.
 - **A refund targets Quickpay's `balance`** (what is still captured) rather than the original amount,
   so a payment partially refunded directly in the Quickpay manager refunds only the remainder instead
   of failing. The balance is persisted into the payment details whenever a callback or the reconciliation
@@ -180,13 +188,17 @@ if you make those and want the store to notice. The README's *Callbacks* section
   adapter) is complemented by a Symfony workflow event subscriber, so capture/refund/cancel reach
   Quickpay also when the `sylius_payment` graph runs on the `symfony_workflow` adapter — where 1.x
   was silently inert.
-- **New: a reconciliation command.** `setono:sylius-quickpay:reconcile-payments` reconciles payments
-  stuck in a non-final state — e.g. because a callback never arrived — with their Quickpay payments,
-  making the state change the callback would have made; `--dry-run` reports what would change and
-  changes nothing. See the README for options and a suggested cron cadence.
+- **New: a reconciliation command.** `setono:sylius-quickpay:reconcile-payments` is the backstop for
+  callbacks that never arrive: each run asks Quickpay which payments changed since the previous run and
+  reconciles those still pending in the store (*new*, *processing* or *authorized*, however old) with
+  their Quickpay payments, making the state change the callback would have made. A payment that fails is
+  retried by every later run; `--dry-run` reports what would change and changes nothing; one run
+  reconciles at a time. Where each run starts from is kept in the cache pool
+  `setono_sylius_quickpay.reconcile`, which a shop that deploys often points at a persistent adapter. See
+  the README's *Reconciling missed callbacks* for options, the cache pool and a suggested cron cadence.
 - **New: a doctor command.** `setono:sylius-quickpay:doctor` verifies every configured gateway —
-  api key, private key self-test, agreement existence, order prefix length and uniqueness, and the
-  notify route — and with `--live` probes the payment link permission. See the README's *Checking
+  api key, private key self-test, agreement existence, the order id the order prefix gives the latest
+  order, and the notify route — and with `--live` probes the payment link permission. See the README's *Checking
   your configuration* section.
 - **New: Quickpay's fraud signals are surfaced.** The admin operation history shows a *Fraud suspected*
   badge, the reconciliation command gains a `--fraud-suspected` report mode, and an opt-in
@@ -214,6 +226,11 @@ Quickpay, the gateway's and the plugin's own, gets its client from the client pr
 one HTTP policy, and the api key, agreement and payment link checks are gateway checks that return a verdict
 ([ADR 0003](docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md)).
 
+The reconciliation command no longer reconciles a budget of the oldest pending payments: each run reconciles the
+pending payments Quickpay changed since the previous run, and retries the ones it couldn't reconcile
+([ADR 0005](docs/adr/0005-the-reconcile-command-reads-quickpays-changes.md)). Its options changed (see *Behavioural
+changes*); check your cron entries.
+
 ### Removed
 
 | Class | Service | Replaced by |
@@ -224,6 +241,7 @@ one HTTP policy, and the api key, agreement and payment link checks are gateway 
 | `Validator\Constraints\QuickpayCredentials`, `Validator\Constraints\QuickpayCredentialsValidator` | `Setono\SyliusQuickpayPlugin\Validator\Constraints\QuickpayCredentialsValidator`, tagged `validator.constraint_validator` | `Validator\Constraints\UsableGatewayConfiguration`, which verifies the api key on save, also through the Admin API |
 | `Quickpay\ApiKeyVerifierInterface`, `Quickpay\ApiKeyVerifier` | `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifier`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ApiKeyVerifierInterface` | the gateway checks: `Quickpay\GatewayCheck\GatewayChecksInterface::apiKey(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and returns a `Verdict` instead of throwing Quickpay's errors |
 | `Quickpay\ApiKeyVerification` | none | the `Verdict`: a key Quickpay accepts is `VerdictOutcome::Passed`, and one accepted only through the `/payments` read (`ViaPayments`) carries a note saying so |
+| `Provider\PendingPaymentProviderInterface`, `Provider\PendingPaymentProvider` | `Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProvider`, aliased by `Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface` | the pending payments module: `Reconciliation\PendingPaymentsInterface::start()`, which lists the payments Quickpay changed since the previous run instead of finding the oldest pending payments created within a period |
 | `Quickpay\ClientFactoryInterface`, `Quickpay\ClientFactory` | `Setono\SyliusQuickpayPlugin\Quickpay\ClientFactory`, aliased by `Setono\SyliusQuickpayPlugin\Quickpay\ClientFactoryInterface` | the client provider: `Quickpay\QuickpayClientProviderInterface::forGatewayConfiguration(GatewayConfiguration)`, which takes the gateway configuration instead of the api key and builds the client on the plugin's HTTP policy, or `quickpayPaymentOf(PaymentInterface)` to read a Sylius payment's Quickpay payment |
 
 The reconciliation command's private Quickpay status → transition mapping is gone as well: Sylius' own
@@ -268,9 +286,17 @@ mapping applies.
   payment method's gateway config in `sylius_quickpay` as well, in the admin form and the Admin API alike. The group
   holds one constraint, `Validator\Constraints\UsableGatewayConfiguration`, declared on Sylius' `GatewayConfig` by the
   plugin's validation mapping (validator service `Setono\SyliusQuickpayPlugin\Validator\Constraints\UsableGatewayConfigurationValidator`,
-  constructor `(GatewayChecksInterface $gatewayChecks)`, logger-aware). An application that sets
+  constructor `(GatewayChecksInterface $gatewayChecks, LatestOrderNumberProviderInterface $latestOrderNumberProvider)`,
+  logger-aware). An application that sets
   `sylius_payum.gateway_config.validation_groups.quickpay` itself replaces the plugin's entry, so it must list
   `sylius_quickpay` too.
+- **`OrderId\LatestOrderNumberProviderInterface`**, service `Setono\SyliusQuickpayPlugin\OrderId\LatestOrderNumberProvider`
+  (constructor `(ManagerRegistry $managerRegistry, string $orderClass)`), aliased by the interface:
+  `getLatestOrderNumber(): ?string`, the number of the newest order that has one, or null; `STAND_IN_ORDER_NUMBER`
+  (`000000001`) stands in while there is none. Save validation and the doctor check the order id (see
+  [GLOSSARY.md](GLOSSARY.md)) the order prefix gives that order with payum-quickpay's `OrderId::of()`.
+  `GatewayConfiguration::orderPrefix(): ?string` gives the order prefix the gateway sends, even from a configuration
+  payum-quickpay rejects for other options.
 - **One HTTP policy for every request to Quickpay** ([ADR 0003](docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md)).
   The extension prepends a scoped HTTP client onto `framework.http_client`, `setono_sylius_quickpay.http_client`:
   base URI `https://api.quickpay.net`, `timeout` 10, `max_duration` 10, no `retry_failed`. Override single options
@@ -311,18 +337,45 @@ mapping applies.
   invoice and shipping addresses, the basket, shipping and the plugin as the shop system. It holds the mapping the
   convert action had, except that it leaves out what an order lacks (see *Behavioural changes*). Decorate it to change
   what Quickpay is told; the VAT rate resolver stays decoratable.
+- **The pending payments module, `Reconciliation\PendingPaymentsInterface`**, service
+  `Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments` (constructor `(GatewayConfigurationProviderInterface
+  $gatewayConfigurationProvider, QuickpayClientProviderInterface $clientProvider, CacheItemPoolInterface $cache,
+  LockFactory $lockFactory, ManagerRegistry $managerRegistry, string $paymentClass, int $pageSize = 100)`: the cache
+  pool `setono_sylius_quickpay.reconcile`, the plugin's lock factory `lock.setono_sylius_quickpay.factory` and Sylius'
+  payment class; logger-aware via `setLogger()`), aliased by the interface (terms in
+  [GLOSSARY.md](GLOSSARY.md): Pending payment; the decision in
+  [ADR 0005](docs/adr/0005-the-reconcile-command-reads-quickpays-changes.md)). It replaces the pending payment provider.
+  `start(\DateTimeImmutable $lookbackFrom, bool $full, bool $dryRun): PendingPaymentsRun` takes the run lock unless
+  it is a dry run (`Reconciliation\AnotherRunIsReconciling` when another run holds it), then lists, once per Quickpay
+  account (a distinct api key), the payments Quickpay changed since the account's watermark, or since `$lookbackFrom`
+  when it has none, it is older, or `$full` is set. The `PendingPaymentsRun` yields the pending payments among them and
+  the ones to retry, stuck ones first, and says what it listed per account (`windows()`, each an `AccountWindow` with
+  the `WindowReason` it lists since then) and which gateways it couldn't list (`failedGateways()`, each a
+  `ListingFailure`). `retryLater()` puts a payment that errored or was skipped on the retry list, `failingSince()` says
+  since when a payment to retry has been failing, `finish()` stores the watermarks and the retry list, unless the run
+  is a dry run, returns false when the cache refused to save them, and releases the run lock, and `release()` ends a
+  run without storing anything, releasing the run lock.
+- **The cache pool `setono_sylius_quickpay.reconcile`.** The extension prepends it onto `framework.cache.pools` with
+  adapter `cache.app`. It keeps each Quickpay account's watermark, under a hash of the api key, and the retry list,
+  together in one item. A run whose item the cache refuses to save warns and exits non-zero.
+  Override its adapter under the same name in your framework configuration: on a filesystem `cache.app`, which a deploy
+  empties, the first run after a deploy looks back the whole `--since` period (see the README's *Reconciling missed
+  callbacks*).
+- **`psr/cache` (`^2.0 || ^3.0`) is a direct dependency.** Symfony's cache component already requires it, so nothing
+  new is installed.
+- **`sylius/order` (`^1.0`) is a direct dependency.** `sylius/core` already requires it, so nothing new is installed.
 
 ### Changed constructors
 
 | Class | `v2.0.0-alpha.2` | Now |
 |---|---|---|
-| `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
+| `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)`, and logger-aware |
 | `PaymentLink\PaymentLinkProvider` | `(UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` |
-| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentProviderInterface $pendingPaymentProvider, PaymentReconcilerInterface $reconciler, QuickpayClientProviderInterface $clientProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
+| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentsInterface $pendingPayments, PaymentReconcilerInterface $reconciler, QuickpayClientProviderInterface $clientProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
 | `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(QuickpayClientProviderInterface $quickpayClientProvider)` |
 | `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, QuickpayClientProviderInterface $quickpayClientProvider, Environment $twig)`, and logger-aware |
-| `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
+| `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router, LatestOrderNumberProviderInterface $latestOrderNumberProvider)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 | `FactoryBuilder\QuickpayGatewayFactoryBuilder` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser)` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser, QuickpayClientProviderInterface $clientProvider)` |
 | `Action\ConvertPaymentAction` | `(Payum $payum, VatRateResolverInterface $vatRateResolver)` | `(OrderDescriberInterface $orderDescriber, PaymentDescriptionProviderInterface $paymentDescriptionProvider)`, Sylius' payment description provider |
@@ -331,8 +384,9 @@ The service definitions changed accordingly; only a redefinition or decoration o
 
 ### Behavioural changes
 
-- **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.3`**, the release whose public `GatewayOptions` the plugin
-  reads gateway configurations with, and whose convert takes an order description. A root `composer.json` allowing
+- **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.4`**, the release whose public `GatewayOptions` the plugin
+  reads gateway configurations with, whose convert takes an order description, and whose `OrderId` builds the order id
+  and reads the order number back. A root `composer.json` allowing
   `^2.0@RC` picks it up with `composer update`.
 - **payum-quickpay's convert creates the Quickpay payment, and the plugin only describes the order to it.**
   `Action\ConvertPaymentAction` now supports `Convert` to `array` of a Sylius payment, the convert Sylius' capture and
@@ -345,7 +399,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   is one of payum-quickpay's `LogicException`s now, where it failed an assertion). The order is read from the Sylius
   payment instead of through the Payum token and storage, so a `Convert` of a Sylius payment without a token works,
   without return urls. A `Convert` of a Payum payment on a Quickpay gateway goes to payum-quickpay's convert and sends
-  no order description. Quickpay is told the same about the order as before, but for what an order lacks (next item).
+  no order description. Quickpay is told the same about the order as before, but for what an order lacks and the
+  basket (next items).
   The describer gets the VAT rate resolver through `VatRateResolverInterface`, so a decorator of that alias applies now
   too; before, the convert action only got a decorator of the `VatRateResolver` service.
 - **An order missing optional data still reaches the payment window.** Before, the checkout of an order without a
@@ -354,9 +409,20 @@ The service definitions changed accordingly; only a redefinition or decoration o
   every address field as optional, so the order describer now leaves out what the order lacks: the email on the
   addresses, the invoice or shipping address, or that address' country. An order item without a variant, or an address
   without a street or country, still fails: Sylius always sets them, so such an order is broken rather than missing
-  optional data. A basket item's name joins the product and variant names with a space only when the item has both,
-  so an item whose variant has no name no longer ends in a space; an item with neither name is named by its variant
-  code.
+  optional data.
+- **The basket and shipping Quickpay is told add up to the order total.** Before, the basket had one line per order
+  item priced at its first unit's price after promotions, without the tax added on top, so in a channel adding the tax
+  on top of its prices, or when an order promotion's cents split unevenly over an item's units, the basket and shipping
+  added up to less or more than the payment's amount; Klarna rejects such a payment. Each line is now a unit price with
+  its VAT (`OrderItemUnit::getTotal()`), one line per distinct unit price of an item, and each non-neutral adjustment
+  on an order item, or on the order outside shipping (a plugin's payment fee or gift card, say), is a line of its own:
+  quantity 1, its amount, its type as the item number and its label (else its type) as the name. A line's name no
+  longer ends in a space when the variant has no name, and a line whose product and variant both have no name is named
+  by its variant code.
+- **`VatRateResolverInterface` has a third method, `forAdjustment(AdjustmentInterface $adjustment): float`** (Sylius'
+  `Sylius\Component\Order\Model\AdjustmentInterface`), the VAT rate of an adjustment's basket line. Add it to your
+  own implementation; a decorator can delegate it to the inner resolver. The plugin's resolver returns the rate stored
+  in the adjustment's details (`taxRateAmount`), else 0.
 - **Every request to Quickpay gives up after 10 seconds**, the gateway's and the plugin's own alike, and none is
   retried. Before, the gateway built its own HTTP client through PSR-18 discovery: a request could wait 60 seconds
   (PHP's `default_socket_timeout`) for each idle stretch, with no limit in total, so a slow Quickpay could hang the
@@ -380,8 +446,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   Quickpay as before. Before, the form only required the api and private keys and verified the api key, and the Admin
   API checked nothing, so a branding name where the branding id belongs, or agreement id 0, was saved and every
   operation on that gateway then threw. The form's fields lost their `NotBlank` constraints and the api key its
-  credentials constraint; the order prefix keeps its length constraint. Each message says, in the admin's language, what
-  the option accepts; payum-quickpay's own reason is logged at info level. Fixtures, the console and direct database
+  credentials constraint, and the order prefix its length constraint (see the order id below). Each message says, in
+  the admin's language, what the option accepts; payum-quickpay's own reason is logged at info level. Fixtures, the console and direct database
   writes are still not validated.
 - **Saving logs why an api key check is undetermined.** When Quickpay neither accepts nor refuses the api key (it
   doesn't answer, or answers `/ping` or the `/payments` read with an error other than 401/403), the payment method is
@@ -413,6 +479,30 @@ The service definitions changed accordingly; only a redefinition or decoration o
   callback for that gateway's payments found no order and was dropped with a 204. An order prefix stored as a number
   is now stripped like the gateway reads it, as a string. A callback on a payment's own callback url is unaffected by
   another gateway's configuration.
+- **The order id is checked before checkout, by payum-quickpay's rule and the store's own order numbers.** The order id
+  (see [GLOSSARY.md](GLOSSARY.md)) is the order prefix followed by the order number, and Quickpay accepts 4–20
+  letters, digits, spaces, `.`, `_` and `-`. Before, the admin form held the order prefix to 11 characters (20 minus
+  Sylius' default 9-digit order numbers) and the doctor failed a longer one, while a character Quickpay refuses passed
+  both and failed every checkout. Now:
+  - payum-quickpay rejects an order prefix with a character Quickpay refuses, or longer than 19 characters, as it
+    rejects any invalid gateway option: saving shows the plugin's message for it, and **a stored configuration with
+    such a prefix is unusable**, so that gateway's captures, refunds, cancels and callbacks fail until it is fixed (no
+    payment can have been created under such a prefix). Run the doctor after upgrading;
+  - saving and the doctor check the order id the order prefix gives the latest order (`000000001` while there is
+    none) with payum-quickpay's `OrderId::of()`: a refusal is a violation on the order prefix field, in the admin's
+    language, and a failed doctor check. A store numbering its orders its own way is held to its own numbers, so a
+    prefix longer than 11 can pass and an order number format with a character Quickpay refuses fails;
+  - the form's `Length(max: 11)` constraint on the order prefix is gone, and its help text states the rule.
+- **The doctor no longer warns that two gateways share an order prefix.** Within one store, a shared order prefix
+  gives two gateways the same order id only for the same order, which payum-quickpay picks up as a retry, and gateways
+  on different Quickpay accounts never collide. The collision that hurts, another store or environment on the same
+  account, isn't visible to the doctor; give each its own order prefix.
+- **The shared callback endpoint tries every candidate order.** It reads the order number under each Quickpay gateway's
+  order prefix (`OrderId::numberIn()`) and takes the first candidate whose order holds the callback's Quickpay payment.
+  Before, it took the first order found, and answered 400 when that order didn't hold the payment, though a later
+  candidate might have, so Quickpay retried in vain. A callback no payment matches, such as one for a payment made
+  under an order prefix since changed, is answered 204 as before, and now also logged as a warning naming the order id
+  and the Quickpay payment id; before, a callback with an order lacking the payment was a 400.
 - **The admin form shows what checkout uses, so re-saving an unchanged Quickpay payment method never changes how a
   working gateway behaves.** The form reads the stored gateway configuration by payum-quickpay's rules and shows the
   capture mode checkout uses; it has no rules of its own any more. Before, re-saving could change the gateway: a
@@ -441,16 +531,16 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **`reconcile-payments --fraud-suspected` reports a gateway whose configuration is unusable** with a warning naming
   the gateway, goes on with the other gateways and exits non-zero. Before, a gateway without an api key was skipped
   silently, and an encrypted configuration crashed the report.
-- **`reconcile-payments --fraud-suspected` says when `--limit` stopped it.** `--limit` is still the number of payments
-  reported across all gateways. Once the report holds that many, it prints `The report stopped at the limit of N
-  payment(s) and didn't query the gateway(s) "…", "…". Raise --limit to see more.`, or `… and may be incomplete. …`
-  when every gateway was queried. Before, the gateways after the limit were skipped silently. Reaching the limit
-  doesn't fail the run.
+- **`reconcile-payments --fraud-suspected` says when `--limit` stopped it.** `--limit`, when given, is still the number
+  of payments reported across all gateways. Once the report holds that many, it prints `The report stopped at the
+  limit of N payment(s) and didn't query the gateway(s) "…", "…". Raise --limit to see more.`, or
+  `… and may be incomplete. …` when every gateway was queried. Before, the gateways after the limit were skipped
+  silently. Reaching the limit doesn't fail the run.
 - **The doctor checks what the gateway checks.** It reads each Quickpay gateway configuration by payum-quickpay's
   rules, the ones the gateway is built from, and reports every gateway option the gateway rejects as a failed check,
   the branding id, `synchronized`, `auto_capture` and the payment methods included. An encrypted configuration is one
   failed check saying encryption isn't supported. For such a gateway the checks against Quickpay are skipped, while
-  the order prefix of one that can be read is still checked and compared with the other gateways'. The
+  the order id the order prefix of one that can be read gives the latest order is still checked. The
   agreement it looks up is the one the gateway sends. Before, it applied rules of its own: an agreement id of `'1e3'`,
   `0` or `12.0` passed (looked up as 1000, 0 and 12), a blank one failed as "not a number", an encrypted
   configuration crashed it, and it printed "All checks passed" for configurations the gateway rejects. It now also
@@ -462,7 +552,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   state-machine callbacks (the order isn't marked paid, inventory isn't sold) and nothing persisted, not even
   refreshed payment details. Before, Sylius applied the transitions during the dry run and they were saved. Each
   payment prints its state, the transition that would be applied (or `no transition`) and the state its Quickpay
-  payment's status maps to: `Payment N: "<state>", would apply "<transition>" (Quickpay → "<target state>")`.
+  payment's status maps to: `Payment N: "<state>", would apply "<transition>" (Quickpay → "<target state>")`. It
+  doesn't record the run either, so the next run lists the same changes.
 - **A real reconcile run follows Sylius' mapping and reports truthfully.** Sylius' payment-state extension applies
   the transition, so reconciling makes exactly the change a callback would have made: a pending Quickpay payment
   now moves a `new` payment to `processing`. Each payment is saved as soon as it is reconciled. A changed payment
@@ -478,6 +569,35 @@ The service definitions changed accordingly; only a redefinition or decoration o
   every retry then saw the payment as reconciled. The reconciliation command goes on with its next payment after
   such an error, with Doctrine's entity manager cleared. When the database fails to save a payment, Doctrine closes
   the entity manager, and the rest of that run is reported as errored; the next run reconciles those payments.
+- **`reconcile-payments` reconciles the pending payments Quickpay changed since the previous run.** Each run lists, once
+  per Quickpay account (a distinct api key), the payments Quickpay changed since that account's previous run (less 5
+  minutes, for clocks out of step) and reconciles those still pending in the store, however old: new and processing
+  ones first, then authorized ones, each oldest first. A payment Quickpay hasn't changed gets no request. Before, a
+  run reconciled the oldest `--limit` (100) pending payments created within `--since` (7 days): authorized payments
+  waiting for shipment could fill that budget, so stuck ones were never reached, payments without a Quickpay payment
+  id used it up before they were dropped, and an older payment was never reconciled. Each run first prints, per
+  account, `Gateway(s) "<name>": the payments Quickpay changed since <time> (since the last run)`, or
+  `(no earlier run: the last 7 days)`, or `(the last run was more than 7 days ago: the last 7 days)`, or
+  `(--full: the last 7 days)`. An account whose changes can't be listed is
+  reported as `Gateway(s) "<name>": could not list the payments Quickpay changed: <error>` and fails the run; the next
+  run lists its changes again.
+- **A payment that errored or was skipped is retried by every later run** until it reconciles or is no longer pending,
+  whether or not Quickpay changes it again. A run says how many payments it has to retry (`N payment(s) to retry`),
+  and one that fails again says since when: `Payment N: <error> (failing since <time>)`. Before, a later run only
+  found it again while it was among the oldest `--limit` pending payments created within `--since`.
+- **`--since` is the fallback lookback, `--full` is new, and `--limit` is for the fraud report only.** `--since` (still
+  `7 days` by default) is how far back a run looks when an account has no earlier run on record (the first run, a new
+  api key, an emptied cache) or its last run was longer ago; it no longer limits how old a reconciled payment may be.
+  `--full` ignores the earlier runs and looks back `--since`, e.g. after restoring a database backup; given with
+  `--fraud-suspected`, it stops the command with an error (exit code 2). `--limit` no
+  longer applies to reconciling: a reconciling run given `--limit` stops with an error (exit code 2) before
+  reconciling anything, so remove it from your cron entries. With `--fraud-suspected` it has no default any more (it
+  was 100): without it, the report lists every flagged payment.
+- **One reconciling run at a time.** A run takes a run lock, key `setono_sylius_quickpay_reconcile_run`, from the
+  plugin's `setono_sylius_quickpay` lock resource, so the shared store of a multi-server shop keeps runs on different
+  servers apart. A run started while it is held prints `Another run is reconciling payments; skipped.` and exits 0. A
+  lock left by a run that died expires within 5 minutes (a `flock` lock is released with its process). `--dry-run` and
+  `--fraud-suspected` take no lock. Before, nothing stopped a second run while one was going.
 - **Duplicate callbacks are answered 2xx without processing, on both callback urls.** Both urls reconcile the
   payment under its lock, held until the transition is applied and saved. A callback arriving while the lock is
   held is answered 204 and runs nothing; one arriving after it was released sees the saved state and changes

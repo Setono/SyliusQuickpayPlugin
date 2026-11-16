@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\Quickpay\GatewayCheck;
 
+use Setono\Payum\Quickpay\Exception\InvalidOrderId;
+use Setono\Payum\Quickpay\OrderId;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Exception\ForbiddenException;
 use Setono\Quickpay\Exception\NotFoundException;
@@ -65,8 +67,16 @@ final class GatewayChecks implements GatewayChecksInterface
     {
         $client = $this->clientProvider->forGatewayConfiguration($gatewayConfiguration);
 
-        // The gateway's order prefix, like the store's orders on the account, and a random suffix unique per run
-        $orderId = $gatewayConfiguration->options()->orderPrefix . 'dr' . bin2hex(random_bytes(3));
+        // Numbered under the gateway's order prefix, like the store's orders on the account, with a number unique per run
+        try {
+            $orderId = OrderId::of($gatewayConfiguration->options()->orderPrefix, 'dr' . bin2hex(random_bytes(3)));
+        } catch (InvalidOrderId $e) {
+            return Verdict::undetermined(sprintf(
+                'the order prefix "%s" leaves no room for a test payment: Quickpay refuses the order id "%s"',
+                $e->prefix,
+                $e->orderId,
+            ));
+        }
 
         return self::ask(
             static fn (): Payment => $client->payments()->create(new CreatePaymentRequest(orderId: $orderId, currency: 'DKK')),
