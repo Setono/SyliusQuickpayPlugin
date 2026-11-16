@@ -8,9 +8,10 @@ use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Provider\PendingPaymentProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -23,17 +24,17 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 /**
  * The Quickpay callback is normally the only path by which a payment learns about a state
  * change at Quickpay. This command closes the gap left by callbacks that never arrive: it
- * reconciles each payment stuck in a non-final state, making the state change the callback
- * would have made.
+ * reconciles each pending payment whose Quickpay payment changed since the last run, and each
+ * one an earlier run couldn't reconcile, making the state change the callback would have made.
  */
 #[AsCommand(
     name: 'setono:sylius-quickpay:reconcile-payments',
-    description: 'Reconciles payments stuck in a non-final state with their Quickpay payments',
+    description: 'Reconciles the pending payments Quickpay changed since the last run with their Quickpay payments',
 )]
 final class ReconcilePaymentsCommand extends Command
 {
     public function __construct(
-        private readonly PendingPaymentProviderInterface $pendingPaymentProvider,
+        private readonly PendingPaymentsInterface $pendingPayments,
         private readonly PaymentReconcilerInterface $reconciler,
         private readonly QuickpayClientProviderInterface $clientProvider,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
@@ -44,8 +45,9 @@ final class ReconcilePaymentsCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addOption('since', null, InputOption::VALUE_REQUIRED, 'Only reconcile payments created within this period', '7 days')
-            ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Maximum number of payments to check, or with --fraud-suspected to report across all gateways', '100')
+            ->addOption('since', null, InputOption::VALUE_REQUIRED, 'How far back to look for the payments Quickpay changed when there was no earlier run, or with --full; with --fraud-suspected, the period to report', '7 days')
+            ->addOption('full', null, InputOption::VALUE_NONE, 'Ignore the last run: reconcile every payment Quickpay changed within --since')
+            ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'With --fraud-suspected, the maximum number of payments to report across all gateways')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Report the transition each payment would get, changing nothing')
             ->addOption('fraud-suspected', null, InputOption::VALUE_NONE, 'Report the payments Quickpay flags as fraud suspected instead of reconciling; no transition is applied')
         ;
@@ -57,25 +59,64 @@ final class ReconcilePaymentsCommand extends Command
 
         /** @var string $since */
         $since = $input->getOption('since');
+        $period = ltrim($since, '+- ');
 
         try {
-            $createdSince = new \DateTimeImmutable(sprintf('-%s', ltrim($since, '+- ')));
+            $lookbackFrom = new \DateTimeImmutable(sprintf('-%s', $period));
         } catch (\Exception) {
             $io->error(sprintf('Cannot parse "%s" as a period. Use a relative format like "7 days" or "12 hours".', $since));
 
             return Command::INVALID;
         }
 
-        $limit = (int) $input->getOption('limit');
+        /** @var string|null $limit */
+        $limit = $input->getOption('limit');
+        $full = (bool) $input->getOption('full');
         $dryRun = (bool) $input->getOption('dry-run');
 
         if (true === $input->getOption('fraud-suspected')) {
-            return $this->reportFraudSuspected($io, $createdSince, $limit);
+            if (null !== $limit && ((string) (int) $limit !== $limit || (int) $limit < 1)) {
+                $io->error(sprintf('Cannot use "%s" as --limit. Use a whole number of payments, at least 1.', $limit));
+
+                return Command::INVALID;
+            }
+
+            return $this->reportFraudSuspected($io, $lookbackFrom, null === $limit ? null : (int) $limit);
+        }
+
+        if (null !== $limit) {
+            $io->error('--limit only applies to --fraud-suspected: a run reconciles every pending payment Quickpay changed since the last run.');
+
+            return Command::INVALID;
+        }
+
+        $run = $this->pendingPayments->start($lookbackFrom, $full, $dryRun);
+
+        foreach ($run->windows() as $window) {
+            $io->writeln(sprintf(
+                'Gateway(s) %s: the payments Quickpay changed since %s (%s)',
+                self::quoted($window->gatewayNames),
+                $window->changedSince->format('Y-m-d H:i'),
+                self::describeWindow($window, $full, $period),
+            ));
+        }
+
+        if ($run->paymentsToRetry() > 0) {
+            $io->writeln(sprintf('%d payment(s) to retry', $run->paymentsToRetry()));
+        }
+
+        // Its changes are listed again by the next run that lists the account
+        foreach ($run->failedGateways() as $failure) {
+            $io->warning(sprintf(
+                'Gateway(s) %s: could not list the payments Quickpay changed: %s',
+                self::quoted($failure->gatewayNames),
+                $failure->message,
+            ));
         }
 
         $checked = $transitioned = $unchanged = $skipped = $errored = 0;
 
-        foreach ($this->pendingPaymentProvider->findPending($createdSince, $limit) as $payment) {
+        foreach ($run as $payment) {
             ++$checked;
 
             // Besides Quickpay and Payum, a transition's state-machine callbacks can fail (say, on stock):
@@ -122,16 +163,27 @@ final class ReconcilePaymentsCommand extends Command
 
                         break;
                     case ReconcileOutcome::Skipped:
+                        // Whoever holds its lock may fail to reconcile it, so the next run makes sure
                         ++$skipped;
+                        $run->retry($payment);
                         $io->writeln(self::describe($payment, 'skipped, it is locked by a callback being handled or another run'));
 
                         break;
                 }
             } catch (\Exception $e) {
                 ++$errored;
-                $io->warning(self::describe($payment, $e->getMessage()));
+                $run->retry($payment);
+
+                $failingSince = $run->failingSince($payment);
+                $io->warning(self::describe($payment, null === $failingSince ? $e->getMessage() : sprintf(
+                    '%s (failing since %s)',
+                    $e->getMessage(),
+                    $failingSince->format('Y-m-d H:i'),
+                )));
             }
         }
+
+        $run->finish();
 
         $io->success(sprintf(
             '%d checked, %d transitioned%s, %d unchanged, %d skipped, %d errored',
@@ -143,7 +195,24 @@ final class ReconcilePaymentsCommand extends Command
             $errored,
         ));
 
-        return $errored > 0 ? Command::FAILURE : Command::SUCCESS;
+        return $errored > 0 || [] !== $run->failedGateways() ? Command::FAILURE : Command::SUCCESS;
+    }
+
+    private static function describeWindow(AccountWindow $window, bool $full, string $period): string
+    {
+        if ($window->sinceLastRun) {
+            return 'since the last run';
+        }
+
+        return sprintf('%s: the last %s', $full ? '--full' : 'no earlier run', $period);
+    }
+
+    /**
+     * @param list<string> $gatewayNames
+     */
+    private static function quoted(array $gatewayNames): string
+    {
+        return implode(', ', array_map(static fn (string $gatewayName): string => sprintf('"%s"', $gatewayName), $gatewayNames));
     }
 
     /**
@@ -151,18 +220,19 @@ final class ReconcilePaymentsCommand extends Command
      * every configured Quickpay gateway is queried for payments flagged fraud suspected within the
      * period, regardless of their local state. Report only — nothing is transitioned or persisted.
      * A gateway that can't be queried, its gateway configuration unusable included, is reported and
-     * fails the run, so a gap in the report is never silent. Neither is the limit: it caps the payments
-     * reported across gateways, and once the report holds that many, it says so and names the gateways
-     * it didn't query. Reaching the limit isn't a failure.
+     * fails the run, so a gap in the report is never silent. Neither is a limit: without one, every
+     * flagged payment is reported; with one, it caps the payments reported across gateways, and once
+     * the report holds that many, it says so and names the gateways it didn't query. Reaching the
+     * limit isn't a failure.
      */
-    private function reportFraudSuspected(SymfonyStyle $io, \DateTimeImmutable $createdSince, int $limit): int
+    private function reportFraudSuspected(SymfonyStyle $io, \DateTimeImmutable $createdSince, ?int $limit): int
     {
         $rows = [];
         $errored = false;
         $notQueried = [];
 
         foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
-            if (\count($rows) >= $limit) {
+            if (null !== $limit && \count($rows) >= $limit) {
                 $notQueried[] = sprintf('"%s"', $gatewayConfiguration->gatewayName);
 
                 continue;
@@ -186,7 +256,7 @@ final class ReconcilePaymentsCommand extends Command
                         $payment->testMode ? 'yes' : 'no',
                     ];
 
-                    if (\count($rows) >= $limit) {
+                    if (null !== $limit && \count($rows) >= $limit) {
                         break;
                     }
                 }
@@ -196,7 +266,7 @@ final class ReconcilePaymentsCommand extends Command
             }
         }
 
-        $stopped = \count($rows) >= $limit;
+        $stopped = null !== $limit && \count($rows) >= $limit;
 
         if ([] !== $rows) {
             $io->table(['Gateway', 'Quickpay id', 'Order id', 'State', 'Created', 'Test mode'], $rows);
