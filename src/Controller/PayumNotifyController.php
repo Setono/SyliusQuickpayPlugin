@@ -110,6 +110,6 @@ final class PayumNotifyController implements LoggerAwareInterface
             return null;
         }
 
-        return is_int($id) || (is_string($id) && ctype_digit($id)) ? (int) $id : null;
+        return is_int($id) || (is_string($id) && 1 === preg_match('/^\d+$/', $id)) ? (int) $id : null;
     }
 }

@@ -406,8 +406,9 @@ final class PaymentProcessorTest extends FunctionalTestCase
         self::assertSame([], $logger->records);
         $payment = $this->reload($payment);
         self::assertSame($stateAfter, $payment->getState());
-        // Not even the offline gateway's own refund or cancel ran on it
-        self::assertSame($details, $payment->getDetails());
+        // Not even the offline gateway's own refund or cancel ran on it. Equal, not identical: MySQL's JSON type stores
+        // the keys in an order of its own
+        self::assertEquals($details, $payment->getDetails());
     }
 
     /**

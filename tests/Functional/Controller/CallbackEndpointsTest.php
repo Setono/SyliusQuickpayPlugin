@@ -329,7 +329,8 @@ final class CallbackEndpointsTest extends FunctionalTestCase
         self::assertSame([], $transitions->getArrayCopy());
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_NEW, $payment->getState());
-        self::assertSame($details, $payment->getDetails());
+        // Equal, not identical: MySQL's JSON type stores the keys in an order of its own
+        self::assertEquals($details, $payment->getDetails());
     }
 
     /**
