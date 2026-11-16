@@ -260,8 +260,9 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
 bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
 ```
 
-`--limit` (default 100) caps the payments reported across all gateways. A report that reaches it says so and names
-the gateways it didn't query; raise `--limit` to see the rest.
+`--since` (default `7 days`) is the period the payments were created in. Without `--limit`, every flagged payment is
+reported; `--limit` caps the payments reported across all gateways. A report that reaches it says so and names the
+gateways it didn't query; raise `--limit` to see the rest.
 
 ## Callbacks
 
@@ -315,17 +316,43 @@ framework:
 
 Callbacks are normally how your store learns about a payment state change. If one never arrives — the store was
 unreachable until Quickpay gave up retrying, or the change was made outside the store and the account-wide callback
-url points elsewhere (see [Callbacks](#callbacks)) — the payment stays stuck in a non-final state and the order
-never completes. The plugin ships a reconciliation command that closes this gap by reconciling each stuck payment with
-its Quickpay payment:
+url points elsewhere (see [Callbacks](#callbacks)) — the payment stays stuck and the order never completes. The plugin
+ships a reconciliation command that closes this gap: each run asks Quickpay which payments changed since the previous
+run, and reconciles those still pending in your store with their Quickpay payments:
 
 ```bash
-bin/console setono:sylius-quickpay:reconcile-payments                             # last 7 days, max 100 payments
-bin/console setono:sylius-quickpay:reconcile-payments --since="12 hours" --limit=50
-bin/console setono:sylius-quickpay:reconcile-payments --dry-run                   # report only, change nothing
+bin/console setono:sylius-quickpay:reconcile-payments             # the payments Quickpay changed since the last run
+bin/console setono:sylius-quickpay:reconcile-payments --full      # every payment Quickpay changed in the last 7 days
+bin/console setono:sylius-quickpay:reconcile-payments --dry-run   # report only, change nothing
 ```
 
-Each stuck payment is reconciled: the command fetches its status from Quickpay and Sylius applies the state change
+A **pending payment** is a payment of a Quickpay payment method in state *new*, *processing* or *authorized* that has a
+Quickpay payment, however old it is. A run lists the payments Quickpay changed once per Quickpay account (each
+distinct api key among your Quickpay payment methods, however many payment methods share it) and reconciles the
+pending ones among them: the stuck ones (*new*, *processing*) first, then the authorized ones, each oldest first. A
+payment Quickpay hasn't changed costs no request, so a run sends a list request per account (one per page of a long
+list) and one request per payment it reconciles. A capture or cancel made in the Quickpay manager is reconciled by the
+next run however old the payment is.
+
+Each run first says, per account, which changes it lists:
+
+```
+Gateway(s) "quickpay": the payments Quickpay changed since 2026-11-16 10:25 (since the last run)
+```
+
+- `(since the last run)`: since the previous run started, less 5 minutes in case Quickpay's clock and yours differ.
+- `(no earlier run: the last 7 days)`: the account has no earlier run on record — the first run, a new api key, an
+  emptied [cache](#where-a-run-keeps-what-the-next-one-starts-from) — or the last one was longer ago than `--since`
+  (default `7 days`), so the run looks back `--since`.
+- `(--full: the last 7 days)`: `--full` ignores the earlier run and looks back `--since`, e.g. after you restored a
+  database backup.
+
+`--since` is only this fallback; it doesn't limit how old a payment may be. After the command hasn't run for longer
+than `--since`, run it once with a `--since` covering the gap. `--limit` only applies to the
+[fraud report](#fraud-signals): a reconciling run reconciles every pending payment Quickpay changed, and given
+`--limit` it stops with an error.
+
+Each pending payment is reconciled: the command fetches its status from Quickpay and Sylius applies the state change
 its own mapping gives, exactly the change the callback would have made (a pending Quickpay payment, for example,
 moves a new payment to *processing*). Each payment is saved as soon as it is reconciled, and every payment that
 changed is listed with its state before and after and the state Sylius maps its Quickpay payment's status to:
@@ -338,21 +365,61 @@ Payment 43: skipped, it is locked by a callback being handled or another run
 ```
 
 The command takes the same per-payment lock as the [callbacks](#callbacks): a payment whose callback is being
-handled at that moment is skipped and reported as such, and the next run picks it up. A payment counted as
-*unchanged* kept its state; the payment details refreshed from Quickpay, such as its balance, are still saved. A
-payment that fails (Quickpay unreachable, a state-machine callback throwing, say Sylius failing to sell the order's
-inventory) is reported and counted, and nothing of it is saved, not even a state change that was halfway applied, so
-the next run retries it; the run goes on with the next payment. When the database fails to save a payment, Doctrine
-closes its entity manager and the rest of that run is reported as errored too; nothing of those payments is saved
-either, and the next run reconciles them.
+handled at that moment is skipped and reported as such. A payment counted as *unchanged* kept its state; the payment
+details refreshed from Quickpay, such as its balance, are still saved. A payment that fails (Quickpay unreachable, a
+state-machine callback throwing, say Sylius failing to sell the order's inventory) is reported and counted, and
+nothing of it is saved, not even a state change that was halfway applied; the run goes on with the next payment. When
+the database fails to save a payment, Doctrine closes its entity manager and the rest of that run is reported as
+errored too; nothing of those payments is saved either.
+
+A payment that failed or was skipped is retried by every later run until it reconciles or is no longer pending,
+whether or not Quickpay changes it again. A run with payments to retry says how many (`2 payment(s) to retry`), and a
+payment that fails again says since when it has been failing:
+
+```
+ [WARNING] Payment 44: Quickpay is down (failing since 2026-11-16 10:25)
+```
+
+An account whose changes can't be listed, because Quickpay fails or a gateway configuration is unusable, is reported
+(`Gateway(s) "quickpay": could not list the payments Quickpay changed: …`) and fails the run. Its changes are listed
+again by the next run, while the other accounts carry on.
 
 `--dry-run` only reads: it reports each payment's state, the transition that would be applied (or `no transition`)
 and the state the Quickpay payment's status maps to, and changes nothing — no state, no state-machine callbacks, no
-database writes. It is safe against a production shop:
+database writes, and no record of the run, so the next run lists the same changes. It is safe against a production
+shop:
 
 ```
 Payment 42: "new", would apply "authorize" (Quickpay → "authorized")
 ```
+
+**One run at a time.** A run started while another is reconciling payments prints
+`Another run is reconciling payments; skipped.` and exits 0, so overlapping cron runs neither send the same requests
+twice nor alert your monitoring. The lock is in the plugin's lock resource `setono_sylius_quickpay` (see
+[Callbacks](#callbacks)): if your shop runs the command on several servers, redefine the resource with a shared store
+to keep their runs apart. A run that dies holding the lock doesn't block the next ones for long: a `flock` lock is
+released with the process, and a lock in a shared store expires within 5 minutes. `--dry-run` and `--fraud-suspected`
+take no lock, so they run alongside a run that reconciles.
+
+### Where a run keeps what the next one starts from
+
+Each account's last run and the payments to retry are kept in a cache pool, `setono_sylius_quickpay.reconcile`, on your
+application cache (`cache.app`) by default. An account is stored under a hash of its api key, never the key itself.
+Symfony's default `cache.app` is a filesystem cache in the cache directory, which `cache:clear` and a deploy into a
+fresh directory empty. The next run then lists the whole `--since` period again, as a first run does. Point the pool
+at a persistent adapter, under the same name in your framework configuration, to avoid that:
+
+```yaml
+# config/packages/cache.yaml
+framework:
+    cache:
+        pools:
+            setono_sylius_quickpay.reconcile:
+                adapter: cache.adapter.redis
+                provider: '%env(REDIS_URL)%'   # e.g. REDIS_URL=redis://localhost
+```
+
+### Scheduling
 
 Scheduling is your application's choice; a cron entry along these lines is plenty:
 
@@ -360,15 +427,18 @@ Scheduling is your application's choice; a cron entry along these lines is plent
 */30 * * * * /usr/bin/php /path/to/shop/bin/console setono:sylius-quickpay:reconcile-payments >> /var/log/quickpay-reconcile.log 2>&1
 ```
 
-The command exits non-zero when any payment could not be checked, so cron mail or your monitoring
-will surface persistent problems.
+A run reads only what changed, so running it more often costs little more than a list request per account, and a
+missed callback is fixed sooner. The command exits non-zero when a payment couldn't be reconciled or an account's
+changes couldn't be listed, so cron mail or your monitoring will surface persistent problems; a run skipped because
+another one is going exits 0.
 
 ## HTTP policy
 
 Every request to Quickpay, the gateway's (checkout, capture, refund, cancel, callbacks, reconciling) and the plugin's
-own (the fraud check, the operation history, the fraud report, the doctor, checking the api key and agreement on save), goes
-through one [scoped HTTP client](https://symfony.com/doc/current/http_client.html#scoping-client) that the plugin adds
-to your framework configuration: `setono_sylius_quickpay.http_client`. Its defaults:
+own (the fraud check, the operation history, listing the payments Quickpay changed, the fraud report, the doctor,
+checking the api key and agreement on save), goes through one
+[scoped HTTP client](https://symfony.com/doc/current/http_client.html#scoping-client) that the plugin adds to your
+framework configuration: `setono_sylius_quickpay.http_client`. Its defaults:
 
 | Option | Default | |
 |---|---|---|
@@ -548,7 +618,8 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
 - `Payment 42: skipped, it is locked by a callback being handled or another run`
 
   The reconciliation command found the payment's lock held: a callback for it was being handled at that moment,
-  or another run of the command was reconciling it. Nothing was changed, and the next run picks the payment up.
+  or another run of the command was reconciling it. Nothing was changed, and every later run retries the payment
+  until it reconciles.
   A lock is never left behind for long: a `flock` lock is released with the process holding it, and a lock in a
   shared store expires after 60 seconds.
 
