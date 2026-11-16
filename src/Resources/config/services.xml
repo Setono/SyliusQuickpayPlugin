@@ -130,8 +130,6 @@
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
             <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
-            <!-- the run lock comes from the plugin's lock resource too, so a shared store keeps runs on different servers apart -->
-            <argument type="service" id="lock.setono_sylius_quickpay.factory"/>
 
             <tag name="console.command"/>
         </service>
@@ -169,8 +167,14 @@
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
             <!-- the cache pool the plugin prepends onto framework.cache -->
             <argument type="service" id="setono_sylius_quickpay.reconcile"/>
+            <!-- the run lock comes from the plugin's lock resource, so a shared store keeps runs on different servers apart -->
+            <argument type="service" id="lock.setono_sylius_quickpay.factory"/>
             <argument type="service" id="doctrine"/>
             <argument>%sylius.model.payment.class%</argument>
+
+            <call method="setLogger">
+                <argument type="service" id="logger" on-invalid="ignore"/>
+            </call>
         </service>
 
         <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface"

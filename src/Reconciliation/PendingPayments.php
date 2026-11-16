@@ -6,6 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\Reconciliation;
 
 use Doctrine\Persistence\ManagerRegistry;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use Setono\Doctrine\ORMTrait;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Exception\QuickpayException;
@@ -15,11 +17,28 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvide
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
+use Symfony\Component\Lock\Exception\ExceptionInterface as LockExceptionInterface;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\LockInterface;
 use Webmozart\Assert\Assert;
 
-final class PendingPayments implements PendingPaymentsInterface
+final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInterface
 {
+    use LoggerAwareTrait;
     use ORMTrait;
+
+    /**
+     * The key of the run lock a run that writes holds, apart from the per-payment lock keys
+     * (`setono_sylius_quickpay_payment_<Quickpay payment id>`)
+     */
+    public const RUN_LOCK_KEY = 'setono_sylius_quickpay_reconcile_run';
+
+    /**
+     * The run lock is refreshed after each list page and before each payment is yielded, so it only has to outlast one
+     * page or one payment (a few Quickpay requests of at most 10 s each, a transition, a flush). A run that died
+     * holding it makes the next runs skip for at most this long.
+     */
+    private const RUN_LOCK_TTL = 300.0;
 
     /**
      * How much earlier than a run's start the next run lists from, in case Quickpay's clock is behind the store's
@@ -43,6 +62,7 @@ final class PendingPayments implements PendingPaymentsInterface
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
         private readonly QuickpayClientProviderInterface $clientProvider,
         private readonly CacheItemPoolInterface $cache,
+        private readonly LockFactory $lockFactory,
         ManagerRegistry $managerRegistry,
         private readonly string $paymentClass,
         private readonly int $pageSize = 100,
@@ -51,6 +71,26 @@ final class PendingPayments implements PendingPaymentsInterface
     }
 
     public function start(\DateTimeImmutable $lookbackFrom, bool $full, bool $dryRun): PendingPaymentsRun
+    {
+        // Only a run that writes takes the run lock: a dry run stores nothing, so it may run alongside a run that does
+        $runLock = $dryRun ? null : $this->acquireRunLock();
+
+        try {
+            return $this->startHolding($runLock, $lookbackFrom, $full);
+        } catch (\Throwable $e) {
+            // No run to release it later
+            if (null !== $runLock) {
+                $this->releaseRunLock($runLock);
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Starts a run, holding the run lock unless it is a dry run
+     */
+    private function startHolding(?LockInterface $runLock, \DateTimeImmutable $lookbackFrom, bool $full): PendingPaymentsRun
     {
         $startedAt = new \DateTimeImmutable();
         $failures = [];
@@ -83,16 +123,28 @@ final class PendingPayments implements PendingPaymentsInterface
             try {
                 // Every payment Quickpay changed since then, however long ago it was created. Quickpay can't sort them
                 // by when they changed, so they are listed by id, which pages steadily while payments change
-                $payments = $this->clientProvider->forGatewayConfiguration($gatewayConfigurations[0])->payments()->paginate(new PaymentsQuery(
+                $payments = $this->clientProvider->forGatewayConfiguration($gatewayConfigurations[0])->payments();
+                $query = new PaymentsQuery(
                     minTime: $window->changedSince,
                     sortBy: 'id',
                     sortDir: 'asc',
                     extra: ['timestamp' => 'updated_at'],
                     pageSize: self::LIST_PAGE_SIZE,
-                ));
+                );
 
-                foreach ($payments as $payment) {
-                    $changed[$payment->id] = true;
+                // A page at a time, until a page short of the page size, as the SDK's paginate() does, so the run
+                // lock is refreshed after each
+                for ($page = 1; ; ++$page) {
+                    $listedPayments = $payments->getPage($query->withPage($page))->items;
+                    foreach ($listedPayments as $payment) {
+                        $changed[$payment->id] = true;
+                    }
+
+                    $runLock?->refresh();
+
+                    if (\count($listedPayments) < self::LIST_PAGE_SIZE) {
+                        break;
+                    }
                 }
 
                 $listed[] = $watermarkKey;
@@ -107,7 +159,7 @@ final class PendingPayments implements PendingPaymentsInterface
         // step, whatever became of its payments: the payments to retry are retried by id instead, so one that keeps
         // failing never widens a window. An account that couldn't be listed keeps its watermark, so the next run lists
         // its changes again
-        $finish = $dryRun ? null : function (array $retryList) use ($listed, $startedAt): void {
+        $finish = null === $runLock ? null : function (array $retryList) use ($listed, $startedAt): void {
             $watermark = $startedAt->sub(new \DateInterval(self::CLOCK_SKEW_MARGIN));
             foreach ($listed as $watermarkKey) {
                 $this->cache->saveDeferred($this->cache->getItem($watermarkKey)->set($watermark));
@@ -118,12 +170,45 @@ final class PendingPayments implements PendingPaymentsInterface
         };
 
         return new PendingPaymentsRun(
-            $this->pendingPaymentsAmong($changed, $retryList),
+            $this->pendingPaymentsAmong($changed, $retryList, $runLock),
             $retryList,
             $windows,
             $failures,
             $finish,
+            null === $runLock ? null : fn () => $this->releaseRunLock($runLock),
         );
+    }
+
+    /**
+     * Not auto-released: released when the run is finished or released, never left to whenever the lock object
+     * happens to be collected. Non-blocking: the run going on does the work. A lock store that can't be reached
+     * throws, failing the run before it starts.
+     */
+    private function acquireRunLock(): LockInterface
+    {
+        $runLock = $this->lockFactory->createLock(self::RUN_LOCK_KEY, self::RUN_LOCK_TTL, false);
+        if (!$runLock->acquire()) {
+            throw new AnotherRunIsReconciling();
+        }
+
+        return $runLock;
+    }
+
+    /**
+     * A run lock that cannot be released expires with its TTL. Throwing here would turn a finished run into an error,
+     * or replace the error that ended it.
+     */
+    private function releaseRunLock(LockInterface $runLock): void
+    {
+        try {
+            $runLock->release();
+        } catch (LockExceptionInterface $e) {
+            $this->logger?->warning(sprintf(
+                'Could not release the run lock, so reconcile runs are skipped until it expires within %d seconds: %s',
+                self::RUN_LOCK_TTL,
+                $e->getMessage(),
+            ), ['exception' => $e]);
+        }
     }
 
     /**
@@ -167,10 +252,11 @@ final class PendingPayments implements PendingPaymentsInterface
      *
      * @param array<int, true> $quickpayPaymentIds
      * @param array<int, \DateTimeImmutable> $retryList
+     * @param LockInterface|null $runLock refreshed before each payment is yielded
      *
      * @return \Generator<int, PaymentInterface>
      */
-    private function pendingPaymentsAmong(array $quickpayPaymentIds, array $retryList): \Generator
+    private function pendingPaymentsAmong(array $quickpayPaymentIds, array $retryList, ?LockInterface $runLock): \Generator
     {
         if ([] === $quickpayPaymentIds && [] === $retryList) {
             return;
@@ -193,6 +279,10 @@ final class PendingPayments implements PendingPaymentsInterface
                 }
 
                 $yielded[$id] = true;
+
+                // Gives the run lock its full TTL for reconciling this payment. A lock store that fails here throws,
+                // ending the run unfinished: the next run lists the same changes again
+                $runLock?->refresh();
 
                 yield $payment;
             }

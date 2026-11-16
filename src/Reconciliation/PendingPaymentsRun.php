@@ -11,7 +11,7 @@ use Webmozart\Assert\Assert;
  * One reconcile run's pending payments ({@see PendingPaymentsInterface}): the ones whose Quickpay payment changed in
  * the run's windows and the ones to retry, yielded once each, stuck ones (new, processing) first, then authorized
  * ones, each oldest first. Iterate it once, pass each payment that errored or was skipped to {@see self::retry()},
- * and {@see self::finish()} it.
+ * {@see self::finish()} it, and {@see self::release()} it however it ends.
  *
  * @implements \IteratorAggregate<int, PaymentInterface>
  */
@@ -29,6 +29,7 @@ final class PendingPaymentsRun implements \IteratorAggregate
      * @param list<ListingFailure> $failedGateways
      * @param (\Closure(array<int, \DateTimeImmutable>): void)|null $finish stores what the next run starts from,
      *        given the payments to retry; null on a dry run
+     * @param (\Closure(): void)|null $releaseRunLock null on a dry run, which holds no run lock
      */
     public function __construct(
         private readonly \Generator $pendingPayments,
@@ -36,6 +37,7 @@ final class PendingPaymentsRun implements \IteratorAggregate
         private readonly array $windows,
         private readonly array $failedGateways,
         private readonly ?\Closure $finish,
+        private ?\Closure $releaseRunLock,
     ) {
     }
 
@@ -101,12 +103,27 @@ final class PendingPaymentsRun implements \IteratorAggregate
     /**
      * Ends the run, once its payments are reconciled. Unless it is a dry run: each account that was listed is listed
      * from this run's start on next time, and an account that couldn't be listed from where it was this time; the
-     * payments retried are the ones to retry next time, and no others.
+     * payments retried are the ones to retry next time, and no others. Then it releases the run lock.
      */
     public function finish(): void
     {
-        if (null !== $this->finish) {
+        if (null !== $this->finish && null !== $this->releaseRunLock) {
             ($this->finish)($this->retried);
+        }
+
+        $this->release();
+    }
+
+    /**
+     * Ends the run without storing anything, unless it is finished already: releases the run lock a run that writes
+     * holds, so the next run isn't skipped. Call it however the run ends, say in a `finally`, for a run abandoned on
+     * an error; a run neither finished nor released keeps the next runs skipping until its lock expires.
+     */
+    public function release(): void
+    {
+        if (null !== $this->releaseRunLock) {
+            ($this->releaseRunLock)();
+            $this->releaseRunLock = null;
         }
     }
 }

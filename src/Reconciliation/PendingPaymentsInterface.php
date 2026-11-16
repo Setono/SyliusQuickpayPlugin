@@ -16,6 +16,11 @@ interface PendingPaymentsInterface
      * configurations, since the account's watermark (when the previous run listed it), or since `$lookbackFrom` when
      * the account has no watermark, the watermark is older, or `$full` is set. A dry run stores nothing when it
      * finishes.
+     *
+     * A run that writes, unlike a dry run, holds the run lock from here until it is finished or released, so runs
+     * reconcile one at a time.
+     *
+     * @throws AnotherRunIsReconciling when another run holds the run lock; nothing is listed
      */
     public function start(\DateTimeImmutable $lookbackFrom, bool $full, bool $dryRun): PendingPaymentsRun;
 }

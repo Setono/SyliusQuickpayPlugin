@@ -9,6 +9,7 @@ use Nyholm\Psr7\Response;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
+use Setono\SyliusQuickpayPlugin\Reconciliation\AnotherRunIsReconciling;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsRun;
@@ -18,6 +19,10 @@ use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Cache\Adapter\TraceableAdapter;
+use Symfony\Component\Lock\Key;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\PersistingStoreInterface;
+use Symfony\Component\Lock\Store\InMemoryStore;
 
 /**
  * Which pending payments a reconcile run yields: the ones Quickpay changed since the run's window, as Quickpay lists
@@ -474,6 +479,134 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
+     * Two runs at once would ask Quickpay the same things, and the one finishing last would overwrite what the other
+     * stored
+     *
+     * @test
+     */
+    public function a_run_started_while_another_is_reconciling_payments_lists_nothing(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+        $this->holdRunLock();
+
+        try {
+            $this->start();
+            self::fail('The run started');
+        } catch (AnotherRunIsReconciling) {
+        }
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * A dry run stores nothing, so it may run alongside a run that does
+     *
+     * @test
+     */
+    public function a_dry_run_starts_while_another_run_is_reconciling_payments(): void
+    {
+        $payment = $this->payment(PaymentInterface::STATE_NEW, 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->holdRunLock();
+
+        self::assertSame([$payment->getId()], self::idsOf($this->start(dryRun: true)));
+    }
+
+    /**
+     * @test
+     */
+    public function a_finished_run_releases_the_run_lock(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+
+        $this->finishedRun();
+
+        $this->holdRunLock();
+    }
+
+    /**
+     * A run abandoned halfway, say on an error, stores nothing, and the next run isn't kept waiting
+     *
+     * @test
+     */
+    public function a_released_run_releases_the_run_lock_and_stores_nothing(): void
+    {
+        $this->payment(PaymentInterface::STATE_NEW, 501);
+        $this->payment(PaymentInterface::STATE_NEW, 502);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, 502));
+        $run = $this->start();
+        foreach ($run as $payment) {
+            $run->retry($payment);
+
+            break;
+        }
+
+        $run->release();
+
+        $this->holdRunLock()->release();
+        $run = $this->start();
+        self::assertSame(0, $run->paymentsToRetry());
+        self::assertFalse($run->windows()[0]->sinceLastRun);
+    }
+
+    /**
+     * @test
+     */
+    public function a_run_whose_listing_throws_releases_the_run_lock(): void
+    {
+        $this->storeQuickpayGateway();
+
+        try {
+            // Nothing answers its list request
+            $this->start();
+            self::fail('The run started');
+        } catch (\LogicException $e) {
+            self::assertStringContainsString('No response scripted for "GET /payments', $e->getMessage());
+        }
+
+        $this->holdRunLock();
+    }
+
+    /**
+     * A run lists every account's changes before it yields a payment, and a fallback run may list many pages: the run
+     * lock is refreshed after each page and before each payment, so it doesn't expire while the run goes on
+     *
+     * @test
+     */
+    public function a_run_keeps_its_run_lock_while_it_lists_and_yields_payments(): void
+    {
+        $first = $this->payment(PaymentInterface::STATE_NEW, 501);
+        $second = $this->payment(PaymentInterface::STATE_NEW, 701);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, ...range(602, 700)), ['page' => 1]);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(701), ['page' => 2]);
+        /** @var \ArrayObject<int, string> $timeline */
+        $timeline = new \ArrayObject();
+
+        $run = $this->pendingPayments(lockFactory: $this->lockFactoryRecordingInto($timeline))->start(new \DateTimeImmutable('-7 days'), false, false);
+        foreach ($run as $payment) {
+            $timeline[] = sprintf('yielded payment %s', (string) $payment->getId());
+        }
+        $run->finish();
+
+        self::assertSame([
+            // Taking the lock gives it its TTL
+            'acquired after 0 request(s)',
+            'refreshed after 0 request(s)',
+            // ...each list page
+            'refreshed after 1 request(s)',
+            'refreshed after 2 request(s)',
+            // ...each payment
+            'refreshed after 2 request(s)',
+            sprintf('yielded payment %s', (string) $first->getId()),
+            'refreshed after 2 request(s)',
+            sprintf('yielded payment %s', (string) $second->getId()),
+            'released after 2 request(s)',
+        ], $timeline->getArrayCopy());
+    }
+
+    /**
      * Starts a run of the module as the container wires it, or of one reading the given number of local pending
      * payments at a time
      *
@@ -489,14 +622,17 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
+     * The module as the container wires it, or one reading the given number of local pending payments at a time, on
+     * the given lock factory
+     *
      * @param positive-int|null $pageSize
      */
-    private function pendingPayments(?int $pageSize = null): PendingPaymentsInterface
+    private function pendingPayments(?int $pageSize = null, ?LockFactory $lockFactory = null): PendingPaymentsInterface
     {
         $container = self::getContainer();
         $pendingPayments = $container->get(PendingPaymentsInterface::class);
         self::assertInstanceOf(PendingPayments::class, $pendingPayments);
-        if (null === $pageSize) {
+        if (null === $pageSize && null === $lockFactory) {
             return $pendingPayments;
         }
 
@@ -510,7 +646,64 @@ final class PendingPaymentsTest extends FunctionalTestCase
         self::assertIsString($paymentClass);
         self::assertTrue(is_a($paymentClass, PaymentInterface::class, true));
 
-        return new PendingPayments($gatewayConfigurationProvider, $clientProvider, $this->cache(), $doctrine, $paymentClass, $pageSize);
+        if (null === $lockFactory) {
+            $lockFactory = $container->get('lock.setono_sylius_quickpay.factory');
+            self::assertInstanceOf(LockFactory::class, $lockFactory);
+        }
+
+        return new PendingPayments($gatewayConfigurationProvider, $clientProvider, $this->cache(), $lockFactory, $doctrine, $paymentClass, $pageSize ?? 100);
+    }
+
+    /**
+     * A lock factory on an in-memory store that records each lock it takes, refreshes and releases into the timeline,
+     * with the number of requests sent to Quickpay by then
+     *
+     * @param \ArrayObject<int, string> $timeline
+     */
+    private function lockFactoryRecordingInto(\ArrayObject $timeline): LockFactory
+    {
+        $quickpay = $this->quickpay();
+
+        return new LockFactory(new class(new InMemoryStore(), $timeline, static fn (): int => \count($quickpay->sentRequests())) implements PersistingStoreInterface {
+            /**
+             * @param \ArrayObject<int, string> $timeline
+             * @param \Closure(): int $sentRequests
+             */
+            public function __construct(
+                private readonly InMemoryStore $store,
+                private readonly \ArrayObject $timeline,
+                private readonly \Closure $sentRequests,
+            ) {
+            }
+
+            public function save(Key $key): void
+            {
+                $this->store->save($key);
+                $this->record('acquired');
+            }
+
+            public function delete(Key $key): void
+            {
+                $this->store->delete($key);
+                $this->record('released');
+            }
+
+            public function exists(Key $key): bool
+            {
+                return $this->store->exists($key);
+            }
+
+            public function putOffExpiration(Key $key, float $ttl): void
+            {
+                $this->store->putOffExpiration($key, $ttl);
+                $this->record('refreshed');
+            }
+
+            private function record(string $what): void
+            {
+                $this->timeline[] = sprintf('%s after %d request(s)', $what, ($this->sentRequests)());
+            }
+        });
     }
 
     /**

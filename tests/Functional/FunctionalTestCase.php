@@ -10,6 +10,7 @@ use Payum\Core\GatewayInterface;
 use Payum\Core\Payum;
 use Psr\Http\Message\ResponseInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\ScriptedHttpClient;
 use SM\Event\SMEvents;
 use SM\Event\TransitionEvent;
@@ -147,7 +148,7 @@ abstract class FunctionalTestCase extends KernelTestCase
         $lockFactory = self::getContainer()->get('lock.setono_sylius_quickpay.factory');
         self::assertInstanceOf(LockFactory::class, $lockFactory);
 
-        $lock = $lockFactory->createLock('setono_sylius_quickpay_reconcile_run', autoRelease: false);
+        $lock = $lockFactory->createLock(PendingPayments::RUN_LOCK_KEY, autoRelease: false);
         self::assertTrue($lock->acquire(), 'The run lock is already held');
 
         return $lock;

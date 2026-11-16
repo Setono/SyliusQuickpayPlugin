@@ -10,8 +10,10 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvide
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
+use Setono\SyliusQuickpayPlugin\Reconciliation\AnotherRunIsReconciling;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsRun;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -20,9 +22,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\Lock\Exception\ExceptionInterface as LockExceptionInterface;
-use Symfony\Component\Lock\LockFactory;
-use Symfony\Component\Lock\LockInterface;
 
 /**
  * The Quickpay callback is normally the only path by which a payment learns about a state
@@ -36,24 +35,11 @@ use Symfony\Component\Lock\LockInterface;
 )]
 final class ReconcilePaymentsCommand extends Command
 {
-    /**
-     * Distinct from the per-payment lock keys (`setono_sylius_quickpay_payment_<Quickpay payment id>`)
-     */
-    private const RUN_LOCK_KEY = 'setono_sylius_quickpay_reconcile_run';
-
-    /**
-     * Refreshed after each payment, so it only has to outlast the listing and one payment (a few Quickpay requests of
-     * at most 10 s each, a transition, a flush). A run that died holding the lock makes the next runs skip for at
-     * most this long.
-     */
-    private const RUN_LOCK_TTL = 300.0;
-
     public function __construct(
         private readonly PendingPaymentsInterface $pendingPayments,
         private readonly PaymentReconcilerInterface $reconciler,
         private readonly QuickpayClientProviderInterface $clientProvider,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
-        private readonly LockFactory $lockFactory,
     ) {
         parent::__construct();
     }
@@ -106,47 +92,29 @@ final class ReconcilePaymentsCommand extends Command
             return Command::INVALID;
         }
 
-        // Only a run that writes takes the run lock: a dry run changes nothing, not even the watermark, so it may run
-        // alongside a run that does
-        $runLock = null;
-        if (!$dryRun) {
-            // Not auto-released: released in the finally below, once the run is over, never left to whenever the
-            // lock object happens to be collected
-            $runLock = $this->lockFactory->createLock(self::RUN_LOCK_KEY, self::RUN_LOCK_TTL, false);
+        try {
+            $run = $this->pendingPayments->start($lookbackFrom, $full, $dryRun);
+        } catch (AnotherRunIsReconciling) {
+            // The run going on does the work, so this one sends nothing and changes nothing. Not a failure either, so
+            // overlapping cron runs don't alert anyone
+            $io->writeln('Another run is reconciling payments; skipped.');
 
-            // Non-blocking: the run going on does the work, so this one sends nothing and changes nothing. Not a
-            // failure either, so overlapping cron runs don't alert anyone. A lock store that can't be reached throws,
-            // failing the run before it starts
-            if (!$runLock->acquire()) {
-                $io->writeln('Another run is reconciling payments; skipped.');
-
-                return Command::SUCCESS;
-            }
+            return Command::SUCCESS;
         }
 
         try {
-            return $this->reconcile($io, $lookbackFrom, $full, $dryRun, $period, $runLock);
+            return $this->reconcile($io, $run, $full, $dryRun, $period);
         } finally {
-            if (null !== $runLock) {
-                self::release($runLock, $io);
-            }
+            // A run that ended on an error stores nothing, and the next run isn't kept waiting for the run lock
+            $run->release();
         }
     }
 
     /**
-     * Reconciles each pending payment of a run, or runs the status check on it in a dry run, and reports the run.
-     * The run lock, held by a run that writes, is refreshed after each payment.
+     * Reconciles each pending payment of a run, or runs the status check on it in a dry run, and reports the run
      */
-    private function reconcile(
-        SymfonyStyle $io,
-        \DateTimeImmutable $lookbackFrom,
-        bool $full,
-        bool $dryRun,
-        string $period,
-        ?LockInterface $runLock,
-    ): int {
-        $run = $this->pendingPayments->start($lookbackFrom, $full, $dryRun);
-
+    private function reconcile(SymfonyStyle $io, PendingPaymentsRun $run, bool $full, bool $dryRun, string $period): int
+    {
         foreach ($run->windows() as $window) {
             $io->writeln(sprintf(
                 'Gateway(s) %s: the payments Quickpay changed since %s (%s)',
@@ -236,10 +204,6 @@ final class ReconcilePaymentsCommand extends Command
                     $failingSince->format('Y-m-d H:i'),
                 )));
             }
-
-            // Gives the run lock its full TTL again, so it only expires on a run that died holding it. A lock store
-            // that fails here throws, ending the run unfinished: the next run lists the same window again
-            $runLock?->refresh();
         }
 
         $run->finish();
@@ -255,23 +219,6 @@ final class ReconcilePaymentsCommand extends Command
         ));
 
         return $errored > 0 || [] !== $run->failedGateways() ? Command::FAILURE : Command::SUCCESS;
-    }
-
-    /**
-     * A run lock that cannot be released expires with its TTL. Throwing here would turn a finished run into an error,
-     * or replace the run's own error.
-     */
-    private static function release(LockInterface $runLock, SymfonyStyle $io): void
-    {
-        try {
-            $runLock->release();
-        } catch (LockExceptionInterface $e) {
-            $io->warning(sprintf(
-                'Could not release the run lock, so runs are skipped until it expires within %d seconds: %s',
-                self::RUN_LOCK_TTL,
-                $e->getMessage(),
-            ));
-        }
     }
 
     private static function describeWindow(AccountWindow $window, bool $full, string $period): string
