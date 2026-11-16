@@ -421,7 +421,10 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $entityManager;
     }
 
-    private function channel(): ChannelInterface
+    /**
+     * The shared channel, in the test currency and locale, persisted on first use
+     */
+    protected function channel(): ChannelInterface
     {
         $channel = $this->findOneBy('sylius.repository.channel', ['code' => 'web']);
         if (null !== $channel) {
@@ -461,7 +464,10 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $channel;
     }
 
-    private function createOrder(ChannelInterface $channel, string $paymentState, string $number): OrderInterface
+    /**
+     * A completed order with no items, in the test currency and locale, persisted
+     */
+    protected function createOrder(ChannelInterface $channel, string $paymentState, string $number): OrderInterface
     {
         $order = $this->createResource('sylius.factory.order');
         self::assertInstanceOf(OrderInterface::class, $order);
@@ -480,9 +486,9 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
-     * One unit of the variant at the given price
+     * The given number of units of the variant at the given price, one unit unless more are given
      */
-    private function createOrderItem(ProductVariantInterface $variant, int $unitPrice): OrderItemInterface
+    protected function createOrderItem(ProductVariantInterface $variant, int $unitPrice, int $quantity = 1): OrderItemInterface
     {
         $item = $this->createResource('sylius.factory.order_item');
         self::assertInstanceOf(OrderItemInterface::class, $item);
@@ -491,12 +497,16 @@ abstract class FunctionalTestCase extends KernelTestCase
 
         $quantityModifier = self::getContainer()->get('sylius.order_item_quantity_modifier');
         self::assertInstanceOf(OrderItemQuantityModifierInterface::class, $quantityModifier);
-        $quantityModifier->modify($item, 1);
+        $quantityModifier->modify($item, $quantity);
 
         return $item;
     }
 
-    private function quickpayPaymentMethod(): PaymentMethodInterface
+    /**
+     * The Quickpay payment method the test's payments are paid with, persisted on first use: gateway `quickpay`, with
+     * the test's api key, private key and order prefix
+     */
+    protected function quickpayPaymentMethod(): PaymentMethodInterface
     {
         $paymentMethod = $this->findOneBy('sylius.repository.payment_method', ['code' => 'quickpay']);
         if (null !== $paymentMethod) {
@@ -525,7 +535,7 @@ abstract class FunctionalTestCase extends KernelTestCase
         return $paymentMethod;
     }
 
-    private function createResource(string $factoryId): object
+    protected function createResource(string $factoryId): object
     {
         $factory = self::getContainer()->get($factoryId);
         self::assertInstanceOf(FactoryInterface::class, $factory);

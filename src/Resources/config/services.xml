@@ -143,9 +143,10 @@
         </service>
 
         <!-- Action -->
+        <!-- takes Sylius' Convert of the Sylius payment and hands payum-quickpay's convert the described payment -->
         <service id="Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction" public="true">
-            <argument type="service" id="payum"/>
-            <argument type="service" id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriberInterface"/>
+            <argument type="service" id="sylius.payment_description_provider"/>
 
             <tag name="payum.action"
                  factory="quickpay"
@@ -227,6 +228,14 @@
 
         <service id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface"
                  alias="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolver"/>
+
+        <!-- Order description -->
+        <service id="Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriber">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Taxation\VatRateResolverInterface"/>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriberInterface"
+                 alias="Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriber"/>
 
         <!-- Checkout presentation -->
         <service id="Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider">
