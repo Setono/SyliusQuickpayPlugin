@@ -2,6 +2,7 @@
 /.gitattributes                     export-ignore
 /.github                            export-ignore
 /.gitignore                         export-ignore
+/.out-of-scope                      export-ignore
 /CLAUDE.md                          export-ignore
 /GLOSSARY.md                        export-ignore
 /README.md                          export-ignore
