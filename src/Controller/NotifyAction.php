@@ -13,6 +13,7 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvide
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
@@ -73,12 +74,12 @@ final class NotifyAction implements LoggerAwareInterface
             return new Response('', 204);
         }
 
-        // A payment skipped because its lock is held is answered like a reconciled one: the lock's holder,
-        // e.g. the original of this duplicate, reconciles it, so Quickpay can stop retrying. Errors
-        // (a forged callback, Quickpay unreachable) propagate to an error response, so Quickpay retries.
-        $this->reconciler->reconcileFromCallback($payment);
+        // A payment skipped because its lock is held is answered 409, so Quickpay retries the callback: it may
+        // report an operation newer than the lock's holder read, and the retry reconciles from a fresh read. Errors
+        // (a forged callback, Quickpay unreachable) propagate to an error response, so Quickpay retries too.
+        $result = $this->reconciler->reconcileFromCallback($payment);
 
-        return new Response('', 204);
+        return new Response('', ReconcileOutcome::Skipped === $result->outcome ? 409 : 204);
     }
 
     /**

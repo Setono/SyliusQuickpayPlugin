@@ -500,13 +500,15 @@ windows and listing happen in `start()`; matching runs lazily as the run is iter
 ### Callbacks
 Callbacks arrive on two endpoints, which behave identically for the same callback
 (`tests/Functional/Controller/CallbackEndpointsTest` runs its callback scenarios against both). Both call
-`reconcileFromCallback()` and answer 204 whether the payment was reconciled or skipped because its lock is held (a
-duplicate of a callback being handled: the lock's holder reconciles it, and Quickpay stops retrying); errors
+`reconcileFromCallback()` and answer 204 when the payment was reconciled, and 409 Conflict with an empty body when it
+was skipped because its lock is held (`ReconcileOutcome::Skipped`). A skipped callback isn't always a duplicate: it can
+report an operation newer than the lock's holder read (the authorize and capture callbacks of the capture mode
+"immediately" arrive moments apart), so Quickpay must retry it, and the retry reconciles from a fresh read; a retried
+duplicate changes nothing. 409, not a 5xx, so a routine race doesn't trip a store's error monitoring. Errors
 propagate to an error response (a forged callback → Payum's reply listener turns the `HttpResponse` into a 400,
 anything else a 500), so Quickpay retries, and since a failed reconcile saves nothing, the retry finds the payment as
 it was. The lock is taken before the HMAC is checked (the check is the `Notify` inside the sequence), so a forged
-callback arriving while the payment's lock is held is answered 204 too and runs nothing: nothing is read or changed,
-but a 2xx is no proof a callback was genuine.
+callback arriving while the payment's lock is held is answered 409 too and runs nothing: nothing is read or changed.
 - `src/Controller/PayumNotifyController.php` **decorates Payum's notify controller** (service
   `Payum\Bundle\PayumBundle\Controller\NotifyController`, route `payum_notify_do` → `/payment/notify/{payum_token}`;
   args `.inner`, `payum`, `PaymentReconcilerInterface`, `GatewayConfigurationProviderInterface`; logger-aware via

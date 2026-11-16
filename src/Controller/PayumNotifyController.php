@@ -11,6 +11,7 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
+use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Symfony\Component\HttpFoundation\Exception\JsonException;
 use Symfony\Component\HttpFoundation\Request;
@@ -72,11 +73,11 @@ final class PayumNotifyController implements LoggerAwareInterface
             return new Response('', 204);
         }
 
-        // A payment skipped because its lock is held is answered like a reconciled one, and errors propagate
-        // to an error response, as on the shared callback endpoint
-        $this->reconciler->reconcileFromCallback($payment);
+        // A payment skipped because its lock is held is answered 409, so Quickpay retries the callback, and errors
+        // propagate to an error response, as on the shared callback endpoint
+        $result = $this->reconciler->reconcileFromCallback($payment);
 
-        return new Response('', 204);
+        return new Response('', ReconcileOutcome::Skipped === $result->outcome ? 409 : 204);
     }
 
     public function doUnsafeAction(Request $request): Response

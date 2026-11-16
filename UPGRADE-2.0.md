@@ -185,8 +185,9 @@ if you make those and want the store to notice. The README's *Callbacks* section
 - **A payment is reconciled under a per-payment lock.** Callbacks, on either callback url, and the
   reconciliation command take the payment's lock and hold it until the state change is applied and
   saved. A callback arriving while it is held, such as a Quickpay retry racing the original delivery,
-  is answered with a 2xx and runs nothing, and the reconciliation command skips the payment and reports
-  it, so a state change is never applied twice. Locking uses the Symfony Lock component (a new
+  runs nothing and is answered 409 Conflict, so Quickpay retries it and the retry reconciles from a fresh
+  read, and the reconciliation command skips the payment and reports it, so a state change is never
+  applied twice. Locking uses the Symfony Lock component (a new
   dependency, installed by composer) through a named `framework.lock` resource, `setono_sylius_quickpay`,
   defaulting to the per-server `flock` store — the README's *Callbacks* section shows how a multi-server
   shop redefines the resource with a shared store.
@@ -628,19 +629,23 @@ The service definitions changed accordingly; only a redefinition or decoration o
   servers apart. A run started while it is held prints `Another run is reconciling payments; skipped.` and exits 0. A
   lock left by a run that died expires within 5 minutes (a `flock` lock is released with its process). `--dry-run` and
   `--fraud-suspected` take no lock. Before, nothing stopped a second run while one was going.
-- **Duplicate callbacks are answered 2xx without processing, on both callback urls.** Both urls reconcile the
-  payment under its lock, held until the transition is applied and saved. A callback arriving while the lock is
-  held is answered 204 and runs nothing; one arriving after it was released sees the saved state and changes
-  nothing. Before, the lock was released before the transition was applied and saved, and a locked-out duplicate
-  still had its transition applied, so a duplicate could complete a payment, pay its order and sell its inventory
-  twice. The lock key changed from `setono_sylius_quickpay_notify_<id>` to `setono_sylius_quickpay_payment_<id>`
+- **A callback arriving while the payment's lock is held runs nothing and is answered 409, on both callback urls.**
+  Both urls reconcile the payment under its lock, held until the transition is applied and saved. A callback
+  arriving while the lock is held runs nothing and is answered 409 Conflict with an empty body, so Quickpay retries
+  it: it may report an operation newer than the lock's holder read (the authorize and capture callbacks of the
+  capture mode "immediately" arrive moments apart), and the retry reconciles from a fresh read once the lock is
+  released. A retried duplicate finds the saved state and changes nothing. Expect the occasional 409 in Quickpay's
+  callback history and your access logs; it is this race, not an error. Before, the lock was released before the
+  transition was applied and saved, and a locked-out duplicate was answered with a 2xx and still had its transition
+  applied, so a duplicate could complete a payment, pay its order and sell its inventory twice, while a newer
+  callback skipped on the lock was never retried. The lock key changed from `setono_sylius_quickpay_notify_<id>` to `setono_sylius_quickpay_payment_<id>`
   and callbacks and the reconciliation command now take the same one, so they never reconcile a payment at the
   same time. The `setono_sylius_quickpay` lock resource and its multi-server override are unchanged, and a broken
   lock store still fails open.
 - **A forged callback changes nothing.** A callback whose HMAC doesn't match is answered 400 before anything about
   the payment changes, on both callback urls. Before, Sylius still reconciled and saved the payment (against
   Quickpay's real status) before the 400 was sent. The payment's lock is taken before the HMAC is checked, so a
-  forged callback arriving while the lock is held is answered 204 like any duplicate, and runs nothing.
+  forged callback arriving while the lock is held is answered 409 like any other callback, and runs nothing.
 - **Admin operations no longer apply a transition inside themselves.** The guards before capture, refund and
   cancel (skip the operation when Quickpay already did it) use the status check. Before, completing a payment
   Quickpay had already captured ran `complete` and its callbacks a second time from inside the first, and the

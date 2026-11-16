@@ -60,7 +60,7 @@ interface PaymentReconcilerInterface
      * callback changes nothing. Then Sylius' payment-state extension applies at most one transition, and the
      * result, confirmed details included, is persisted.
      *
-     * A payment whose lock is held, e.g. by a duplicate of the callback being handled, is skipped untouched.
+     * A payment whose lock is held, e.g. by another callback about it being handled, is skipped untouched.
      *
      * Errors propagate, so the callback is answered with an error and Quickpay retries it: the SDK's
      * {@see QuickpayException} (e.g. Quickpay unreachable), Payum's {@see ExceptionInterface},

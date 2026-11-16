@@ -88,11 +88,28 @@ final class NotifyActionTest extends TestCase
     {
         $payment = self::payment($storedId);
         $reconciler = $this->prophesize(PaymentReconcilerInterface::class);
-        $reconciler->reconcileFromCallback($payment)->willReturn(ReconcileResult::skipped('new'))->shouldBeCalledOnce();
+        $reconciler->reconcileFromCallback($payment)->willReturn(ReconcileResult::reconciled('new', 'completed', 'completed'))->shouldBeCalledOnce();
 
         $response = $this->createActionFor($payment, $reconciler->reveal())($this->createRequest('000001000', quickpayPaymentId: 1000));
 
         self::assertSame(204, $response->getStatusCode());
+    }
+
+    /**
+     * A payment skipped because its lock is held is answered 409, so Quickpay retries the callback
+     *
+     * @test
+     */
+    public function it_answers_a_409_when_the_payment_is_skipped_on_its_held_lock(): void
+    {
+        $payment = self::payment(1000);
+        $reconciler = $this->prophesize(PaymentReconcilerInterface::class);
+        $reconciler->reconcileFromCallback($payment)->willReturn(ReconcileResult::skipped('authorized'))->shouldBeCalledOnce();
+
+        $response = $this->createActionFor($payment, $reconciler->reveal())($this->createRequest('000001000', quickpayPaymentId: 1000));
+
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame('', $response->getContent());
     }
 
     /**

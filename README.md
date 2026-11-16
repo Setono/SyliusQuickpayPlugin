@@ -311,13 +311,15 @@ the [reconciliation command](#reconciling-missed-callbacks). Quickpay retries un
 backoff.
 
 Deliveries can race: Quickpay retries a callback it considers undelivered, and a retry can arrive while the
-original is still being handled. Both callback urls reconcile the payment under a per-payment lock, held until the
-state change is applied and saved. A callback arriving while the lock is held is answered with a 2xx and runs
-nothing, so nothing is applied twice and Quickpay stops retrying; one arriving after the lock was released sees the
-saved state and changes nothing. Nothing is lost either: handling a callback re-fetches the payment from Quickpay,
-so the callback holding the lock sees the state the duplicate carried. The lock is taken before the callback's
-signature is checked, so a forged callback arriving while the payment's lock is held is answered with a 2xx as well;
-like any duplicate it runs nothing and changes nothing. A callback whose handling fails (Quickpay unreachable, a
+original is still being handled. Two operations in quick succession, such as the authorization and the capture under
+the capture mode "immediately", also send two callbacks moments apart. Both callback urls reconcile the payment under
+a per-payment lock, held until the state change is applied and saved. A callback arriving while the lock is held runs
+nothing, so nothing is applied twice, and is answered 409 Conflict: it may report an operation that happened after
+the callback holding the lock read the payment, so Quickpay retries it, and the retry reconciles the payment from a
+fresh read once the lock is released. A retried duplicate finds the payment in step and changes nothing. A 409 in
+Quickpay's callback history is this race, not an error. The lock is taken before the callback's signature is
+checked, so a forged callback arriving while the payment's lock is held is answered 409 as well; it runs nothing and
+changes nothing. A callback whose handling fails (Quickpay unreachable, a
 state-machine callback throwing) saves nothing, not even a state change that was halfway applied, and is answered
 with an error, so Quickpay's retry finds the payment as it was. The
 [reconciliation command](#reconciling-missed-callbacks) takes the same lock, so a callback and the command never
