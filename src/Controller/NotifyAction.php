@@ -11,7 +11,7 @@ use Setono\Quickpay\Callback\Callback;
 use Setono\Quickpay\Enum\ResourceType;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
-use Setono\SyliusQuickpayPlugin\Provider\PaymentProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -34,7 +34,7 @@ final class NotifyAction implements LoggerAwareInterface
     public function __construct(
         private readonly PaymentReconcilerInterface $reconciler,
         private readonly OrderRepositoryInterface $orderRepository,
-        private readonly PaymentProviderInterface $paymentProvider,
+        private readonly QuickpayPaymentIdProviderInterface $quickpayPaymentIdProvider,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
     ) {
     }
@@ -94,13 +94,29 @@ final class NotifyAction implements LoggerAwareInterface
                 continue;
             }
 
-            $payment = $this->paymentProvider->findByQuickpayPaymentId($order, $quickpayPaymentId);
-            if ($payment instanceof PaymentInterface) {
+            $payment = $this->paymentOf($order, $quickpayPaymentId);
+            if (null !== $payment) {
                 return $payment;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The order's payment linked to the Quickpay payment: the last one whose Quickpay payment id it is. An id that
+     * can't be read never matches, and neither does a payment whose method is no longer a Quickpay gateway's
+     */
+    private function paymentOf(OrderInterface $order, int $quickpayPaymentId): ?PaymentInterface
+    {
+        $linked = null;
+        foreach ($order->getPayments() as $payment) {
+            if ($payment instanceof PaymentInterface && $this->quickpayPaymentIdProvider->tryIdOf($payment) === $quickpayPaymentId) {
+                $linked = $payment;
+            }
+        }
+
+        return $linked;
     }
 
     /**

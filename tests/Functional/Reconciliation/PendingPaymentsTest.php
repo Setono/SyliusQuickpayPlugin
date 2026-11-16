@@ -10,6 +10,7 @@ use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AnotherRunIsReconciling;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments;
@@ -79,6 +80,27 @@ final class PendingPaymentsTest extends FunctionalTestCase
             [$new->getId(), $processing->getId(), $old->getId(), $authorized->getId()],
             self::idsOf($this->start()),
         );
+    }
+
+    /**
+     * A Quickpay payment id payum-quickpay can't read never matches a listed one, however PHP would cast it, and the
+     * run goes on past it
+     *
+     * @test
+     */
+    public function it_never_matches_a_quickpay_payment_id_it_cannot_read(): void
+    {
+        $readable = $this->payment(PaymentInterface::STATE_NEW, 501);
+        foreach (['1e3', '12abc', 'abc'] as $unreadableId) {
+            $this->payment(PaymentInterface::STATE_NEW, null)->setDetails(['quickpayPaymentId' => $unreadableId]);
+        }
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(12, 501, 1000));
+
+        $run = $this->start();
+
+        self::assertSame([$readable->getId()], self::idsOf($run));
+        self::assertTrue($run->finish());
     }
 
     /**
@@ -753,7 +775,10 @@ final class PendingPaymentsTest extends FunctionalTestCase
             self::assertInstanceOf(LockFactory::class, $lockFactory);
         }
 
-        return new PendingPayments($gatewayConfigurationProvider, $clientProvider, $cache ?? $this->cache(), $lockFactory, $doctrine, $paymentClass, $pageSize ?? 100);
+        $quickpayPaymentIdProvider = $container->get(QuickpayPaymentIdProviderInterface::class);
+        self::assertInstanceOf(QuickpayPaymentIdProviderInterface::class, $quickpayPaymentIdProvider);
+
+        return new PendingPayments($gatewayConfigurationProvider, $clientProvider, $cache ?? $this->cache(), $lockFactory, $doctrine, $paymentClass, $quickpayPaymentIdProvider, $pageSize ?? 100);
     }
 
     /**

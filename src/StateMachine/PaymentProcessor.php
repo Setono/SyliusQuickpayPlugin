@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Setono\SyliusQuickpayPlugin\StateMachine;
 
-use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\Exception\ExceptionInterface;
 use Payum\Core\Payum;
 use Payum\Core\Request\Cancel;
@@ -12,14 +11,15 @@ use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
-use Setono\Payum\Quickpay\Details;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
+use Webmozart\Assert\Assert;
 
 final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareInterface
 {
@@ -29,6 +29,8 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
         private readonly Payum $payum,
         private readonly PaymentReconcilerInterface $reconciler,
         private readonly FraudCheckerInterface $fraudChecker,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
+        private readonly QuickpayPaymentIdProviderInterface $quickpayPaymentIdProvider,
         private readonly bool $captureEnabled,
         private readonly bool $refundEnabled,
         private readonly bool $cancelEnabled,
@@ -44,19 +46,16 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
             return;
         }
 
-        $quickpayPaymentId = $payment->getDetails()['quickpayPaymentId'] ?? null;
-        if (null === $quickpayPaymentId) {
+        // Only a payment with a Quickpay payment has anything to carry out at Quickpay. One whose method is no longer a
+        // Quickpay gateway's (the customer switched to bank transfer after opening the payment window, and Sylius kept
+        // its details) is another gateway's business, and so is one that never got a payment link
+        if (!$this->quickpayPaymentIdProvider->has($payment)) {
             return;
         }
 
-        /** @var PaymentMethodInterface|null $method */
-        $method = $payment->getMethod();
-        $gatewayConfig = $method?->getGatewayConfig();
-        if (null === $gatewayConfig) {
-            return;
-        }
-
-        $gatewayName = $gatewayConfig->getGatewayName();
+        $gatewayConfiguration = $this->gatewayConfigurationProvider->forPayment($payment);
+        Assert::notNull($gatewayConfiguration);
+        $gatewayName = $gatewayConfiguration->gatewayName;
 
         switch ($transition) {
             case PaymentTransitions::TRANSITION_COMPLETE:
@@ -68,7 +67,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
 
                 break;
             case PaymentTransitions::TRANSITION_CANCEL:
-                $this->cancel($payment, $gatewayName, $quickpayPaymentId);
+                $this->cancel($payment, $gatewayName);
 
                 break;
         }
@@ -101,7 +100,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
         }
 
         // The status check read the Quickpay payment by this id, so it is usable
-        $quickpayPaymentId = Details::paymentId(new ArrayObject($payment->getDetails()));
+        $quickpayPaymentId = $this->quickpayPaymentIdProvider->idOf($payment);
 
         // Only an authorization can be captured. Executing a Capture without one makes Sylius create a
         // payment link instead (or fail building one), so the transition aborts here, with nothing sent to
@@ -145,7 +144,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
      * Cancels the payment at Quickpay. Fails open: an error, an unusable gateway configuration's included, is
      * logged and the transition proceeds
      */
-    private function cancel(PaymentInterface $payment, string $gatewayName, mixed $quickpayPaymentId): void
+    private function cancel(PaymentInterface $payment, string $gatewayName): void
     {
         try {
             if ($this->targetStateIs($payment, PaymentInterface::STATE_CANCELLED)) {
@@ -160,7 +159,7 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
             // unusable gateway configuration throws the plugin's UnusableGatewayConfiguration;
             // Payum's ExceptionInterface covers Payum's other errors
             $this->logger?->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
-                'quickpayPaymentId' => $quickpayPaymentId,
+                'quickpayPaymentId' => $this->quickpayPaymentIdProvider->tryIdOf($payment),
                 'paymentId' => $payment->getId(),
             ]);
         }

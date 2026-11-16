@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Controller;
 
 use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\Controller\NotifyAction;
+use Setono\SyliusQuickpayPlugin\Controller\PayumNotifyController;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Setono\SyliusQuickpayPlugin\Tests\Payum\OfflineNotifyAction;
@@ -280,6 +281,56 @@ final class CallbackEndpointsTest extends FunctionalTestCase
         self::assertSame(404, $response->getStatusCode());
         self::assertStringContainsString('The payment of the token', (string) $response->getContent());
         self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * The customer opened the Quickpay window, switched the order to bank transfer in another tab, then paid in the
+     * still-open window. Sylius kept the payment, its details and the callback url its Quickpay payment was given, but
+     * the payment is the bank transfer's now: neither endpoint reconciles it, both answer 204 so Quickpay stops
+     * retrying, and both log why
+     *
+     * @test
+     *
+     * @dataProvider callbackEndpoints
+     */
+    public function a_callback_for_a_payment_switched_to_another_payment_method_is_answered_with_a_204_and_a_warning(string $endpoint): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        // Minted while the payment was the Quickpay gateway's
+        $callbackUrl = $this->callbackUrlOf($payment);
+        $payment->setMethod($this->createPaymentMethod('bank_transfer', [], factoryName: 'offline'));
+        $this->entityManager()->flush();
+        $details = $payment->getDetails();
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize']));
+        $transitions = $this->recordPaymentTransitions();
+
+        $logger = new RecordingLogger();
+        $controller = self::getContainer()->get(self::PAYMENT_CALLBACK_URL === $endpoint ? PayumNotifyController::class : NotifyAction::class);
+        self::assertTrue($controller instanceof PayumNotifyController || $controller instanceof NotifyAction);
+        $controller->setLogger($logger);
+
+        $callback = self::quickpayCallback(501);
+        $response = self::$kernel->handle(self::PAYMENT_CALLBACK_URL === $endpoint ? self::sentTo($callbackUrl, $callback) : $callback);
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([[
+            LogLevel::WARNING,
+            ...(self::PAYMENT_CALLBACK_URL === $endpoint ? [
+                sprintf('The callback of Quickpay payment 501 was not reconciled: its Sylius payment %d is no longer paid with a Quickpay gateway but with the payment method "bank_transfer". Retrying can\'t help; handle any money Quickpay holds for it in the Quickpay manager.', (int) $payment->getId()),
+                ['paymentId' => $payment->getId(), 'paymentMethod' => 'bank_transfer', 'quickpayPaymentId' => 501],
+            ] : [
+                'No Sylius payment matches the callback of Quickpay payment 501 with order id "qp_000000001", so nothing was reconciled. Was the order prefix of its payment method changed?',
+                ['quickpayPaymentId' => 501, 'orderId' => 'qp_000000001'],
+            ]),
+        ]], $logger->records);
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame([], $transitions->getArrayCopy());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_NEW, $payment->getState());
+        // Equal, not identical: MySQL's JSON type stores the keys in an order of its own
+        self::assertEquals($details, $payment->getDetails());
     }
 
     /**

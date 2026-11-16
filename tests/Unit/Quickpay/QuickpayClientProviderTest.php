@@ -16,6 +16,7 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProvider;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProvider;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Quickpay\TemporaryCacheDir;
 use Sylius\Component\Core\Model\Payment;
@@ -256,13 +257,14 @@ final class QuickpayClientProviderTest extends TestCase
     {
         $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
         $gatewayConfigurationProvider->forPayment(Argument::type(PaymentInterface::class))->willReturn($paymentsGatewayConfiguration);
+        $gatewayConfigurationProvider = $gatewayConfigurationProvider->reveal();
 
         return new QuickpayClientProvider(new MockHttpClient(function (string $method, string $url, array $options) use ($response): MockResponse {
             /** @var array<string, mixed> $options */
             $this->requests[] = [$method, $url, $options];
 
             return $response ?? new MockResponse(self::quickpayPayment(), ['response_headers' => ['Content-Type' => 'application/json']]);
-        }), $this->cacheDir, $gatewayConfigurationProvider->reveal());
+        }), $this->cacheDir, $gatewayConfigurationProvider, new QuickpayPaymentIdProvider($gatewayConfigurationProvider));
     }
 
     /**

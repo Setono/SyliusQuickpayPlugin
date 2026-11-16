@@ -9,7 +9,9 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\NoAuthorizationToCapture;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
@@ -375,6 +377,54 @@ final class PaymentProcessorTest extends FunctionalTestCase
     }
 
     /**
+     * The customer opened the Quickpay window, then switched the order to bank transfer: Sylius kept the payment and its
+     * details, Quickpay payment id included. It is the bank transfer's now, so the plugin builds no gateway, checks no
+     * status and contacts no one, and the admin can mark it paid, refund it or cancel it
+     *
+     * @test
+     *
+     * @dataProvider transitionsOfAPaymentSwitchedToAnotherMethod
+     */
+    public function it_leaves_a_payment_switched_to_another_payment_method_alone(
+        string $stateMachineAdapter,
+        string $state,
+        string $orderPaymentState,
+        string $transition,
+        string $stateAfter,
+    ): void {
+        self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
+        $logger = $this->recordProcessorLog();
+
+        $payment = $this->createSyliusPayment($state, $orderPaymentState, quickpayPaymentId: 501);
+        $payment->setMethod($this->createPaymentMethod('bank_transfer', [], factoryName: 'offline'));
+        $this->entityManager()->flush();
+        $details = $payment->getDetails();
+
+        $this->applyTransition($payment, $transition);
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame([], $logger->records);
+        $payment = $this->reload($payment);
+        self::assertSame($stateAfter, $payment->getState());
+        // Not even the offline gateway's own refund or cancel ran on it. Equal, not identical: MySQL's JSON type stores
+        // the keys in an order of its own
+        self::assertEquals($details, $payment->getDetails());
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string, string, string}>
+     */
+    public static function transitionsOfAPaymentSwitchedToAnotherMethod(): iterable
+    {
+        foreach (self::stateMachineAdapters() as $adapterName => [$adapter]) {
+            yield sprintf('%s: complete', $adapterName) => [$adapter, PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, PaymentTransitions::TRANSITION_COMPLETE, PaymentInterface::STATE_COMPLETED];
+            yield sprintf('%s: complete a processing payment', $adapterName) => [$adapter, PaymentInterface::STATE_PROCESSING, OrderPaymentStates::STATE_AWAITING_PAYMENT, PaymentTransitions::TRANSITION_COMPLETE, PaymentInterface::STATE_COMPLETED];
+            yield sprintf('%s: refund', $adapterName) => [$adapter, PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID, PaymentTransitions::TRANSITION_REFUND, PaymentInterface::STATE_REFUNDED];
+            yield sprintf('%s: cancel', $adapterName) => [$adapter, PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, PaymentTransitions::TRANSITION_CANCEL, PaymentInterface::STATE_CANCELLED];
+        }
+    }
+
+    /**
      * @test
      */
     public function it_completes_a_payment_never_sent_to_quickpay_without_contacting_quickpay(): void
@@ -542,7 +592,12 @@ final class PaymentProcessorTest extends FunctionalTestCase
         $fraudChecker = self::getContainer()->get(FraudCheckerInterface::class);
         self::assertInstanceOf(FraudCheckerInterface::class, $fraudChecker);
 
-        return new PaymentProcessor($this->payum(), $this->reconciler(), $fraudChecker, $capture, $refund, $cancel, $blockCaptureOnSuspectedFraud);
+        $gatewayConfigurationProvider = self::getContainer()->get(GatewayConfigurationProviderInterface::class);
+        self::assertInstanceOf(GatewayConfigurationProviderInterface::class, $gatewayConfigurationProvider);
+        $quickpayPaymentIdProvider = self::getContainer()->get(QuickpayPaymentIdProviderInterface::class);
+        self::assertInstanceOf(QuickpayPaymentIdProviderInterface::class, $quickpayPaymentIdProvider);
+
+        return new PaymentProcessor($this->payum(), $this->reconciler(), $fraudChecker, $gatewayConfigurationProvider, $quickpayPaymentIdProvider, $capture, $refund, $cancel, $blockCaptureOnSuspectedFraud);
     }
 
     /**

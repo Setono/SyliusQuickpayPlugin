@@ -15,11 +15,11 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\LoggerInterface;
 use Setono\Doctrine\ORMTrait;
-use Setono\Payum\Quickpay\Details;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Bundle\PayumBundle\Request\GetStatus;
 use Sylius\Component\Core\Model\PaymentInterface;
-use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\Lock\Exception\ExceptionInterface as LockExceptionInterface;
 use Symfony\Component\Lock\LockFactory;
@@ -44,6 +44,8 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         private readonly StateMachineInterface $stateMachine,
         private readonly LockFactory $lockFactory,
         ManagerRegistry $managerRegistry,
+        private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
+        private readonly QuickpayPaymentIdProviderInterface $quickpayPaymentIdProvider,
     ) {
         $this->managerRegistry = $managerRegistry;
     }
@@ -54,7 +56,10 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         // extension maps it. It runs on a copy of the stored details instead of the Sylius payment: the
         // extension only applies a transition after a request on a Sylius payment, and Payum's storage only
         // persists one, so neither a transition nor the details the status read refreshes reach the payment
-        $targetState = self::readTargetState($this->gatewayOf($payment), new ArrayObject($payment->getDetails()));
+        $targetState = self::readTargetState(
+            $this->payum->getGateway($this->gatewayNameOf($payment)),
+            new ArrayObject($payment->getDetails()),
+        );
 
         // The extension's own condition for applying a transition
         if ($targetState === $payment->getState() || PaymentInterface::STATE_UNKNOWN === $targetState) {
@@ -119,7 +124,9 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
      */
     private function reconcileWith(PaymentInterface $payment, \Closure $runRequest): ReconcileResult
     {
-        $quickpayPaymentId = Details::paymentId(new ArrayObject($payment->getDetails()));
+        // Refused before anything is locked or read: another gateway's payment is not Quickpay's to reconcile
+        $gatewayName = $this->gatewayNameOf($payment);
+        $quickpayPaymentId = $this->quickpayPaymentIdProvider->idOf($payment);
 
         // Not auto-released: the lock must span the transition and the commit and be released right after,
         // in the finally below, never left to whenever the lock object happens to be collected
@@ -152,7 +159,7 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
             $manager->getConnection()->beginTransaction();
 
             try {
-                $targetState = $runRequest($this->gatewayOf($payment), $payment);
+                $targetState = $runRequest($this->payum->getGateway($gatewayName), $payment);
                 $manager->getConnection()->commit();
             } catch (\Throwable $e) {
                 // The entity manager still holds the half-applied changes in memory, so they go too. When the
@@ -219,15 +226,19 @@ final class PaymentReconciler implements PaymentReconcilerInterface, LoggerAware
         return $state;
     }
 
-    private function gatewayOf(PaymentInterface $payment): GatewayInterface
+    /**
+     * The name of the payment's Quickpay gateway. A payment whose method has no Quickpay gateway configuration, say one
+     * the customer switched to bank transfer after opening the payment window, is refused: its status is another
+     * gateway's to tell
+     */
+    private function gatewayNameOf(PaymentInterface $payment): string
     {
-        $method = $payment->getMethod();
-        $gatewayName = $method instanceof PaymentMethodInterface ? $method->getGatewayConfig()?->getGatewayName() : null;
-        if (null === $gatewayName) {
+        $gatewayConfiguration = $this->gatewayConfigurationProvider->forPayment($payment);
+        if (null === $gatewayConfiguration) {
             // The caller knows which payment it passed: the reconcile command prefixes its id to the message
-            throw new InvalidArgumentException('The payment has no payment method with a gateway');
+            throw new InvalidArgumentException('The payment is not a payment of a Quickpay gateway: its payment method has no Quickpay gateway configuration');
         }
 
-        return $this->payum->getGateway($gatewayName);
+        return $gatewayConfiguration->gatewayName;
     }
 }

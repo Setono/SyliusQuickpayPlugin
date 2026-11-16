@@ -184,6 +184,10 @@ configuration, so its checkout would capture immediately whatever the payment me
   authorization was declined, fails with an error naming the payment and the state Quickpay's status maps to, and
   nothing is sent to Quickpay. An operation turned off in the [plugin config](#3-configure-the-plugin-optional) leaves
   Quickpay alone: its transition is applied without contacting Quickpay.
+* A payment is a Quickpay payment only while its payment method is a Quickpay one. A customer who opened the Quickpay
+  window and then switched the order to another payment method, such as bank transfer, leaves a payment Sylius keeps,
+  Quickpay details included; the plugin leaves it to that method: completing, refunding or cancelling it contacts no
+  one, and the admin shows no Quickpay panel for it (see [Troubleshooting](#troubleshooting)).
 * A refund targets Quickpay's **balance** (what is still captured) rather than the original amount — so a payment
   that was partially refunded directly in the Quickpay manager refunds only the remainder instead of failing. The
   balance is also persisted into the payment details whenever a callback or the
@@ -245,7 +249,8 @@ is sent in the order's locale through Sylius' mailer and can be overridden like 
 
 ## Operation history in the admin
 
-Each Quickpay payment on the admin order view shows its **live operation history** — every
+Each Quickpay payment on the admin order view (one whose payment method is a Quickpay one and that got as far as the
+payment window) shows its **live operation history** — every
 authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
 captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
@@ -295,7 +300,9 @@ That endpoint resolves the payment from the callback body (`order_id` → your o
 precisely because one static url cannot carry a Payum token. It reads the order number under the order prefix of every
 Quickpay payment method, and tries each until an order holds the callback's Quickpay payment. When none does, as for a
 payment made under an order prefix you have since changed, it answers 204 (retrying can't help) and logs a warning
-naming the `order_id` and the Quickpay payment id: that payment is left to you. While one of the payment methods has a
+naming the `order_id` and the Quickpay payment id: that payment is left to you. A payment switched to another payment
+method since (see [Troubleshooting](#troubleshooting)) is no Quickpay payment any more, so it never matches either;
+its own callback url answers a callback about it the same way. While one of the payment methods has a
 gateway configuration the gateway can't be built from (written by fixtures, the Admin API or the database directly),
 it answers every callback with a 500 and Quickpay retries it once that is fixed.
 A Quickpay account has exactly one such url, so when
@@ -580,7 +587,7 @@ behavioral changes around refunds and callbacks. Coming from an earlier 2.0 alph
 
 ## Troubleshooting
 
-Run [the doctor](#checking-your-configuration) first — it detects every case below.
+Run [the doctor](#checking-your-configuration) first — it detects every configuration problem below.
 
 - `Not authorized: Not authorized to PUT /payments/:id/link`
   at a `/payment/authorize/...` url:
@@ -616,6 +623,15 @@ Run [the doctor](#checking-your-configuration) first — it detects every case b
   the doctor. Shorten the prefix (11 characters or less with Sylius' default 9-digit order numbers) or remove other
   characters from it. If your order numbers themselves hold other characters (a custom order number generator), no
   prefix helps: Quickpay refuses every such `order_id`.
+
+- `The callback of Quickpay payment … was not reconciled: its Sylius payment … is no longer paid with a Quickpay gateway`
+  in the log, or a paid Quickpay payment for an order paid by bank transfer
+
+  The customer opened the Quickpay payment window, then switched the order to another payment method (Sylius lets them
+  on the order page while it awaits payment) and paid in the Quickpay window still open in another tab. The Sylius
+  payment is the other method's now, so the plugin reconciles nothing for it, and the money the Quickpay payment holds
+  is yours to handle in the Quickpay manager: cancel an authorization you don't want (unused, it expires by itself) or
+  refund a capture. Completing, refunding or cancelling the Sylius payment in the admin leaves Quickpay alone.
 
 - `The "branding_id" option must be a positive integer (or an integer string), got 'Our brand'` from the doctor, or
   any other `The "<option>" option ...` failure

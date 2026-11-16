@@ -40,7 +40,7 @@
         })();
     </script>
 {% endif %}
-{% if payment.details['quickpayPaymentId'] is defined %}
+{% if setono_sylius_quickpay_has_quickpay_payment(payment) %}
     <div class="ui top attached segment setono-quickpay-operations"
          data-url="{{ path('setono_sylius_quickpay_admin_payment_operations', {'id': payment.id}) }}">
         <h4 class="ui tiny dividing header">{{ 'setono_sylius_quickpay.ui.operations'|trans }}</h4>
@@ -56,7 +56,15 @@
             var load = function () {
                 content.innerHTML = '<em>{{ 'setono_sylius_quickpay.ui.loading'|trans|e('js') }}<\/em>';
                 fetch(panel.dataset.url, {headers: {'Accept': 'text/html'}, credentials: 'same-origin'})
-                    .then(function (response) { return response.text(); })
+                    .then(function (response) {
+                        // A 502 is the route's own inline notice (Quickpay failed); any other error answer would put
+                        // an error page into the panel, so it is shown as the load failure it is
+                        if (!response.ok && 502 !== response.status) {
+                            throw new Error('Unexpected status ' + response.status);
+                        }
+
+                        return response.text();
+                    })
                     .then(function (html) { content.innerHTML = html; })
                     .catch(function () {
                         content.innerHTML = '<div class="ui tiny negative message">{{ 'setono_sylius_quickpay.ui.load_failed'|trans|e('js') }} <a href="#" class="setono-quickpay-operations__retry">{{ 'setono_sylius_quickpay.ui.retry'|trans|e('js') }}<\/a><\/div>';

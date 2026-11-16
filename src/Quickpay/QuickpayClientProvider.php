@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Quickpay;
 
 use CuyZ\Valinor\Cache\FileSystemCache;
-use Setono\Payum\Quickpay\Details;
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\Quickpay\Response\Payment\Payment;
@@ -14,6 +13,7 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvide
 use Sylius\Component\Payment\Model\PaymentInterface;
 use Symfony\Component\HttpClient\Psr18Client;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Webmozart\Assert\Assert;
 
 final class QuickpayClientProvider implements QuickpayClientProviderInterface
 {
@@ -30,6 +30,7 @@ final class QuickpayClientProvider implements QuickpayClientProviderInterface
         HttpClientInterface $httpClient,
         string $cacheDir,
         private readonly GatewayConfigurationProviderInterface $gatewayConfigurationProvider,
+        private readonly QuickpayPaymentIdProviderInterface $quickpayPaymentIdProvider,
     ) {
         $this->httpClient = new Psr18Client($httpClient);
         $this->cache = new FileSystemCache($cacheDir);
@@ -46,16 +47,14 @@ final class QuickpayClientProvider implements QuickpayClientProviderInterface
 
     public function quickpayPaymentOf(PaymentInterface $payment): ?Payment
     {
+        // Checked before the gateway configuration is read, so a payment without one never throws
+        if (!$this->quickpayPaymentIdProvider->has($payment)) {
+            return null;
+        }
+
         $gatewayConfiguration = $this->gatewayConfigurationProvider->forPayment($payment);
-        if (null === $gatewayConfiguration) {
-            return null;
-        }
+        Assert::notNull($gatewayConfiguration);
 
-        $details = new \ArrayObject($payment->getDetails());
-        if (!Details::hasPaymentId($details)) {
-            return null;
-        }
-
-        return $this->forGatewayConfiguration($gatewayConfiguration)->payments()->getById(Details::paymentId($details));
+        return $this->forGatewayConfiguration($gatewayConfiguration)->payments()->getById($this->quickpayPaymentIdProvider->idOf($payment));
     }
 }

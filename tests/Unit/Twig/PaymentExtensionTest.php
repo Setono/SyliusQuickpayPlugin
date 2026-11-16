@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Twig;
 use Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProvider;
 use Setono\SyliusQuickpayPlugin\PaymentLink\PaymentLinkProvider;
+use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProvider;
 use Setono\SyliusQuickpayPlugin\Twig\PaymentExtension;
 use Setono\SyliusQuickpayPlugin\Twig\PaymentRuntime;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
@@ -62,6 +63,7 @@ final class PaymentExtensionTest extends IntegrationTestCase
             PaymentRuntime::class => static fn (): PaymentRuntime => new PaymentRuntime(
                 new PaymentMethodLogoProvider($gatewayConfigurationProvider, ['resurs' => 'https://cdn.example/resurs.png'], ['dankort', 'visa', 'mastercard']),
                 new PaymentLinkProvider($gatewayConfigurationProvider, new UrlGenerator($routes, $context), new UrlHelper(new RequestStack(), $context)),
+                new QuickpayPaymentIdProvider($gatewayConfigurationProvider),
             ),
         ])];
     }

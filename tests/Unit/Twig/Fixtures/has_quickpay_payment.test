@@ -1,0 +1,60 @@
+--TEST--
+"setono_sylius_quickpay_has_quickpay_payment" is true only for a payment of a Quickpay gateway whose details carry a Quickpay payment id
+--TEMPLATE--
+{{ setono_sylius_quickpay_has_quickpay_payment(payment) ? 'has a Quickpay payment' : 'no Quickpay payment' }}
+--DATA--
+return ['payment' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('quickpay');
+    $gatewayConfig->setGatewayName('quickpay');
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setCode('quickpay');
+    $method->setGatewayConfig($gatewayConfig);
+
+    $payment = new \Sylius\Component\Core\Model\Payment();
+    $payment->setMethod($method);
+    $payment->setDetails(['quickpayPaymentId' => 501]);
+
+    return $payment;
+})()]
+--EXPECT--
+has a Quickpay payment
+--DATA--
+return ['payment' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('quickpay');
+    $gatewayConfig->setGatewayName('quickpay');
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setCode('quickpay');
+    $method->setGatewayConfig($gatewayConfig);
+
+    // Sylius' convert may leave the key with a null value before the Quickpay payment is created
+    $payment = new \Sylius\Component\Core\Model\Payment();
+    $payment->setMethod($method);
+    $payment->setDetails(['quickpayPaymentId' => null]);
+
+    return $payment;
+})()]
+--EXPECT--
+no Quickpay payment
+--DATA--
+return ['payment' => (static function () {
+    $gatewayConfig = new \Sylius\Bundle\PayumBundle\Model\GatewayConfig();
+    $gatewayConfig->setFactoryName('offline');
+    $gatewayConfig->setGatewayName('bank_transfer');
+
+    $method = new \Sylius\Component\Core\Model\PaymentMethod();
+    $method->setCode('bank_transfer');
+    $method->setGatewayConfig($gatewayConfig);
+
+    // The customer opened the Quickpay window, then switched to bank transfer: Sylius kept the details
+    $payment = new \Sylius\Component\Core\Model\Payment();
+    $payment->setMethod($method);
+    $payment->setDetails(['quickpayPaymentId' => 501]);
+
+    return $payment;
+})()]
+--EXPECT--
+no Quickpay payment

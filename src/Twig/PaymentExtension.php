@@ -17,6 +17,7 @@ final class PaymentExtension extends AbstractExtension
         return [
             new TwigFunction('setono_sylius_quickpay_payment_method_logos', [PaymentRuntime::class, 'paymentMethodLogos']),
             new TwigFunction('setono_sylius_quickpay_payment_link', [PaymentRuntime::class, 'paymentLink']),
+            new TwigFunction('setono_sylius_quickpay_has_quickpay_payment', [PaymentRuntime::class, 'hasQuickpayPayment']),
         ];
     }
 }
