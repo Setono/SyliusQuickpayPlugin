@@ -324,19 +324,24 @@ mapping applies.
 - **The pending payments module, `Reconciliation\PendingPaymentsInterface`**, service
   `Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments` (constructor `(GatewayConfigurationProviderInterface
   $gatewayConfigurationProvider, QuickpayClientProviderInterface $clientProvider, CacheItemPoolInterface $cache,
-  ManagerRegistry $managerRegistry, string $paymentClass, int $pageSize = 100)`: the cache pool
-  `setono_sylius_quickpay.reconcile` and Sylius' payment class), aliased by the interface (terms in
+  LockFactory $lockFactory, ManagerRegistry $managerRegistry, string $paymentClass, int $pageSize = 100)`: the cache
+  pool `setono_sylius_quickpay.reconcile`, the plugin's lock factory `lock.setono_sylius_quickpay.factory` and Sylius'
+  payment class; logger-aware via `setLogger()`), aliased by the interface (terms in
   [GLOSSARY.md](GLOSSARY.md): Pending payment; the decision in
   [ADR 0005](docs/adr/0005-the-reconcile-command-reads-quickpays-changes.md)). It replaces the pending payment provider.
-  `start(\DateTimeImmutable $lookbackFrom, bool $full, bool $dryRun): PendingPaymentsRun` lists, once per Quickpay
+  `start(\DateTimeImmutable $lookbackFrom, bool $full, bool $dryRun): PendingPaymentsRun` takes the run lock unless
+  it is a dry run (`Reconciliation\AnotherRunIsReconciling` when another run holds it), then lists, once per Quickpay
   account (a distinct api key), the payments Quickpay changed since the account's watermark, or since `$lookbackFrom`
   when it has none, it is older, or `$full` is set. The `PendingPaymentsRun` yields the pending payments among them and
-  the ones to retry, stuck ones first, and says what it listed per account (`windows()`, each an `AccountWindow`) and
-  which gateways it couldn't list (`failedGateways()`, each a `ListingFailure`). `retryLater()` puts a payment that errored
-  or was skipped on the retry list, `failingSince()` says since when a payment to retry has been failing, and
-  `finish()` stores the watermarks and the retry list, unless the run is a dry run.
+  the ones to retry, stuck ones first, and says what it listed per account (`windows()`, each an `AccountWindow` with
+  the `WindowReason` it lists since then) and which gateways it couldn't list (`failedGateways()`, each a
+  `ListingFailure`). `retryLater()` puts a payment that errored or was skipped on the retry list, `failingSince()` says
+  since when a payment to retry has been failing, `finish()` stores the watermarks and the retry list, unless the run
+  is a dry run, returns false when the cache refused to save them, and releases the run lock, and `release()` ends a
+  run without storing anything, releasing the run lock.
 - **The cache pool `setono_sylius_quickpay.reconcile`.** The extension prepends it onto `framework.cache.pools` with
-  adapter `cache.app`. It keeps each Quickpay account's watermark, under a hash of the api key, and the retry list.
+  adapter `cache.app`. It keeps each Quickpay account's watermark, under a hash of the api key, and the retry list,
+  together in one item. A run whose item the cache refuses to save warns and exits non-zero.
   Override its adapter under the same name in your framework configuration: on a filesystem `cache.app`, which a deploy
   empties, the first run after a deploy looks back the whole `--since` period (see the README's *Reconciling missed
   callbacks*).
@@ -349,7 +354,7 @@ mapping applies.
 |---|---|---|
 | `Controller\NotifyAction` | `(Payum $payum, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, RepositoryInterface $gatewayConfigRepository)` | `(PaymentReconcilerInterface $reconciler, OrderRepositoryInterface $orderRepository, PaymentProviderInterface $paymentProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `PaymentLink\PaymentLinkProvider` | `(UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, UrlGeneratorInterface $urlGenerator, UrlHelper $urlHelper, bool $unsecuredUrls = false)` |
-| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentsInterface $pendingPayments, PaymentReconcilerInterface $reconciler, QuickpayClientProviderInterface $clientProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, LockFactory $lockFactory)`, the last the plugin's lock factory `lock.setono_sylius_quickpay.factory` |
+| `Command\ReconcilePaymentsCommand` | `(PendingPaymentProviderInterface $pendingPaymentProvider, Payum $payum, StateMachineInterface $stateMachine, ClientFactoryInterface $clientFactory, RepositoryInterface $gatewayConfigRepository, ManagerRegistry $managerRegistry)` | `(PendingPaymentsInterface $pendingPayments, PaymentReconcilerInterface $reconciler, QuickpayClientProviderInterface $clientProvider, GatewayConfigurationProviderInterface $gatewayConfigurationProvider)` |
 | `Checkout\PaymentMethodLogoProvider` | `(array $images = [], array $creditcardBrands = ['visa', 'mastercard'])` | `(GatewayConfigurationProviderInterface $gatewayConfigurationProvider, array $images = [], array $creditcardBrands = ['visa', 'mastercard'])`, and logger-aware |
 | `Fraud\FraudChecker` | `(ClientFactoryInterface $clientFactory)` | `(QuickpayClientProviderInterface $quickpayClientProvider)` |
 | `Controller\Admin\PaymentOperationsAction` | `(PaymentRepositoryInterface $paymentRepository, ClientFactoryInterface $clientFactory, Environment $twig)` | `(PaymentRepositoryInterface $paymentRepository, QuickpayClientProviderInterface $quickpayClientProvider, Environment $twig)`, and logger-aware |
@@ -516,7 +521,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
   waiting for shipment could fill that budget, so stuck ones were never reached, payments without a Quickpay payment
   id used it up before they were dropped, and an older payment was never reconciled. Each run first prints, per
   account, `Gateway(s) "<name>": the payments Quickpay changed since <time> (since the last run)`, or
-  `(no earlier run: the last 7 days)`, or `(--full: the last 7 days)`. An account whose changes can't be listed is
+  `(no earlier run: the last 7 days)`, or `(the last run was more than 7 days ago: the last 7 days)`, or
+  `(--full: the last 7 days)`. An account whose changes can't be listed is
   reported as `Gateway(s) "<name>": could not list the payments Quickpay changed: <error>` and fails the run; the next
   run lists its changes again.
 - **A payment that errored or was skipped is retried by every later run** until it reconciles or is no longer pending,
@@ -526,7 +532,8 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **`--since` is the fallback lookback, `--full` is new, and `--limit` is for the fraud report only.** `--since` (still
   `7 days` by default) is how far back a run looks when an account has no earlier run on record (the first run, a new
   api key, an emptied cache) or its last run was longer ago; it no longer limits how old a reconciled payment may be.
-  `--full` ignores the earlier runs and looks back `--since`, e.g. after restoring a database backup. `--limit` no
+  `--full` ignores the earlier runs and looks back `--since`, e.g. after restoring a database backup; given with
+  `--fraud-suspected`, it stops the command with an error (exit code 2). `--limit` no
   longer applies to reconciling: a reconciling run given `--limit` stops with an error (exit code 2) before
   reconciling anything, so remove it from your cron entries. With `--fraud-suspected` it has no default any more (it
   was 100): without it, the report lists every flagged payment.

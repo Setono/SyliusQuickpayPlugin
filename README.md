@@ -342,10 +342,12 @@ Gateway(s) "quickpay": the payments Quickpay changed since 2026-11-16 10:25 (sin
 
 - `(since the last run)`: since the previous run started, less 5 minutes in case Quickpay's clock and yours differ.
 - `(no earlier run: the last 7 days)`: the account has no earlier run on record — the first run, a new api key, an
-  emptied [cache](#where-a-run-keeps-what-the-next-one-starts-from) — or the last one was longer ago than `--since`
-  (default `7 days`), so the run looks back `--since`.
+  emptied [cache](#where-a-run-keeps-what-the-next-one-starts-from) — so the run looks back `--since` (default
+  `7 days`).
+- `(the last run was more than 7 days ago: the last 7 days)`: the account's last run was longer ago than `--since`, so
+  the run looks back `--since` only.
 - `(--full: the last 7 days)`: `--full` ignores the earlier run and looks back `--since`, e.g. after you restored a
-  database backup.
+  database backup. It only applies to reconciling: with `--fraud-suspected` the command stops with an error.
 
 `--since` is only this fallback; it doesn't limit how old a payment may be. After the command hasn't run for longer
 than `--since`, run it once with a `--since` covering the gap. `--limit` only applies to the
@@ -403,8 +405,9 @@ take no lock, so they run alongside a run that reconciles.
 
 ### Where a run keeps what the next one starts from
 
-Each account's last run and the payments to retry are kept in a cache pool, `setono_sylius_quickpay.reconcile`, on your
-application cache (`cache.app`) by default. An account is stored under a hash of its api key, never the key itself.
+Each account's last run and the payments to retry are kept together, in one item of a cache pool,
+`setono_sylius_quickpay.reconcile`, on your application cache (`cache.app`) by default. An account is stored under a
+hash of its api key, never the key itself.
 Symfony's default `cache.app` is a filesystem cache in the cache directory, which `cache:clear` and a deploy into a
 fresh directory empty. The next run then lists the whole `--since` period again, as a first run does. Point the pool
 at a persistent adapter, under the same name in your framework configuration, to avoid that:
@@ -419,6 +422,10 @@ framework:
                 provider: '%env(REDIS_URL)%'   # e.g. REDIS_URL=redis://localhost
 ```
 
+Should the cache refuse to save it, full or unreachable, the run warns
+`Could not save the reconcile state; the next run lists the changes since the previous one again.` and exits non-zero.
+Nothing is lost: the next run starts from what the run before it saved, and lists those changes again.
+
 ### Scheduling
 
 Scheduling is your application's choice; a cron entry along these lines is plenty:
@@ -428,8 +435,8 @@ Scheduling is your application's choice; a cron entry along these lines is plent
 ```
 
 A run reads only what changed, so running it more often costs little more than a list request per account, and a
-missed callback is fixed sooner. The command exits non-zero when a payment couldn't be reconciled or an account's
-changes couldn't be listed, so cron mail or your monitoring will surface persistent problems; a run skipped because
+missed callback is fixed sooner. The command exits non-zero when a payment couldn't be reconciled, an account's
+changes couldn't be listed or what the next run starts from couldn't be saved, so cron mail or your monitoring will surface persistent problems; a run skipped because
 another one is going exits 0.
 
 ## HTTP policy
