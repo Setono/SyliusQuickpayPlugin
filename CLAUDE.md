@@ -14,7 +14,8 @@ client (`Setono\Quickpay\Client\*`), request/response DTOs (`Setono\Quickpay\Req
 state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
-base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.3`, the first release whose
+base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.4`, the first release with
+`OrderId`; rc.3 was the first whose
 convert takes an order description; the SDK is stable, `^1.3`).
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
@@ -85,7 +86,9 @@ flag with nothing decrypted, as Doctrine loads it), `USABLE` the two required ga
 helper. A caller reading a Quickpay payment (the fraud check, the operations panel) doubles
 `QuickpayClientProviderInterface` and returns the SDK's `Payment` objects or throws, never an SDK client (the fraud
 report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); a
-caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts. The order describer's
+caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts, and its latest order
+number by doubling `LatestOrderNumberProviderInterface` (save validation's functional tests create numbered orders
+instead, flushed, since the provider queries the database). The order describer's
 unit test builds real Sylius orders (items, units, adjustments, addresses, customers, shipments) and uses the real VAT
 rate resolver; each case asserts that the basket and shipping add up to the order total. The convert action is glue
 around payum-quickpay's convert, which the library tests, so it is tested only functionally, through the real gateway.
@@ -229,7 +232,7 @@ module's lookups can't do.
   `usesDeprecatedOptions()` (the library's check). `CaptureMode` owns the mapping to and from `use_authorize`
   (`fromUseAuthorize()`, `useAuthorize()`); don't write a `use_authorize` ternary elsewhere.
 - **Reading a configuration the library rejects**, for whoever shows or checks one that may still need fixing (the
-  admin form, the doctor's order prefix checks): `optionsWithRejectedAsStored(): GatewayOptionValues` never throws for
+  admin form, the order id checks): `optionsWithRejectedAsStored(): GatewayOptionValues` never throws for
   a readable configuration (an unreadable one throws as `options()` does). `values` holds every option the library
   reads (the keys of `GatewayOptions::DEFAULTS`, each read from the `GatewayOptions` property named after it in
   camelCase), by current name: the library's normalized value where it accepts the option, the stored value (null when
@@ -259,9 +262,29 @@ module's lookups can't do.
   `UnusableGatewayConfiguration` (not payum-quickpay's `InvalidGatewayOptions`, a Payum `ExceptionInterface`; the
   message names "a Quickpay gateway", since Payum passes no gateway name with the config).
 - The doctor (`all()`): an unusable configuration is one failed check per violation (an unreadable one is a single
-  failed check with the exception's message) and its checks against Quickpay are skipped, while a readable one's
-  order prefix (from `optionsWithRejectedAsStored()`) is still checked; a usable one's checks run on the typed
-  `GatewayOptions` (see *Command/DoctorCommand* below).
+  failed check with the exception's message) and its checks against Quickpay are skipped, while the order id a readable
+  one's order prefix gives is still checked; a usable one's checks run on the typed `GatewayOptions` (see
+  *Command/DoctorCommand* below).
+- **The order prefix the gateway sends**, `GatewayConfiguration::orderPrefix(): ?string`, read through
+  `optionsWithRejectedAsStored()` even when the library rejects other options: null for an unreadable configuration or
+  one whose order prefix the library rejects (its violation says so). Save validation and the doctor check the order
+  id it gives (*The order id* below).
+
+### The order id (`src/OrderId/`)
+Read `GLOSSARY.md` (Order id, Order prefix) first. payum-quickpay owns the order id both ways (`OrderId::of($prefix,
+$number)` builds it or throws `InvalidOrderId`, a Payum `LogicException` carrying `prefix`, `number` and `orderId`;
+`OrderId::numberIn($orderId, $prefix)` reads the number back or gives null) and rejects an `order_prefix` that can never
+start one (a character outside letters, digits, space, `.`, `_`, `-`, or more than 19 characters) as a gateway option
+violation, so the plugin re-implements none of it. What only the store knows is how long its order numbers get:
+- **`LatestOrderNumberProviderInterface`** (service `LatestOrderNumberProvider`, args `doctrine`,
+  `%sylius.model.order.class%`): `getLatestOrderNumber(): ?string`, the newest order's number among those that have
+  one (carts have none), null when there is none; `STAND_IN_ORDER_NUMBER` (`000000001`, Sylius' default first number)
+  stands in then.
+- **Save validation** (`UsableGatewayConfigurationValidator`) and **the doctor** run `OrderId::of()` on the
+  configuration's `orderPrefix()` and the latest order number (or the stand-in), whenever `orderPrefix()` isn't null, so
+  also for a configuration rejected for other options. No fixed length budget anywhere: a store numbering its orders its
+  own way is held to its own numbers.
+- **The shared endpoint** reads the candidate order numbers with `OrderId::numberIn()` (*Callbacks* below).
 
 ### Quickpay client and HTTP policy (`src/Quickpay/`)
 Read `docs/adr/0003-the-plugin-owns-the-quickpay-http-client.md` first. The rule from the ADR: **every request to
@@ -321,8 +344,9 @@ exceptions or interpret Quickpay's status codes themselves.
   account's default Payment Window agreement. Otherwise `GET /agreements/{id}`: accepted → passed; 404 → failed;
   401/403 → undetermined (the api user may lack the `/agreements` permission); any other error → undetermined.
 - **Payment link permission** (`paymentLinkPermission()`, the doctor's `--live` check; the one check that writes to the
-  account): creates a money-less test payment (`POST /payments`, DKK, order id = the gateway's order prefix + `dr` + 6
-  random hex digits): 401/403 → failed (may not create payments). Then puts a link on it (`PUT /payments/{id}/link`):
+  account): creates a money-less test payment (`POST /payments`, DKK, order id = `OrderId::of()` of the gateway's order
+  prefix and `dr` + 6 random hex digits; an `InvalidOrderId` there, a prefix leaving no room for it, is undetermined
+  with nothing sent): 401/403 → failed (may not create payments). Then puts a link on it (`PUT /payments/{id}/link`):
   401/403 → failed (may not create payment links), accepted → passed. Then deletes the link, best effort (its errors are
   ignored). Once the test payment exists, every verdict's note names it (id and order id): it stays on the account.
 - Tested at the HTTP seam in `tests/Unit/Quickpay/GatewayCheck/GatewayChecksTest` (the real provider over
@@ -461,15 +485,18 @@ but a 2xx is no proof a callback was genuine.
   400. Every other token, and Payum's token-less `doUnsafeAction`, is delegated to Payum's controller untouched.
 - `src/Controller/NotifyAction.php` is the plugin's **shared endpoint** (route `setono_sylius_quickpay_notify` →
   `POST /payment/quickpay/notify`, in `src/Resources/config/routes/global.yaml`), the account-wide callback url for
-  operations made outside the store. It only handles callbacks whose `QuickPay-Resource-Type` header is `Payment`,
-  recovers the Sylius order number by stripping the order prefix of **each Quickpay gateway configuration** from the
-  incoming `order_id` (the module's `all()`, each read through `options()`, so a prefix stored as a number counts too —
-  with the raw `order_id` as the last candidate), finds the matching payment via
-  `Provider/PaymentProvider::findByQuickpayPaymentId()`, then reconciles it from the callback. While any stored Quickpay
-  gateway configuration is unusable, `UnusableGatewayConfiguration` propagates and every callback on it is answered
-  500 (the order might be that gateway's), so Quickpay retries; the reconcile command is the backstop.
-
-The prefix handling is the source of several documented "order_id" troubleshooting cases (see README).
+  operations made outside the store. It only handles callbacks whose `QuickPay-Resource-Type` header is `Payment`.
+  Its candidate Sylius order numbers are payum-quickpay's `OrderId::numberIn()` of the incoming `order_id` under the
+  order prefix of **each Quickpay gateway configuration** (the module's `all()`, each read through `options()`, so a
+  prefix stored as a number counts too), then the raw `order_id`, without duplicates. It tries them in that order: the
+  order with that number, then `Provider/PaymentProvider::findByQuickpayPaymentId()` on it; the first candidate whose
+  order holds the callback's Quickpay payment wins (one prefix can start another's order id, `qp` and `qp_`), and that
+  payment is reconciled from the callback. When none does (a payment made under an order prefix since changed, or
+  another environment's), it answers 204 and logs a warning with `quickpayPaymentId` and `orderId` (logger-aware via
+  `setLogger()`): retrying can't help. While any stored Quickpay gateway configuration is unusable,
+  `UnusableGatewayConfiguration` propagates and every callback on it is answered 500 (the order might be that
+  gateway's), so Quickpay retries; the reconcile command is the backstop. Matching a callback by Quickpay payment id
+  without the order number needs a real payment ↔ Quickpay payment link (architecture candidate 07).
 
 `Controller/Admin/PaymentOperationsAction` (route `setono_sylius_quickpay_admin_payment_operations`,
 `GET /admin/quickpay/payments/{id}/operations`) renders the live Quickpay operation history for the
@@ -485,13 +512,18 @@ requests the route as a logged-in administrator (a `TestBrowserToken` stored in 
 does; browser-kit isn't installed).
 
 `Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `GatewayChecksInterface`,
-`GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting
+`GatewayConfigurationProviderInterface`, `router`, `LatestOrderNumberProviderInterface`) machine-checks the README's Troubleshooting
 section per Quickpay gateway configuration from the module's `all()`. It checks what the gateway checks: each
 violation payum-quickpay finds is a failed check, an unreadable (encrypted) configuration is one failed check
 printing `UnusableGatewayConfiguration`'s message, and an unusable configuration's checks against Quickpay are skipped.
-The order prefix checks need no gateway, so they run on every readable configuration, on the order prefix
-`optionsWithRejectedAsStored()` gives (none when the library rejects the order prefix itself): length per gateway, and
-cross-gateway uniqueness among every readable configuration, usable or not. On a usable one it also runs, on the typed options:
+The order id check needs no gateway, so it runs on every readable configuration whose `orderPrefix()` isn't null (none
+when the library rejects the order prefix itself, whose violation is the failure): `OrderId::of()` of the prefix and
+the latest order number, read once per run (✔ `The order id of the latest order, "qp_000000123", is one Quickpay
+accepts`, or with no order the stand-in's ✔ `No orders yet: a Sylius order number like "000000001" gives …`;
+`InvalidOrderId` → ✖ with its message, saying whose number it is), plus ✔ `No order prefix configured — make sure order
+numbers are unique on the Quickpay account` for an empty prefix. There is no cross-gateway prefix check: within one
+store a shared prefix only means the same order id for the same order, which the library's pick-up handles. On a usable
+one it also runs, on the typed options:
 api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
 reason, counted as a failure, undetermined a warning with its reason; the agreement check of an agreement id and the
 `--live` check run only when it passed, each skipped with a warning otherwise), private key HMAC self-test
@@ -639,7 +671,8 @@ in that folder) and need `assets:install` in the host app.
   `payment_methods` docs link renders through the plugin's own form theme
   (`Resources/views/form/theme.html.twig`, scoped to that field's block prefix and registered by
   `SetonoSyliusQuickpayExtension::prepend()` via `twig.form_themes`). The fields carry no constraints of the
-  gateway's rules, which save validation (below) checks; only the order prefix keeps its `Length`.
+  gateway's rules, which save validation (below) checks, nor any of their own: the order prefix's length is the order
+  id check's (*The order id* above).
 - **Save validation**: `SetonoSyliusQuickpayExtension::prepend()` prepends
   `sylius_payum.gateway_config.validation_groups.quickpay: [sylius, sylius_quickpay]`, so Sylius'
   `GatewayConfigGroupsGenerator` validates a Quickpay payment method in `sylius_quickpay` too, in the admin form and the
@@ -655,7 +688,9 @@ in that folder) and need `assets:install` in the host app.
   the option name (`setLogger`). When payum-quickpay adds an option, add its message. An unreadable/encrypted config
   (`isUnreadable()`) gets the plugin's `unreadable` message on `config`. Every message is a `validators` key shipped in
   all 16 locales (the functional test checks each locale). The doctor still prints the library's text: console output is
-  English. Only on a usable configuration
+  English. Whenever `orderPrefix()` isn't null, it then checks the order id that prefix gives the latest order
+  (*The order id* above): an `InvalidOrderId` is a violation at `config[order_prefix]`, message
+  `order_id.refused` with `{{ order_id }}` and `{{ number }}`. Only on a usable configuration
   does it then run the api key gateway check (`GatewayChecksInterface::apiKey()`, shared with the doctor command; see
   *Gateway checks*): failed → a violation at `config[api_key]` (translated `validators` message); undetermined → the
   save goes through, logged at info level with the reason; passed → nothing. Only when the api key passed and an
@@ -672,8 +707,8 @@ in that folder) and need `assets:install` in the host app.
 
 - Runtime config lives in the **gateway configuration stored per payment method** (admin form) — the
   `QUICKPAY_*` env vars only feed the test application's fixtures. The order prefix must be unique per
-  project/environment — re-used prefixes cause the Quickpay "order_id already exists" / length errors
-  documented in the README.
+  project/environment — re-used prefixes cause the Quickpay "order_id already exists" errors documented in the
+  README. Its rules are payum-quickpay's `OrderId`'s; never hard-code a length or character set for it.
 - The plugin never applies a payment transition (ADR 0001). To bring a Sylius payment in line with Quickpay,
   reconcile it (`PaymentReconcilerInterface`); to read Quickpay's status without side effects, use the status check.
   Don't execute a status request or `Notify` on a Sylius payment anywhere else.

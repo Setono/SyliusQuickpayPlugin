@@ -40,6 +40,14 @@ _Avoid_: gateway config, payment method settings, credentials
 One named setting of a gateway configuration, such as the order prefix.
 _Avoid_: config key, parameter
 
+**Order id**:
+Quickpay's `order_id` of a Quickpay payment: the order prefix followed by the Sylius order number. Quickpay requires it to be unique on the account and to be 4–20 letters, digits, spaces, `.`, `_` or `-`. payum-quickpay builds it (`OrderId::of()`) and reads the order number back (`OrderId::numberIn()`). It is not the Sylius order's id or number.
+_Avoid_: order number (the Sylius part of it), reference
+
+**Order prefix**:
+The gateway option prepended to every order number in the order id, unique per project and environment sharing a Quickpay account. It holds at most 19 of the order id's characters, and with the order number at most 20, which save validation and the doctor check against the latest order's number.
+_Avoid_: order id prefix, shop prefix
+
 **Capture mode**:
 Whether a payment is authorized at checkout and captured when the Sylius payment completes, or captured by Quickpay at authorization.
 _Avoid_: auto capture, use_authorize
