@@ -97,6 +97,18 @@ final class SetonoSyliusQuickpayExtension extends Extension implements PrependEx
                 ],
             ]);
 
+            // Where the reconcile command keeps what the next run starts from: each Quickpay account's watermark and
+            // the payments to retry. On cache.app it is gone after a deploy that clears the cache, which costs a run
+            // looking back the whole --since period; the application points it at a persistent adapter in its own
+            // framework config under the same name, e.g. `framework: { cache: { pools: { setono_sylius_quickpay.reconcile: { adapter: cache.adapter.redis } } } }`
+            $container->prependExtensionConfig('framework', [
+                'cache' => [
+                    'pools' => [
+                        'setono_sylius_quickpay.reconcile' => ['adapter' => 'cache.app'],
+                    ],
+                ],
+            ]);
+
             // The one HTTP policy of every request to Quickpay, the gateway's and the plugin's own (ADR 0003): at most
             // 10 s idle and 10 s in total, and no retries, since a retried capture or refund can move money twice.
             // Ten seconds keeps a callback's reads inside the 60 s TTL of the payment's reconcile lock. The

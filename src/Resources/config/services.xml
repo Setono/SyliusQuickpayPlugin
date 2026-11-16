@@ -170,6 +170,18 @@
         <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface"
                  alias="Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler"/>
 
+        <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments">
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface"/>
+            <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
+            <!-- the cache pool the plugin prepends onto framework.cache -->
+            <argument type="service" id="setono_sylius_quickpay.reconcile"/>
+            <argument type="service" id="doctrine"/>
+            <argument>%sylius.model.payment.class%</argument>
+        </service>
+
+        <service id="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface"
+                 alias="Setono\SyliusQuickpayPlugin\Reconciliation\PendingPayments"/>
+
         <!-- Fraud -->
         <service id="Setono\SyliusQuickpayPlugin\Fraud\FraudChecker">
             <argument type="service" id="Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface"/>
