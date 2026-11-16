@@ -111,7 +111,7 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
   instead of `setono_sylius_quickpay.state_machine.payment_processor`), with interface → class aliases
   for every interfaced service. Update any service references or decorations.
 - **All classes are `final`.** Extension happens through the supported seams: decorate or replace the
-  interfaced services (`PaymentProcessorInterface`, `PaymentProviderInterface`,
+  interfaced services (`PaymentProcessorInterface`, `PaymentProviderInterface`, `OrderDescriberInterface`,
   `VatRateResolverInterface`, `LanguageGuesserInterface`), or extend the gateway configuration form
   with a regular `AbstractTypeExtension`.
 
@@ -286,6 +286,12 @@ mapping applies.
   `paymentLinkPermission(GatewayConfiguration): Verdict`, the
   doctor's `--live` check, creates a money-less test payment and puts a link on it: either refused with 401/403 fails,
   any other error is undetermined, and the note names the test payment left on the account.
+- **The order describer, `OrderDescription\OrderDescriberInterface`**, service
+  `Setono\SyliusQuickpayPlugin\OrderDescription\OrderDescriber` (constructor `(VatRateResolverInterface $vatRateResolver)`),
+  aliased by the interface. `describe(OrderInterface): OrderDescription` returns what Quickpay is told about a Sylius
+  order when its Quickpay payment is created, as payum-quickpay's `Setono\Payum\Quickpay\Model\OrderDescription`: the
+  invoice and shipping addresses, the basket, shipping and the plugin as the shopsystem. It holds the mapping the
+  convert action had, unchanged. Decorate it to change what Quickpay is told; the VAT rate resolver stays decoratable.
 
 ### Changed constructors
 
@@ -300,13 +306,29 @@ mapping applies.
 | `Command\DoctorCommand` | `(ClientFactoryInterface $clientFactory, ApiKeyVerifierInterface $apiKeyVerifier, RepositoryInterface $gatewayConfigRepository, RouterInterface $router)` | `(GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
 | `StateMachine\PaymentProcessor` | `(Payum $payum, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` | `(Payum $payum, PaymentReconcilerInterface $reconciler, FraudCheckerInterface $fraudChecker, bool $captureEnabled, bool $refundEnabled, bool $cancelEnabled, bool $blockCaptureOnSuspectedFraud)` |
 | `FactoryBuilder\QuickpayGatewayFactoryBuilder` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser)` | `(string $gatewayFactoryClass, LanguageGuesserInterface $languageGuesser, QuickpayClientProviderInterface $clientProvider)` |
+| `Action\ConvertPaymentAction` | `(Payum $payum, VatRateResolverInterface $vatRateResolver)` | `(OrderDescriberInterface $orderDescriber, PaymentDescriptionProviderInterface $paymentDescriptionProvider)`, Sylius' payment description provider |
 
 The service definitions changed accordingly; only a redefinition or decoration of these services needs updating.
 
 ### Behavioural changes
 
-- **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.2`**, the release whose public `GatewayOptions` the plugin
-  reads gateway configurations with. A root `composer.json` allowing `^2.0@RC` picks it up with `composer update`.
+- **The plugin requires `setono/payum-quickpay` `^2.0.0-rc.3`**, the release whose public `GatewayOptions` the plugin
+  reads gateway configurations with, and whose convert takes an order description. A root `composer.json` allowing
+  `^2.0@RC` picks it up with `composer update`.
+- **payum-quickpay's convert creates the Quickpay payment, and the plugin only describes the order to it.**
+  `Action\ConvertPaymentAction` now supports `Convert` to `array` of a Sylius payment, the convert Sylius' capture and
+  authorize actions try first, instead of a Payum payment, so Sylius' fallback to a synthetic Payum payment no longer
+  runs for a Quickpay gateway. It builds payum-quickpay's `Setono\Payum\Quickpay\Model\DescribedPayment` as that fallback
+  builds its Payum payment, gives it the order describer's description of the payment's order and runs payum-quickpay's
+  convert on it. The plugin's copy of that convert is gone: the order id, picking up a never-paid Quickpay payment under
+  the same order id, the currency check and the continue and cancel urls are payum-quickpay's, and so are the
+  exceptions, which name the Payum payment where the plugin's named the order (an order without a number or currency
+  is one of payum-quickpay's `LogicException`s now, where it failed an assertion). The order is read from the Sylius
+  payment instead of through the Payum token and storage, so a `Convert` of a Sylius payment without a token works,
+  without return urls. A `Convert` of a Payum payment on a Quickpay gateway goes to payum-quickpay's convert and sends
+  no order description. Quickpay is told the same about the order as before. The describer gets the VAT rate resolver
+  through `VatRateResolverInterface`, so a decorator of that alias applies now too; before, the convert action only got
+  a decorator of the `VatRateResolver` service.
 - **Every request to Quickpay gives up after 10 seconds**, the gateway's and the plugin's own alike, and none is
   retried. Before, the gateway built its own HTTP client through PSR-18 discovery: a request could wait 60 seconds
   (PHP's `default_socket_timeout`) for each idle stretch, with no limit in total, so a slow Quickpay could hang the
