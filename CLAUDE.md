@@ -16,7 +16,7 @@ state machine, and admin.
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
 base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.4`, the first release with
 `OrderId`; rc.3 was the first whose
-convert takes an order description; the SDK is stable, `^1.3`).
+convert takes an order description; the SDK is stable, `^1.4`, the first release typing an operation's callback fields).
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed; it is read only
@@ -550,10 +550,16 @@ retry for any answer that is neither OK nor the 502 notice, so an error page nev
 logger-aware via `setLogger()`) reads the payment through the client provider's `quickpayPaymentOf()`: null
 (not a Quickpay payment, or no Quickpay payment id) → 404; any error (Quickpay, an unusable gateway configuration, an
 id payum-quickpay can't read) → the inline notice, 502, and a warning log with `paymentId`, `gatewayName`
-(`forPayment()?->gatewayName`) and the error under `exception`. `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
+(`forPayment()?->gatewayName`) and the error under `exception`. Each operation row shows its **callback outcome**
+(`GLOSSARY.md`), which the template reads from the SDK's `Operation` in that same `GET /payments/{id}`, as it reads
+the status code: `callbackSuccess` null → not sent; otherwise a green tick or red cross label (Quickpay's judgment)
+around `callbackResponseCode`, or "no answer" when that is null, then `callbackAt`. The url (`callbackUrl`) is the
+cell's tooltip once the callback was sent, and a translated hint lists the codes the callback endpoints answer with.
+Nothing is stored. The SDK maps these fields strictly, like every typed field: a value of another type fails the whole
+read, so the panel shows its inline notice. `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
 requests the route as a logged-in administrator (a `TestBrowserToken` stored in a session, as Symfony's test browser
-does; browser-kit isn't installed), and renders the template with the container's Twig to check when the placeholder
-is there.
+does; browser-kit isn't installed), reads each row's callback cell with ext-dom's `DOMXPath` (dom-crawler isn't
+installed either), and renders the template with the container's Twig to check when the placeholder is there.
 
 `Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `GatewayChecksInterface`,
 `GatewayConfigurationProviderInterface`, `router`, `LatestOrderNumberProviderInterface`) machine-checks the README's Troubleshooting

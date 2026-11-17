@@ -24,7 +24,7 @@ The plugin 2.x line and the `setono/payum-quickpay` gateway it builds on are sti
 so your project must allow the pre-release versions explicitly:
 
 ```bash
-composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.3
+composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.4
 ```
 
 If your project does not already provide PSR-17 factories:
@@ -252,7 +252,14 @@ is sent in the order's locale through Sylius' mailer and can be overridden like 
 Each Quickpay payment on the admin order view (one whose payment method is a Quickpay one and that got as far as the
 payment window) shows its **live operation history** — every
 authorize/capture/refund/cancel with amount, Quickpay status code and message, and timestamp, plus the
-captured balance and a test-mode badge. The data is fetched from Quickpay *after* the page has rendered,
+captured balance and a test-mode badge. Each operation also shows its **callback outcome**, as Quickpay records it:
+not sent yet, the status code the store answered with (green when Quickpay counted it a success, red when not) or no
+answer at all, with the time, and the url the callback went to as a tooltip, so you can tell the payment's own callback
+url from the account-wide one. A hint under the table explains the codes the plugin answers with: 204 reconciled, or no
+payment of the store's to reconcile (an order prefix changed since, say, or a payment switched to another payment
+method; logged as a warning), 409 the payment was already being reconciled and 5xx an error (Quickpay retries both),
+400 a wrong checksum. So "did the
+callback arrive, and what did the store do with it?" needs no log dive. The data is fetched from Quickpay *after* the page has rendered,
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
 gateway configuration is unusable, the panel shows an inline notice with a retry link, and the cause is logged as a
 warning with the payment id and the gateway name. Nothing is stored — the panel reflects what Quickpay reports right now.

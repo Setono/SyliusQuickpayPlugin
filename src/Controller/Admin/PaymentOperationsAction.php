@@ -15,8 +15,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Twig\Environment;
 
 /**
- * Returns the rendered Quickpay operation history for a payment. The admin order view loads
- * this after the page itself has rendered, so a slow or unreachable Quickpay never delays the
+ * Returns the rendered Quickpay operation history for a payment, with each operation's callback outcome. The admin
+ * order view loads this after the page itself has rendered, so a slow or unreachable Quickpay never delays the
  * order page — a failure here renders an inline notice with a retry link instead, and is logged.
  */
 final class PaymentOperationsAction implements LoggerAwareInterface

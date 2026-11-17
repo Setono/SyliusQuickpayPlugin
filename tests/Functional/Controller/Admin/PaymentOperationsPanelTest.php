@@ -91,6 +91,44 @@ final class PaymentOperationsPanelTest extends FunctionalTestCase
     }
 
     /**
+     * Each operation shows how Quickpay's callback about it was answered, as Quickpay records it, and where it went
+     *
+     * @test
+     */
+    public function it_shows_the_callback_outcome_of_each_operation(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', new PsrResponse(200, ['Content-Type' => 'application/json'], json_encode([
+            'id' => 501,
+            'order_id' => self::ORDER_PREFIX . '000000001',
+            'currency' => self::CURRENCY,
+            'state' => 'processed',
+            'merchant_id' => 1,
+            'balance' => 5_000,
+            'operations' => [
+                self::operationWithCallback(1, 'authorize', true, '204', '2026-11-17T09:12:34Z', 'https://shop.example.com/payment/notify/the-token'),
+                self::operationWithCallback(2, 'capture', false, '500', '2026-11-17T10:00:00Z', 'https://shop.example.com/payment/quickpay/notify'),
+                self::operationWithCallback(3, 'refund', false, null, '2026-11-17T11:00:00Z', 'https://shop.example.com/payment/quickpay/notify'),
+                self::operationWithCallback(4, 'refund', null, null, null, null, pending: true),
+            ],
+        ], \JSON_THROW_ON_ERROR)));
+
+        $response = $this->requestPanelOf($payment);
+
+        self::assertSame(Response::HTTP_OK, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([
+            ['204 2026-11-17 09:12:34', 'green', 'https://shop.example.com/payment/notify/the-token'],
+            ['500 2026-11-17 10:00:00', 'red', 'https://shop.example.com/payment/quickpay/notify'],
+            ['No answer 2026-11-17 11:00:00', 'red', 'https://shop.example.com/payment/quickpay/notify'],
+            ['Not sent', null, null],
+        ], self::callbackCellsIn((string) $response->getContent()));
+        self::assertStringContainsString('The store answers 204 when it reconciled the payment', (string) $response->getContent());
+        self::assertSame(['GET /payments/501'], $this->quickpay()->sentRequests());
+    }
+
+    /**
      * @test
      */
     public function it_is_not_found_for_a_payment_that_is_not_paid_through_a_quickpay_gateway(): void
@@ -131,6 +169,62 @@ final class PaymentOperationsPanelTest extends FunctionalTestCase
         self::assertSame($payment->getId(), $context['paymentId'] ?? null);
         self::assertSame('quickpay', $context['gatewayName'] ?? null);
         self::assertInstanceOf(QuickpayException::class, $context['exception'] ?? null);
+    }
+
+    /**
+     * An operation as Quickpay returns it, with the callback fields it records about the operation's callback
+     *
+     * @return array<string, mixed>
+     */
+    private static function operationWithCallback(int $id, string $type, ?bool $success, ?string $responseCode, ?string $at, ?string $url, bool $pending = false): array
+    {
+        return [
+            'id' => $id,
+            'type' => $type,
+            'amount' => 5_000,
+            'pending' => $pending,
+            'qp_status_code' => $pending ? null : '20000',
+            'qp_status_msg' => $pending ? null : 'Approved',
+            'callback_url' => $url,
+            'callback_success' => $success,
+            'callback_response_code' => $responseCode,
+            'callback_at' => $at,
+            'callback_duration' => null === $at ? null : 120,
+        ];
+    }
+
+    /**
+     * Each operation row's callback cell: its text with whitespace collapsed, the colour of its label (if any) and its
+     * title (the url the callback went to)
+     *
+     * @return list<array{string, string|null, string|null}>
+     */
+    private static function callbackCellsIn(string $panel): array
+    {
+        $document = new \DOMDocument();
+        $document->loadHTML('<?xml encoding="utf-8"?>' . $panel, \LIBXML_NOERROR);
+        $xpath = new \DOMXPath($document);
+
+        $callbackCells = $xpath->query('//tbody/tr/td[@class="setono-quickpay-operations__callback"]');
+        self::assertInstanceOf(\DOMNodeList::class, $callbackCells);
+
+        $cells = [];
+        foreach ($callbackCells as $cell) {
+            self::assertInstanceOf(\DOMElement::class, $cell);
+
+            $labels = $xpath->query('.//span[contains(@class, "label")]', $cell);
+            self::assertInstanceOf(\DOMNodeList::class, $labels);
+            $label = $labels->item(0);
+            $colour = $label instanceof \DOMElement ? (array_values(array_intersect(['green', 'red'], explode(' ', $label->getAttribute('class'))))[0] ?? null) : null;
+
+            $cells[] = [
+                trim((string) preg_replace('/\s+/', ' ', $cell->textContent)),
+                $colour,
+                $cell->hasAttribute('title') ? $cell->getAttribute('title') : null,
+            ];
+        }
+
+        return $cells;
     }
 
     /**
