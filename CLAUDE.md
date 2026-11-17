@@ -17,13 +17,15 @@ Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `
 base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.4`, the first release with
 `OrderId`; rc.3 was the first whose
 convert takes an order description; the SDK is stable, `^1.4`, the first release typing an operation's callback fields).
-The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
-BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
+The 2.x line itself is published as pre-release tags: `v2.0.0-alpha.1` and `alpha.2`, then `v2.0.0-beta.1`
+(2026-11-17). The Roave BC check compares a PR against its base branch, so a break it flags is real once the symbol
+shipped in one of those tags. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed; it is read only
 through `Quickpay\QuickpayPaymentIdProviderInterface` (ADR 0006).
 `UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x, and (its last
-section) from an earlier 2.0 alpha: removed/changed classes, services, constructor signatures and behaviour —
-keep it updated when further 2.x breaks land. Domain terms are defined in `GLOSSARY.md`, settled decisions in
+section) from an earlier 2.0 alpha, up to `v2.0.0-beta.1`: removed/changed classes, services, constructor signatures
+and behaviour — keep it updated when further 2.x breaks land. A break landing after `v2.0.0-beta.1` goes in a new
+section for upgrading from that beta, not in the alpha section. Domain terms are defined in `GLOSSARY.md`, settled decisions in
 `docs/adr/`.
 
 All dev tooling (PHPStan, PHPUnit, Rector, Infection, ECS, composer-dependency-analyser, composer-normalize) is
