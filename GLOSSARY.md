@@ -24,6 +24,10 @@ _Avoid_: payment description, order details, basket (one part of it)
 Quickpay's request telling the shop that a Quickpay payment has changed.
 _Avoid_: notify, notification, webhook
 
+**Callback outcome**:
+How Quickpay's callback about one operation of a Quickpay payment was answered, as Quickpay records it on the operation: not sent yet, answered with a status code (a success or a failure, as Quickpay judged it), or sent without an answer. The plugin stores none of it; the admin's operations panel reads it from Quickpay.
+_Avoid_: callback log, delivery status
+
 **Reconcile**:
 Bringing a Sylius payment's state in line with its Quickpay payment's status, applying at most one state transition.
 _Avoid_: sync (Payum's Sync only refreshes the stored payment details), poll

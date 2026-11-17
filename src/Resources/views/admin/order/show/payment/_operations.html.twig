@@ -7,10 +7,12 @@
             <th>{{ 'setono_sylius_quickpay.ui.amount'|trans }}</th>
             <th>{{ 'setono_sylius_quickpay.ui.status'|trans }}</th>
             <th>{{ 'setono_sylius_quickpay.ui.date'|trans }}</th>
+            <th>{{ 'setono_sylius_quickpay.ui.callback'|trans }}</th>
         </tr>
     </thead>
     <tbody>
         {% for operation in quickpay_payment.operations %}
+            {% set callback = callback_outcomes[operation.id] ?? null %}
             <tr>
                 <td>
                     {{ operation.type }}
@@ -23,14 +25,32 @@
                     {{ operation.qpStatusCode }} {{ operation.qpStatusMsg }}
                 </td>
                 <td>{% if operation.createdAt is not null %}{{ operation.createdAt|date('Y-m-d H:i:s') }}{% endif %}</td>
+                {# The url the callback went to tells the payment's own callback url from the account-wide one #}
+                <td class="setono-quickpay-operations__callback"{% if callback is not null and callback.url is not null %} title="{{ callback.url }}"{% endif %}>
+                    {% if callback is null %}
+                        {# Quickpay records no readable callback outcome for this operation #}
+                    {% elseif callback.isSent() %}
+                        <span class="ui tiny {{ callback.success ? 'green' : 'red' }} label">
+                            <i class="{{ callback.success ? 'check' : 'close' }} icon"></i>
+                            {{- callback.isAnswered() ? callback.responseCode : 'setono_sylius_quickpay.ui.callback_no_answer'|trans -}}
+                        </span>
+                        {% if callback.at is not null %}{{ callback.at|date('Y-m-d H:i:s') }}{% endif %}
+                    {% else %}
+                        {{ 'setono_sylius_quickpay.ui.callback_not_sent'|trans }}
+                    {% endif %}
+                </td>
             </tr>
         {% else %}
             <tr>
-                <td colspan="4">{{ 'setono_sylius_quickpay.ui.no_operations'|trans }}</td>
+                <td colspan="5">{{ 'setono_sylius_quickpay.ui.no_operations'|trans }}</td>
             </tr>
         {% endfor %}
     </tbody>
 </table>
+
+{% if callback_outcomes is not empty %}
+    <p><small>{{ 'setono_sylius_quickpay.ui.callback_help'|trans }}</small></p>
+{% endif %}
 
 <div>
     <strong>{{ 'setono_sylius_quickpay.ui.balance'|trans }}:</strong>

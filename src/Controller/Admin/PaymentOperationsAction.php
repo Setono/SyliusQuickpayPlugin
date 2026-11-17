@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Controller\Admin;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\Quickpay\CallbackOutcome;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
@@ -15,8 +16,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Twig\Environment;
 
 /**
- * Returns the rendered Quickpay operation history for a payment. The admin order view loads
- * this after the page itself has rendered, so a slow or unreachable Quickpay never delays the
+ * Returns the rendered Quickpay operation history for a payment, with each operation's callback outcome. The admin
+ * order view loads this after the page itself has rendered, so a slow or unreachable Quickpay never delays the
  * order page — a failure here renders an inline notice with a retry link instead, and is logged.
  */
 final class PaymentOperationsAction implements LoggerAwareInterface
@@ -61,8 +62,14 @@ final class PaymentOperationsAction implements LoggerAwareInterface
             throw new NotFoundHttpException(sprintf('Payment %d has no Quickpay payment', $id));
         }
 
+        $callbackOutcomes = [];
+        foreach ($quickpayPayment->operations as $operation) {
+            $callbackOutcomes[$operation->id] = CallbackOutcome::of($quickpayPayment, $operation);
+        }
+
         return new Response($this->twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig', [
             'quickpay_payment' => $quickpayPayment,
+            'callback_outcomes' => array_filter($callbackOutcomes),
         ]));
     }
 }

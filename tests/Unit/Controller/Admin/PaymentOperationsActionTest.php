@@ -37,7 +37,7 @@ final class PaymentOperationsActionTest extends TestCase
         $quickpayPayment = new QuickpayPayment(id: 999999, orderId: 'qp_000000021', currency: 'EUR', state: 'processed', merchantId: 1);
 
         $twig = $this->prophesize(Environment::class);
-        $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig', ['quickpay_payment' => $quickpayPayment])
+        $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig', ['quickpay_payment' => $quickpayPayment, 'callback_outcomes' => []])
             ->willReturn('<table>rendered</table>');
 
         $response = $this->createAction($quickpayPayment, $twig->reveal())(1);

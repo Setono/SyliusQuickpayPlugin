@@ -550,10 +550,21 @@ retry for any answer that is neither OK nor the 502 notice, so an error page nev
 logger-aware via `setLogger()`) reads the payment through the client provider's `quickpayPaymentOf()`: null
 (not a Quickpay payment, or no Quickpay payment id) → 404; any error (Quickpay, an unusable gateway configuration, an
 id payum-quickpay can't read) → the inline notice, 502, and a warning log with `paymentId`, `gatewayName`
-(`forPayment()?->gatewayName`) and the error under `exception`. `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
+(`forPayment()?->gatewayName`) and the error under `exception`. Each operation row shows its **callback outcome**
+(`GLOSSARY.md`), read from that same `GET /payments/{id}` by `Quickpay\CallbackOutcome::of($payment, $operation)`:
+the SDK models only the operation's `callbackUrl`, so `callback_success`, `callback_response_code` and `callback_at`
+come from the payment's `raw['operations']`, matched by id. `callback_success` null → not sent; a bool with a 3-digit
+`callback_response_code` → answered (`success` is Quickpay's judgment); false without a code → no answer; anything
+else (absent, malformed, a success without a code) → null, and the cell stays empty. A time the SDK's two date formats
+can't read is left out. The controller passes the outcomes keyed by operation id (`callback_outcomes`); the url is the
+cell's tooltip (a callback not sent has none), and a translated hint lists the codes the callback endpoints answer
+with. The template calls `isSent()`/`isAnswered()` explicitly: Twig would resolve `callback.answered` to the static
+named constructor `answered()`. Nothing is stored. When the
+SDK models the callback fields on `Operation`, read them there instead (`tests/Unit/Quickpay/CallbackOutcomeTest` pins
+the reading rules). `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
 requests the route as a logged-in administrator (a `TestBrowserToken` stored in a session, as Symfony's test browser
-does; browser-kit isn't installed), and renders the template with the container's Twig to check when the placeholder
-is there.
+does; browser-kit isn't installed), reads each row's callback cell with ext-dom's `DOMXPath` (dom-crawler isn't
+installed either), and renders the template with the container's Twig to check when the placeholder is there.
 
 `Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `GatewayChecksInterface`,
 `GatewayConfigurationProviderInterface`, `router`, `LatestOrderNumberProviderInterface`) machine-checks the README's Troubleshooting
