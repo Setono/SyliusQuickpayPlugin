@@ -7,7 +7,7 @@ which replaces its hand-rolled API client with [`setono/quickpay-php-sdk`](https
 gateway-level background; this document covers what a **Sylius shop upgrading this plugin** has to do.
 
 Already on a 2.0 alpha? [Upgrading from an earlier 2.0 alpha](#upgrading-from-an-earlier-20-alpha) lists what
-changed since `v2.0.0-alpha.2`.
+changed from `v2.0.0-alpha.2` to `v2.0.0-beta.1`.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ changed since `v2.0.0-alpha.2`.
   versions in your **root** `composer.json`:
 
   ```bash
-  composer require setono/sylius-quickpay-plugin:^2.0@alpha setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.4
+  composer require setono/sylius-quickpay-plugin:^2.0@beta setono/payum-quickpay:^2.0@RC setono/quickpay-php-sdk:^1.4
   ```
 
 ## Gateway configuration stored in the database
@@ -419,6 +419,10 @@ The service definitions changed accordingly; only a redefinition or decoration o
   reads gateway configurations with, whose convert takes an order description, and whose `OrderId` builds the order id
   and reads the order number back. A root `composer.json` allowing
   `^2.0@RC` picks it up with `composer update`.
+- **The plugin requires `setono/quickpay-php-sdk` `^1.4`**, the release that types how Quickpay's callback about an
+  operation was answered, which the admin operations panel shows. Clear the cache after `composer update`: the SDK's
+  mapper cache in the kernel cache directory describes 1.3's classes until then, and the panel would show every
+  callback as not sent.
 - **payum-quickpay's convert creates the Quickpay payment, and the plugin only describes the order to it.**
   `Action\ConvertPaymentAction` now supports `Convert` to `array` of a Sylius payment, the convert Sylius' capture and
   authorize actions try first, instead of a Payum payment, so Sylius' fallback to a synthetic Payum payment no longer
@@ -559,6 +563,11 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **The admin operation history panel logs why it failed.** Each inline error (502) logs a warning with the Sylius
   payment id, the gateway name and the error (under `exception`). Before, the cause was dropped. A payment whose
   details carry a Quickpay payment id payum-quickpay can't read now answers with the inline error too, instead of 404.
+- **The admin operation history panel shows each operation's callback outcome**: a *Callback* column with how
+  Quickpay's callback about the operation was answered (not sent; the status code, green when Quickpay counted it a
+  success, red when not; or no answer), when, and the url it went to as a tooltip, plus a hint explaining the codes the
+  plugin answers with. Four new `setono_sylius_quickpay.ui.callback*` translation keys ship in all 16 locales. An app
+  overriding `admin/order/show/payment/_operations.html.twig` keeps its own template, without the column.
 - **`reconcile-payments --fraud-suspected` reports a gateway whose configuration is unusable** with a warning naming
   the gateway, goes on with the other gateways and exits non-zero. Before, a gateway without an api key was skipped
   silently, and an encrypted configuration crashed the report.
