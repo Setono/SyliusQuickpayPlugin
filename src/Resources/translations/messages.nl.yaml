@@ -40,7 +40,7 @@ setono_sylius_quickpay:
         callback: 'Callback'
         callback_not_sent: 'Niet verzonden'
         callback_no_answer: 'Geen antwoord'
-        callback_help: 'Na elke bewerking stuurt Quickpay de winkel een callback; beweeg de muis erover om te zien naar welke url hij ging. De winkel antwoordt 204 als hij de betaling heeft afgestemd, 409 als de betaling al werd afgestemd en 5xx bij een fout (Quickpay probeert het in beide gevallen opnieuw), en 400 als de controlesom onjuist was. Groen is een antwoord dat Quickpay als geslaagd beschouwde, rood een antwoord dat het als mislukt beschouwde.'
+        callback_help: 'Na elke bewerking stuurt Quickpay de winkel een callback; beweeg de muis erover om te zien naar welke url hij ging. De winkel antwoordt 204 als hij de betaling heeft afgestemd of geen eigen betaling vond om af te stemmen (dan logt hij een waarschuwing), 409 als de betaling al werd afgestemd en 5xx bij een fout (Quickpay probeert het in beide gevallen opnieuw), en 400 als de controlesom onjuist was. Groen is een antwoord dat Quickpay als geslaagd beschouwde, rood een antwoord dat het als mislukt beschouwde.'
         payment_link: 'Betaallink'
         payment_link_help: 'Iedereen met deze link kan de bestelling betalen in het Quickpay-betaalvenster — stuur hem naar de klant om een telefonische of factuurbestelling te innen, of na een afgebroken afrekening.'
         copy: 'Kopiëren'

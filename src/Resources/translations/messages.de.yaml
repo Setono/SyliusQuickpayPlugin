@@ -40,7 +40,7 @@ setono_sylius_quickpay:
         callback: 'Callback'
         callback_not_sent: 'Nicht gesendet'
         callback_no_answer: 'Keine Antwort'
-        callback_help: 'Nach jedem Vorgang sendet Quickpay dem Shop einen Callback; fahren Sie mit der Maus darüber, um die URL zu sehen, an die er ging. Der Shop antwortet mit 204, wenn er die Zahlung abgeglichen hat, mit 409, wenn die Zahlung gerade abgeglichen wurde, und mit 5xx bei einem Fehler (Quickpay versucht es in beiden Fällen erneut) sowie mit 400, wenn die Prüfsumme falsch war. Grün ist eine Antwort, die Quickpay als Erfolg gewertet hat, Rot eine, die es als Fehlschlag gewertet hat.'
+        callback_help: 'Nach jedem Vorgang sendet Quickpay dem Shop einen Callback; fahren Sie mit der Maus darüber, um die URL zu sehen, an die er ging. Der Shop antwortet mit 204, wenn er die Zahlung abgeglichen oder keine eigene Zahlung zum Abgleichen gefunden hat (dann protokolliert er eine Warnung), mit 409, wenn die Zahlung gerade abgeglichen wurde, und mit 5xx bei einem Fehler (Quickpay versucht es in beiden Fällen erneut) sowie mit 400, wenn die Prüfsumme falsch war. Grün ist eine Antwort, die Quickpay als Erfolg gewertet hat, Rot eine, die es als Fehlschlag gewertet hat.'
         payment_link: 'Zahlungslink'
         payment_link_help: 'Jeder mit diesem Link kann die Bestellung im Quickpay-Zahlungsfenster bezahlen — senden Sie ihn dem Kunden, um eine Telefon- oder Rechnungsbestellung einzuziehen oder nach einem abgebrochenen Checkout.'
         copy: 'Kopieren'

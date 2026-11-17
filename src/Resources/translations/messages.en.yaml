@@ -40,7 +40,7 @@ setono_sylius_quickpay:
         callback: 'Callback'
         callback_not_sent: 'Not sent'
         callback_no_answer: 'No answer'
-        callback_help: 'After each operation Quickpay sends the store a callback; hover over one to see the url it went to. The store answers 204 when it reconciled the payment, 409 when the payment was already being reconciled and 5xx on an error (Quickpay retries both), and 400 when the checksum was wrong. Green is an answer Quickpay counted as a success, red one it counted as a failure.'
+        callback_help: 'After each operation Quickpay sends the store a callback; hover over one to see the url it went to. The store answers 204 when it reconciled the payment, or found none of its own to reconcile (it then logs a warning), 409 when the payment was already being reconciled and 5xx on an error (Quickpay retries both), and 400 when the checksum was wrong. Green is an answer Quickpay counted as a success, red one it counted as a failure.'
         payment_link: 'Payment link'
         payment_link_help: 'Anyone with this link can pay this order in the Quickpay payment window — send it to the customer to collect payment for a phone or invoice order, or after an abandoned checkout.'
         copy: 'Copy'

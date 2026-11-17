@@ -255,8 +255,10 @@ authorize/capture/refund/cancel with amount, Quickpay status code and message, a
 captured balance and a test-mode badge. Each operation also shows its **callback outcome**, as Quickpay records it:
 not sent yet, the status code the store answered with (green when Quickpay counted it a success, red when not) or no
 answer at all, with the time, and the url the callback went to as a tooltip, so you can tell the payment's own callback
-url from the account-wide one. A hint under the table explains the codes the plugin answers with: 204 reconciled, 409
-the payment was already being reconciled and 5xx an error (Quickpay retries both), 400 a wrong checksum. So "did the
+url from the account-wide one. A hint under the table explains the codes the plugin answers with: 204 reconciled, or no
+payment of the store's to reconcile (an order prefix changed since, say, or a payment switched to another payment
+method; logged as a warning), 409 the payment was already being reconciled and 5xx an error (Quickpay retries both),
+400 a wrong checksum. So "did the
 callback arrive, and what did the store do with it?" needs no log dive. The data is fetched from Quickpay *after* the page has rendered,
 so the order page is never delayed by a slow gateway; if Quickpay cannot be reached, or the payment method's
 gateway configuration is unusable, the panel shows an inline notice with a retry link, and the cause is logged as a

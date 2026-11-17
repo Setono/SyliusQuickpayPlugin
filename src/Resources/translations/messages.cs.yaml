@@ -40,7 +40,7 @@ setono_sylius_quickpay:
         callback: 'Callback'
         callback_not_sent: 'Neodesláno'
         callback_no_answer: 'Bez odpovědi'
-        callback_help: 'Po každé operaci posílá Quickpay obchodu callback; najetím myší na něj zobrazíte url, na kterou byl odeslán. Obchod odpoví 204, když platbu sesouhlasil, 409, když se platba právě sesouhlasovala, a 5xx při chybě (Quickpay v obou případech zkusí znovu), a 400, když byl kontrolní součet chybný. Zelená je odpověď, kterou Quickpay vyhodnotil jako úspěch, červená ta, kterou vyhodnotil jako selhání.'
+        callback_help: 'Po každé operaci posílá Quickpay obchodu callback; najetím myší na něj zobrazíte url, na kterou byl odeslán. Obchod odpoví 204, když platbu sesouhlasil nebo nenašel žádnou svou platbu k sesouhlasení (pak zapíše do logu varování), 409, když se platba právě sesouhlasovala, a 5xx při chybě (Quickpay v obou případech zkusí znovu), a 400, když byl kontrolní součet chybný. Zelená je odpověď, kterou Quickpay vyhodnotil jako úspěch, červená ta, kterou vyhodnotil jako selhání.'
         payment_link: 'Platební odkaz'
         payment_link_help: 'Kdokoli s tímto odkazem může objednávku zaplatit v platebním okně Quickpay — pošlete ho zákazníkovi pro zaplacení telefonické objednávky nebo objednávky na fakturu, případně po opuštěné pokladně.'
         copy: 'Kopírovat'
