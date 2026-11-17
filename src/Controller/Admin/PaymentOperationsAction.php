@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\Controller\Admin;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
-use Setono\SyliusQuickpayPlugin\Quickpay\CallbackOutcome;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\PaymentRepositoryInterface;
@@ -62,14 +61,8 @@ final class PaymentOperationsAction implements LoggerAwareInterface
             throw new NotFoundHttpException(sprintf('Payment %d has no Quickpay payment', $id));
         }
 
-        $callbackOutcomes = [];
-        foreach ($quickpayPayment->operations as $operation) {
-            $callbackOutcomes[$operation->id] = CallbackOutcome::of($quickpayPayment, $operation);
-        }
-
         return new Response($this->twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations.html.twig', [
             'quickpay_payment' => $quickpayPayment,
-            'callback_outcomes' => array_filter($callbackOutcomes),
         ]));
     }
 }

@@ -12,7 +12,6 @@
     </thead>
     <tbody>
         {% for operation in quickpay_payment.operations %}
-            {% set callback = callback_outcomes[operation.id] ?? null %}
             <tr>
                 <td>
                     {{ operation.type }}
@@ -25,16 +24,16 @@
                     {{ operation.qpStatusCode }} {{ operation.qpStatusMsg }}
                 </td>
                 <td>{% if operation.createdAt is not null %}{{ operation.createdAt|date('Y-m-d H:i:s') }}{% endif %}</td>
-                {# The url the callback went to tells the payment's own callback url from the account-wide one #}
-                <td class="setono-quickpay-operations__callback"{% if callback is not null and callback.url is not null %} title="{{ callback.url }}"{% endif %}>
-                    {% if callback is null %}
-                        {# Quickpay records no readable callback outcome for this operation #}
-                    {% elseif callback.isSent() %}
-                        <span class="ui tiny {{ callback.success ? 'green' : 'red' }} label">
-                            <i class="{{ callback.success ? 'check' : 'close' }} icon"></i>
-                            {{- callback.isAnswered() ? callback.responseCode : 'setono_sylius_quickpay.ui.callback_no_answer'|trans -}}
+                {# How Quickpay's callback about the operation was answered. The url it went to tells the payment's own
+                   callback url from the account-wide one #}
+                {% set callbackSent = operation.callbackSuccess is not null %}
+                <td class="setono-quickpay-operations__callback"{% if callbackSent and operation.callbackUrl is not null %} title="{{ operation.callbackUrl }}"{% endif %}>
+                    {% if callbackSent %}
+                        <span class="ui tiny {{ operation.callbackSuccess ? 'green' : 'red' }} label">
+                            <i class="{{ operation.callbackSuccess ? 'check' : 'close' }} icon"></i>
+                            {{- operation.callbackResponseCode ?? 'setono_sylius_quickpay.ui.callback_no_answer'|trans -}}
                         </span>
-                        {% if callback.at is not null %}{{ callback.at|date('Y-m-d H:i:s') }}{% endif %}
+                        {% if operation.callbackAt is not null %}{{ operation.callbackAt|date('Y-m-d H:i:s') }}{% endif %}
                     {% else %}
                         {{ 'setono_sylius_quickpay.ui.callback_not_sent'|trans }}
                     {% endif %}
@@ -48,7 +47,7 @@
     </tbody>
 </table>
 
-{% if callback_outcomes is not empty %}
+{% if quickpay_payment.operations is not empty %}
     <p><small>{{ 'setono_sylius_quickpay.ui.callback_help'|trans }}</small></p>
 {% endif %}
 

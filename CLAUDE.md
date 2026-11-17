@@ -16,7 +16,7 @@ state machine, and admin.
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
 base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.4`, the first release with
 `OrderId`; rc.3 was the first whose
-convert takes an order description; the SDK is stable, `^1.3`).
+convert takes an order description; the SDK is stable, `^1.4`, the first release typing an operation's callback fields).
 The 2.x line itself is published as `v2.0.0-alpha.x` pre-release tags — the latest of these is the Roave
 BC-check baseline. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed; it is read only
@@ -551,17 +551,12 @@ logger-aware via `setLogger()`) reads the payment through the client provider's 
 (not a Quickpay payment, or no Quickpay payment id) → 404; any error (Quickpay, an unusable gateway configuration, an
 id payum-quickpay can't read) → the inline notice, 502, and a warning log with `paymentId`, `gatewayName`
 (`forPayment()?->gatewayName`) and the error under `exception`. Each operation row shows its **callback outcome**
-(`GLOSSARY.md`), read from that same `GET /payments/{id}` by `Quickpay\CallbackOutcome::of($payment, $operation)`:
-the SDK models only the operation's `callbackUrl`, so `callback_success`, `callback_response_code` and `callback_at`
-come from the payment's `raw['operations']`, matched by id. `callback_success` null → not sent; a bool with a 3-digit
-`callback_response_code` → answered (`success` is Quickpay's judgment); false without a code → no answer; anything
-else (absent, malformed, a success without a code) → null, and the cell stays empty. A time the SDK's two date formats
-can't read is left out. The controller passes the outcomes keyed by operation id (`callback_outcomes`); the url is the
-cell's tooltip (a callback not sent has none), and a translated hint lists the codes the callback endpoints answer
-with. The template calls `isSent()`/`isAnswered()` explicitly: Twig would resolve `callback.answered` to the static
-named constructor `answered()`. Nothing is stored. When the
-SDK models the callback fields on `Operation`, read them there instead (`tests/Unit/Quickpay/CallbackOutcomeTest` pins
-the reading rules). `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
+(`GLOSSARY.md`), which the template reads from the SDK's `Operation` in that same `GET /payments/{id}`, as it reads
+the status code: `callbackSuccess` null → not sent; otherwise a green tick or red cross label (Quickpay's judgment)
+around `callbackResponseCode`, or "no answer" when that is null, then `callbackAt`. The url (`callbackUrl`) is the
+cell's tooltip once the callback was sent, and a translated hint lists the codes the callback endpoints answer with.
+Nothing is stored. The SDK maps these fields strictly, like every typed field: a value of another type fails the whole
+read, so the panel shows its inline notice. `tests/Functional/Controller/Admin/PaymentOperationsPanelTest`
 requests the route as a logged-in administrator (a `TestBrowserToken` stored in a session, as Symfony's test browser
 does; browser-kit isn't installed), reads each row's callback cell with ext-dom's `DOMXPath` (dom-crawler isn't
 installed either), and renders the template with the container's Twig to check when the placeholder is there.
