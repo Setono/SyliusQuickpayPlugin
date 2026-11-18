@@ -179,7 +179,13 @@ configuration, so its checkout would capture immediately whatever the payment me
   most once.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
-  completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order. Completing
+  completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order, and neither
+  does Quickpay being unreachable. Cancelling aborts, with no cancel sent to Quickpay, where Quickpay holds money: when
+  it holds the payment's captured money (captured at checkout, in the Quickpay manager, or by a capture whose callback
+  never arrived) or an operation, such as a capture, is still in flight. A cancelled payment can't be refunded in
+  Sylius, so cancelling it would leave the customer's money at Quickpay. Cancelling such an order in the admin or the
+  Admin API fails with an error naming the Quickpay payment and saves nothing, and `sylius:cancel-unpaid-orders` stops at it on every run (see
+  [Troubleshooting](#troubleshooting) for both and how to recover). Completing
   captures only a payment Quickpay holds an authorization for: completing one the customer never paid, or whose
   authorization was declined, fails with an error naming the payment and the state Quickpay's status maps to, and
   nothing is sent to Quickpay. An operation turned off in the [plugin config](#3-configure-the-plugin-optional) leaves
@@ -654,6 +660,23 @@ Run [the doctor](#checking-your-configuration) first — it detects every config
   payment is the other method's now, so the plugin reconciles nothing for it, and the money the Quickpay payment holds
   is yours to handle in the Quickpay manager: cancel an authorization you don't want (unused, it expires by itself) or
   refund a capture. Completing, refunding or cancelling the Sylius payment in the admin leaves Quickpay alone.
+
+- `The Sylius payment … can't be cancelled: Quickpay holds the captured money of its Quickpay payment …` or
+  `A capture of Quickpay payment … is still pending` (or a refund or cancel) when cancelling an order, or
+  `sylius:cancel-unpaid-orders` failing with one of them on every run
+
+  Quickpay holds the payment's captured money, or an operation on it, a capture say, hasn't settled yet, while Sylius
+  still shows the payment unpaid: it was captured at checkout or in the Quickpay manager and its callback never arrived.
+  A cancelled payment can't be refunded in Sylius, so cancelling the order aborts and saves nothing.
+  `sylius:cancel-unpaid-orders` ends the whole run at that order: nothing in its batch is saved, and every later run
+  stops at the same order until its payment is reconciled. This takes a payment Quickpay captured that Sylius shows
+  unpaid for the whole expiry period, which in practice happens only when the
+  [reconciliation command](#reconciling-missed-callbacks) isn't scheduled.
+
+  To recover, run the reconciliation command, with `--full --since <period>` when the capture is older than its
+  lookback. The payment becomes *completed* and the order paid, so the order is no longer an unpaid one. Then refund
+  the payment in Sylius, and cancel the order if you still want to. For a capture still in flight, wait until it
+  settles (its callback reconciles the payment) and cancel again, or recover as above once it is captured.
 
 - `The "branding_id" option must be a positive integer (or an integer string), got 'Our brand'` from the doctor, or
   any other `The "<option>" option ...` failure

@@ -652,10 +652,21 @@ aborting the transition with nothing else sent to Quickpay (a `Capture` without 
 capture action create a payment link: a token-less Convert for a never-paid payment, a replaced link for a declined
 one); the opt-in fraud guard (below); `Capture`. An unusable gateway configuration is the error of the operation that
 needs it (building its gateway throws the plugin's `UnusableGatewayConfiguration`, `QuickpayGatewayTest` pins that):
-capture and refund propagate it and abort the transition. A failed cancel
-(`Payum\Core\Exception\ExceptionInterface`, the SDK's `Setono\Quickpay\Exception\QuickpayException` or
-`UnusableGatewayConfiguration`, from the status check, building the gateway or the `Cancel`) is logged
-but does not block the transition. Operations execute with the Sylius payment through Sylius' Payum bridge, so
+capture and refund propagate it and abort the transition. `cancel` aborts only where the status check shows Quickpay
+holds money, and runs, in order: the status check, whose failure (`Payum\Core\Exception\ExceptionInterface`, the
+SDK's `Setono\Quickpay\Exception\QuickpayException` or `UnusableGatewayConfiguration`) is logged and the transition
+proceeds, so cancelling an order never depends on Quickpay being reachable; target state `cancelled` → skip; target
+state `completed` (captured money, a partly refunded payment included) → throw
+`StateMachine\QuickpayHoldsCapturedMoney` (carries the Sylius payment and its Quickpay payment id; its message says to
+reconcile, then refund), aborting the transition with nothing else sent to Quickpay, since a cancelled Sylius payment
+can't be refunded; `Cancel`, where payum-quickpay's `OperationPendingException` (a capture, refund or cancel in
+flight; the library refuses before it sends the cancel) is rethrown and aborts the transition, and any other Payum or
+SDK error (never authorized, expired, already refunded) is logged and the transition proceeds. Neither aborting
+exception may be a `StateMachineExecutionException`: Sylius' `UnpaidOrdersStateUpdater` catches that and flushes its
+batch, and under winzou the order is already cancelled in memory when its payment's cancel runs; so
+`sylius:cancel-unpaid-orders` ends its whole run at such an order, saving nothing of its batch, until the payment is
+reconciled (accepted and documented in the README's *Troubleshooting*; `PaymentProcessorTest` runs the real
+updater). Operations execute with the Sylius payment through Sylius' Payum bridge, so
 gateway-updated details persist (`Capture`/`Refund`/`Cancel` aren't status requests, so the extension leaves them
 alone); an unqualified `Refund` refunds the remaining `balance` the library's `RefundAction` fetches from Quickpay
 itself (every library action that fetches the payment also writes `balance` into the details). Each operation can be turned off via the plugin config

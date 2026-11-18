@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\StateMachine;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LogLevel;
+use Setono\Payum\Quickpay\Exception\OperationPendingException;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
@@ -15,12 +16,15 @@ use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\NoAuthorizationToCapture;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
+use Setono\SyliusQuickpayPlugin\StateMachine\QuickpayHoldsCapturedMoney;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
 use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
+use Sylius\Component\Core\Model\OrderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
+use Sylius\Component\Core\Updater\UnpaidOrdersStateUpdaterInterface;
 use Sylius\Component\Payment\PaymentTransitions;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -223,6 +227,111 @@ final class PaymentProcessorTest extends FunctionalTestCase
         self::assertSame([PaymentTransitions::TRANSITION_CANCEL], $transitions->getArrayCopy());
         self::assertSame(['POST /payments/501/cancel'], $this->operationsSentToQuickpay());
         self::assertSame(PaymentInterface::STATE_CANCELLED, $this->reload($payment)->getState());
+    }
+
+    /**
+     * Cancelling the payment would leave the customer's money at Quickpay with nothing in Sylius to refund it from
+     *
+     * @test
+     *
+     * @dataProvider stateMachineAdapters
+     */
+    public function it_refuses_to_cancel_a_payment_whose_money_quickpay_captured(string $stateMachineAdapter): void
+    {
+        self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $transitions = $this->recordPaymentTransitions();
+
+        try {
+            $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
+            self::fail('Cancelling a payment whose money Quickpay captured must fail');
+        } catch (QuickpayHoldsCapturedMoney $e) {
+            self::assertSame($payment, $e->payment);
+            self::assertSame(501, $e->quickpayPaymentId);
+        }
+
+        self::assertSame([], $transitions->getArrayCopy());
+        // The status check, and nothing after it: no cancel Quickpay would refuse
+        self::assertSame(['GET /payments/501'], $this->quickpay()->sentRequests());
+
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
+    }
+
+    /**
+     * Sylius' unpaid orders canceller (`sylius:cancel-unpaid-orders`) saves its batch after logging an order whose
+     * cancel failed in the state machine. Under winzou that order is already cancelled in memory when its payment's
+     * cancel runs, so the refusal must end the run instead: nothing in the batch is saved, and the order stays unpaid
+     * until its payment is reconciled
+     *
+     * @test
+     *
+     * @dataProvider stateMachineAdapters
+     */
+    public function it_ends_cancelling_unpaid_orders_without_saving_any_when_quickpay_captured_the_money_of_one(string $stateMachineAdapter): void
+    {
+        self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
+
+        $expiredLongAgo = new \DateTime('-1 year');
+        // Created first, so the canceller cancels it in memory before it reaches the captured one
+        $bankTransfer = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: null, orderNumber: '000000002', method: $this->createPaymentMethod('bank_transfer', [], factoryName: 'offline'));
+        $bankTransfer->getOrder()?->setCheckoutCompletedAt($expiredLongAgo);
+        $captured = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        $captured->getOrder()?->setCheckoutCompletedAt($expiredLongAgo);
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $unpaidOrdersStateUpdater = self::getContainer()->get('sylius.unpaid_orders_state_updater');
+        self::assertInstanceOf(UnpaidOrdersStateUpdaterInterface::class, $unpaidOrdersStateUpdater);
+
+        try {
+            $unpaidOrdersStateUpdater->cancel();
+            self::fail('Cancelling the unpaid orders must fail on the order whose payment Quickpay captured');
+        } catch (QuickpayHoldsCapturedMoney $e) {
+            self::assertSame(501, $e->quickpayPaymentId);
+        }
+        self::assertSame(OrderInterface::STATE_CANCELLED, $bankTransfer->getOrder()?->getState(), 'The canceller must have cancelled the other order in its batch before it reached the captured one');
+
+        self::assertSame([], $this->operationsSentToQuickpay());
+
+        foreach ([$captured, $bankTransfer] as $payment) {
+            $payment = $this->reload($payment);
+            self::assertSame(PaymentInterface::STATE_NEW, $payment->getState());
+            self::assertSame(OrderInterface::STATE_NEW, $payment->getOrder()?->getState());
+        }
+    }
+
+    /**
+     * The capture's outcome isn't known yet, so the cancel would race it: the money may be captured a moment later
+     *
+     * @test
+     *
+     * @dataProvider stateMachineAdapters
+     */
+    public function it_refuses_to_cancel_a_payment_whose_capture_is_in_flight_at_quickpay(string $stateMachineAdapter): void
+    {
+        self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize'], balance: 0, pendingOperations: ['capture']));
+        $transitions = $this->recordPaymentTransitions();
+
+        try {
+            $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
+            self::fail('Cancelling a payment whose capture is in flight must fail');
+        } catch (OperationPendingException $e) {
+            self::assertSame(501, $e->getPaymentId());
+        }
+
+        self::assertSame([], $transitions->getArrayCopy());
+        self::assertSame([], $this->operationsSentToQuickpay());
+
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $payment->getOrder()?->getPaymentState());
     }
 
     /**
