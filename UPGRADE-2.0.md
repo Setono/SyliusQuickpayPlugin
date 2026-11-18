@@ -7,7 +7,8 @@ which replaces its hand-rolled API client with [`setono/quickpay-php-sdk`](https
 gateway-level background; this document covers what a **Sylius shop upgrading this plugin** has to do.
 
 Already on a 2.0 alpha? [Upgrading from an earlier 2.0 alpha](#upgrading-from-an-earlier-20-alpha) lists what
-changed from `v2.0.0-alpha.2` to `v2.0.0-beta.1`.
+changed from `v2.0.0-alpha.2` to `v2.0.0-beta.1`, and [Upgrading from v2.0.0-beta.1](#upgrading-from-v200-beta1)
+what changed since.
 
 ## Requirements
 
@@ -191,8 +192,10 @@ if you make those and want the store to notice. The README's *Callbacks* section
   dependency, installed by composer) through a named `framework.lock` resource, `setono_sylius_quickpay`,
   defaulting to the per-server `flock` store — the README's *Callbacks* section shows how a multi-server
   shop redefines the resource with a shared store.
-- **A failed cancel no longer blocks cancelling the order** — e.g. when the customer never completed
-  checkout, so there is nothing to cancel at Quickpay; the failure is logged instead.
+- **A failed cancel no longer blocks cancelling the order where Quickpay holds nothing** — e.g. when the customer
+  never completed checkout, so there is nothing to cancel at Quickpay; the failure is logged instead, and so is
+  Quickpay being unreachable. Where Quickpay holds the payment's captured money or a capture is in flight, cancelling
+  still aborts, with no cancel sent to Quickpay (see the README's *Troubleshooting* for how to recover).
 - **Both state machine adapters are supported.** The winzou before-callback (the Sylius 1.14 default
   adapter) is complemented by a Symfony workflow event subscriber, so capture/refund/cancel reach
   Quickpay also when the `sylius_payment` graph runs on the `symfony_workflow` adapter — where 1.x
@@ -692,3 +695,38 @@ The service definitions changed accordingly; only a redefinition or decoration o
   shared callback endpoint matched `"1e3"` as 1000 and the reconcile run read `"12abc"` as 12; an id that can't be read
   now never matches, and it is an error (Payum's `LogicException`) where the id is needed. Only payum-quickpay writes the
   id, always as an int, so payments it created are unaffected.
+
+## Upgrading from `v2.0.0-beta.1`
+
+### Added
+
+- **`StateMachine\QuickpayHoldsCapturedMoney`**, a `\RuntimeException` thrown from a payment's `cancel` transition
+  when Quickpay holds the payment's captured money (below). It carries the Sylius payment (`payment`) and its Quickpay
+  payment id (`quickpayPaymentId`) as public readonly properties, and its message names both and says to reconcile
+  the payment, then refund it. It is the `cancel` counterpart of `StateMachine\NoAuthorizationToCapture`, and on
+  purpose not a `Sylius\Abstraction\StateMachine\Exception\StateMachineExecutionException`: Sylius'
+  `UnpaidOrdersStateUpdater` catches that one and saves its batch, and under winzou the order is already cancelled in
+  memory when its payment's cancel runs.
+
+### Behavioural changes
+
+- **Cancelling a payment aborts when Quickpay holds its captured money or a capture is in flight.** An order's
+  `cancel` cascades to its payments, from the admin, the Admin API and `sylius:cancel-unpaid-orders`. Before, the
+  plugin cancelled the Sylius payment whatever Quickpay said, logging Quickpay's refusal (or payum-quickpay's
+  `OperationPendingException`) as a warning, so the order and payment ended up *cancelled* while Quickpay kept the
+  customer's money, which Sylius then couldn't refund. Now:
+  - when the status check before the cancel maps the Quickpay payment to *completed* (captured, partly refunded
+    included), the transition throws `QuickpayHoldsCapturedMoney` and aborts. The status check is the only request
+    sent;
+  - when an operation, a capture say, is still in flight, payum-quickpay's `OperationPendingException` propagates and
+    the transition aborts. No cancel is sent: the library refuses before it sends one;
+  - everything else fails open as before: a Quickpay payment already cancelled is left alone, and a failed status
+    check, an unusable gateway configuration or any other error from the cancel (never authorized, expired, already
+    refunded) is logged as a warning and the transition proceeds.
+
+  Cancelling such an order in the admin or the Admin API fails with the exception and saves nothing; the admin sees
+  an error page, as when completing a payment Quickpay holds no authorization for. `sylius:cancel-unpaid-orders` ends
+  the whole run at that order: nothing in its batch is saved, and every later run stops at the same order until its
+  payment is reconciled. That takes a payment Quickpay captured that Sylius shows unpaid for the whole expiry period,
+  which in practice happens only when the reconciliation command isn't scheduled. The README's
+  [Troubleshooting](README.md#troubleshooting) says how to recover.

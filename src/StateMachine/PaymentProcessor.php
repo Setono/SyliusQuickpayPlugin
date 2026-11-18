@@ -11,6 +11,7 @@ use Payum\Core\Request\Capture;
 use Payum\Core\Request\Refund;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
+use Setono\Payum\Quickpay\Exception\OperationPendingException;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\SyliusQuickpayPlugin\Fraud\FraudCheckerInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
@@ -141,28 +142,59 @@ final class PaymentProcessor implements PaymentProcessorInterface, LoggerAwareIn
     }
 
     /**
-     * Cancels the payment at Quickpay. Fails open: an error, an unusable gateway configuration's included, is
-     * logged and the transition proceeds
+     * Cancels the payment at Quickpay. Aborts the transition only where the status check shows Quickpay holds the
+     * payment's captured money or an operation is in flight; otherwise it fails open: an error, an unusable gateway
+     * configuration's included, is logged and the transition proceeds
+     *
+     * @throws QuickpayHoldsCapturedMoney when Quickpay holds the payment's captured money
+     * @throws OperationPendingException when an operation, a capture say, is still in flight at Quickpay
      */
     private function cancel(PaymentInterface $payment, string $gatewayName): void
     {
+        // Cancelling the order must not depend on Quickpay being reachable. Building the gateway of an unusable gateway
+        // configuration throws the plugin's UnusableGatewayConfiguration; Payum's ExceptionInterface covers Payum's
+        // other errors
         try {
-            if ($this->targetStateIs($payment, PaymentInterface::STATE_CANCELLED)) {
-                return;
-            }
-
-            $this->payum->getGateway($gatewayName)->execute(new Cancel($payment));
+            $targetState = $this->reconciler->checkStatus($payment)->targetState;
         } catch (ExceptionInterface|QuickpayException|UnusableGatewayConfiguration $e) {
+            $this->logFailedCancel($payment, $e);
+
+            return;
+        }
+
+        if (PaymentInterface::STATE_CANCELLED === $targetState) {
+            return;
+        }
+
+        // Captured money can only be refunded, and Sylius refunds only a completed payment, never a cancelled one.
+        // So the transition aborts here, with nothing sent to Quickpay after the status check, which read the Quickpay
+        // payment by this id
+        if (PaymentInterface::STATE_COMPLETED === $targetState) {
+            throw new QuickpayHoldsCapturedMoney($payment, $this->quickpayPaymentIdProvider->idOf($payment));
+        }
+
+        try {
+            $this->payum->getGateway($gatewayName)->execute(new Cancel($payment));
+        } catch (OperationPendingException $e) {
+            // An operation still in flight, a capture say, may yet take the money, so the transition aborts.
+            // payum-quickpay refuses before it sends the cancel; cancelling again once it settled starts from a fresh
+            // status check
+            throw $e;
+        } catch (ExceptionInterface|QuickpayException $e) {
             // Cancelling the order must not be blocked by Quickpay being unable to cancel
             // the payment, e.g. because it was never authorized or has already expired.
-            // Unused authorizations expire by themselves at Quickpay. Building the gateway of an
-            // unusable gateway configuration throws the plugin's UnusableGatewayConfiguration;
-            // Payum's ExceptionInterface covers Payum's other errors
-            $this->logger?->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
-                'quickpayPaymentId' => $this->quickpayPaymentIdProvider->tryIdOf($payment),
-                'paymentId' => $payment->getId(),
-            ]);
+            // Unused authorizations expire by themselves at Quickpay. The gateway configuration is usable:
+            // the status check built the same gateway
+            $this->logFailedCancel($payment, $e);
         }
+    }
+
+    private function logFailedCancel(PaymentInterface $payment, \Throwable $e): void
+    {
+        $this->logger?->warning(sprintf('Could not cancel Quickpay payment: %s', $e->getMessage()), [
+            'quickpayPaymentId' => $this->quickpayPaymentIdProvider->tryIdOf($payment),
+            'paymentId' => $payment->getId(),
+        ]);
     }
 
     /**

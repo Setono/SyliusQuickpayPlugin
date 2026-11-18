@@ -353,18 +353,27 @@ abstract class FunctionalTestCase extends KernelTestCase
      *
      * @param list<string> $approvedOperations operation types, in the order they happened
      * @param bool $fraudSuspected whether Quickpay's fraud filter flagged the payment
+     * @param list<string> $pendingOperations operation types still in flight, in the order they were made, after the
+     *                                        approved ones: Quickpay has no outcome for them yet
      */
-    protected static function quickpayPayment(int $id, string $state, array $approvedOperations, ?int $balance = null, bool $fraudSuspected = false): ResponseInterface
-    {
+    protected static function quickpayPayment(
+        int $id,
+        string $state,
+        array $approvedOperations,
+        ?int $balance = null,
+        bool $fraudSuspected = false,
+        array $pendingOperations = [],
+    ): ResponseInterface {
         $operations = [];
-        foreach ($approvedOperations as $i => $type) {
+        foreach ([...$approvedOperations, ...$pendingOperations] as $i => $type) {
+            $pending = $i >= \count($approvedOperations);
             $operations[] = [
                 'id' => $i + 1,
                 'type' => $type,
                 'amount' => 10_000,
-                'pending' => false,
-                'qp_status_code' => '20000',
-                'qp_status_msg' => 'Approved',
+                'pending' => $pending,
+                'qp_status_code' => $pending ? null : '20000',
+                'qp_status_msg' => $pending ? null : 'Approved',
             ];
         }
 
