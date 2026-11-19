@@ -18,6 +18,7 @@ use Sylius\Component\Core\Model\Payment;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\Repository\OrderRepositoryInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 final class NotifyActionTest extends TestCase
 {
@@ -75,6 +76,11 @@ final class NotifyActionTest extends TestCase
 
         // The gateway reads the prefix as a string, so the order id it created carries it as one
         yield 'a prefix stored as a number is stripped' => [[42], '42000000123', ['000000123', '42000000123']];
+
+        // The order id is the order number itself, which is looked up once
+        yield 'a gateway without an order prefix' => [[''], '000000123', ['000000123']];
+
+        yield 'gateways sharing an order prefix' => [['qp_', 'qp_'], 'qp_000000123', ['000000123', 'qp_000000123']];
     }
 
     /**
@@ -93,6 +99,107 @@ final class NotifyActionTest extends TestCase
         $response = $this->createActionFor($payment, $reconciler->reveal())($this->createRequest('000001000', quickpayPaymentId: 1000));
 
         self::assertSame(204, $response->getStatusCode());
+    }
+
+    /**
+     * The callback's body is JSON, so it may name the Quickpay payment id as a digit string
+     *
+     * @test
+     */
+    public function it_reconciles_the_payment_of_a_callback_naming_its_quickpay_payment_id_as_a_digit_string(): void
+    {
+        $payment = self::payment(1000);
+        $reconciler = $this->prophesize(PaymentReconcilerInterface::class);
+        $reconciler->reconcileFromCallback($payment)->willReturn(ReconcileResult::reconciled('new', 'completed', 'completed'))->shouldBeCalledOnce();
+
+        $response = $this->createActionFor($payment, $reconciler->reveal())($this->createRequest('000001000', quickpayPaymentId: '1000'));
+
+        self::assertSame(204, $response->getStatusCode());
+    }
+
+    /**
+     * Only callbacks about a payment are handled: any other resource Quickpay calls back about (a subscription, or a
+     * callback without its resource type) is answered 204, so Quickpay doesn't retry it, and reconciles nothing
+     *
+     * @test
+     *
+     * @dataProvider callbacksAboutAnotherResourceThanAPayment
+     */
+    public function it_answers_a_callback_about_another_resource_than_a_payment_with_a_204_and_reconciles_nothing(?string $resourceType): void
+    {
+        $payment = self::payment(1000);
+        $reconciler = $this->prophesize(PaymentReconcilerInterface::class);
+        $reconciler->reconcileFromCallback(Argument::any())->shouldNotBeCalled();
+
+        $request = $this->createRequest('000001000', quickpayPaymentId: 1000);
+        if (null === $resourceType) {
+            $request->headers->remove('QuickPay-Resource-Type');
+        } else {
+            $request->headers->set('QuickPay-Resource-Type', $resourceType);
+        }
+
+        $response = $this->createActionFor($payment, $reconciler->reveal())($request);
+
+        self::assertSame(204, $response->getStatusCode());
+        self::assertSame('', $response->getContent());
+    }
+
+    /**
+     * @return iterable<string, array{?string}>
+     */
+    public static function callbacksAboutAnotherResourceThanAPayment(): iterable
+    {
+        yield 'a subscription' => ['Subscription'];
+
+        yield 'no resource type' => [null];
+    }
+
+    /**
+     * A callback about a payment must name the Quickpay payment by its numeric id and the order id as a string;
+     * otherwise it is a bad request, and nothing is looked up or reconciled
+     *
+     * @test
+     *
+     * @dataProvider callbackBodiesNamingNoPayment
+     *
+     * @param array<string, mixed> $body
+     */
+    public function it_refuses_a_callback_whose_body_names_no_quickpay_payment_as_a_bad_request(array $body): void
+    {
+        $reconciler = $this->prophesize(PaymentReconcilerInterface::class);
+        $reconciler->reconcileFromCallback(Argument::any())->shouldNotBeCalled();
+        $orderRepository = $this->prophesize(OrderRepositoryInterface::class);
+        $orderRepository->findOneByNumber(Argument::any())->shouldNotBeCalled();
+        $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
+        $gatewayConfigurationProvider->all()->willReturn([GatewayConfigurations::of()]);
+
+        $action = new NotifyAction(
+            $reconciler->reveal(),
+            $orderRepository->reveal(),
+            new QuickpayPaymentIdProvider($gatewayConfigurationProvider->reveal()),
+            $gatewayConfigurationProvider->reveal(),
+        );
+
+        $request = new Request(content: (string) json_encode($body));
+        $request->headers->set('QuickPay-Resource-Type', 'Payment');
+
+        $this->expectException(BadRequestHttpException::class);
+
+        $action($request);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function callbackBodiesNamingNoPayment(): iterable
+    {
+        yield 'no id' => [['order_id' => '000001000']];
+
+        yield 'no order id' => [['id' => 1000]];
+
+        yield 'an id that is no number' => [['id' => 'abc', 'order_id' => '000001000']];
+
+        yield 'an order id that is no string' => [['id' => 1000, 'order_id' => 1000]];
     }
 
     /**
@@ -224,7 +331,7 @@ final class NotifyActionTest extends TestCase
         return $provider->reveal();
     }
 
-    private function createRequest(string $orderId, int $quickpayPaymentId = 1): Request
+    private function createRequest(string $orderId, int|string $quickpayPaymentId = 1): Request
     {
         $request = new Request(content: (string) json_encode(['id' => $quickpayPaymentId, 'order_id' => $orderId]));
         $request->headers->set('QuickPay-Resource-Type', 'Payment');

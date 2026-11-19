@@ -15,7 +15,6 @@ use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguratio
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\NoAuthorizationToCapture;
 use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessor;
-use Setono\SyliusQuickpayPlugin\StateMachine\PaymentProcessorInterface;
 use Setono\SyliusQuickpayPlugin\StateMachine\QuickpayHoldsCapturedMoney;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
@@ -113,7 +112,7 @@ final class PaymentProcessorTest extends FunctionalTestCase
             self::assertSame($payment, $e->payment);
             self::assertSame(501, $e->quickpayPaymentId);
             self::assertSame($targetState, $e->targetState);
-            self::assertStringContainsString(sprintf('"%s"', $targetState), $e->getMessage());
+            self::assertSame(sprintf('The Sylius payment %d can\'t be completed: Quickpay holds no authorization to capture for its Quickpay payment 501, whose status maps to the payment state "%s"', (int) $payment->getId(), $targetState), $e->getMessage());
         }
 
         self::assertSame([], $transitions->getArrayCopy());
@@ -250,6 +249,8 @@ final class PaymentProcessorTest extends FunctionalTestCase
         } catch (QuickpayHoldsCapturedMoney $e) {
             self::assertSame($payment, $e->payment);
             self::assertSame(501, $e->quickpayPaymentId);
+            // What the admin is told to do instead
+            self::assertSame(sprintf('The Sylius payment %d can\'t be cancelled: Quickpay holds the captured money of its Quickpay payment 501. Reconcile the payment (the setono:sylius-quickpay:reconcile-payments command), so it is completed in Sylius, then refund it', (int) $payment->getId()), $e->getMessage());
         }
 
         self::assertSame([], $transitions->getArrayCopy());
@@ -337,9 +338,10 @@ final class PaymentProcessorTest extends FunctionalTestCase
     /**
      * @test
      */
-    public function it_cancels_a_payment_quickpay_refuses_to_cancel(): void
+    public function it_cancels_a_payment_quickpay_refuses_to_cancel_with_a_warning(): void
     {
         self::bootKernel();
+        $logger = $this->recordProcessorLog();
 
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0));
@@ -349,6 +351,87 @@ final class PaymentProcessorTest extends FunctionalTestCase
 
         self::assertSame(['POST /payments/501/cancel'], $this->operationsSentToQuickpay());
         self::assertSame(PaymentInterface::STATE_CANCELLED, $this->reload($payment)->getState());
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertStringStartsWith('Could not cancel Quickpay payment: ', $message);
+        self::assertStringContainsString('Transaction in wrong state for this operation', $message);
+        self::assertSame(['quickpayPaymentId' => 501, 'paymentId' => $payment->getId()], $context);
+    }
+
+    /**
+     * Quickpay answered the cancel, and the acquirer declined it: the money stays authorized, and unused
+     * authorizations expire by themselves at Quickpay
+     *
+     * @test
+     */
+    public function it_cancels_a_payment_whose_cancel_quickpay_declines_with_a_warning(): void
+    {
+        self::bootKernel();
+        $logger = $this->recordProcessorLog();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0));
+        $this->quickpay()->respond('POST', '/payments/501/cancel', self::quickpayPaymentDeclining('cancel'));
+
+        $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
+
+        self::assertSame(['POST /payments/501/cancel'], $this->operationsSentToQuickpay());
+        self::assertSame(PaymentInterface::STATE_CANCELLED, $this->reload($payment)->getState());
+        self::assertSame([[
+            LogLevel::WARNING,
+            'Could not cancel Quickpay payment: Quickpay declined the cancel of payment 501: status 40000 (Rejected By Acquirer).',
+            ['quickpayPaymentId' => 501, 'paymentId' => $payment->getId()],
+        ]], $logger->records);
+    }
+
+    /**
+     * Its details carry a Quickpay payment id payum-quickpay can't read, so its status can't be checked: the cancel
+     * proceeds without contacting Quickpay, and the warning says why
+     *
+     * @test
+     */
+    public function it_cancels_a_payment_whose_quickpay_payment_id_cannot_be_read_with_a_warning(): void
+    {
+        self::bootKernel();
+        $logger = $this->recordProcessorLog();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $payment->setDetails(['quickpayPaymentId' => 'abc'] + $payment->getDetails());
+        $this->entityManager()->flush();
+
+        $this->applyTransition($payment, PaymentTransitions::TRANSITION_CANCEL);
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame(PaymentInterface::STATE_CANCELLED, $this->reload($payment)->getState());
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertStringStartsWith('Could not cancel Quickpay payment: ', $message);
+        self::assertStringContainsString('"quickpayPaymentId"', $message);
+        // The id can't be read, so the log names none
+        self::assertSame(['quickpayPaymentId' => null, 'paymentId' => $payment->getId()], $context);
+    }
+
+    /**
+     * The processor's logger is optional, as the plugin wires it: without one, a cancel Quickpay refuses still lets the
+     * transition proceed
+     *
+     * @test
+     */
+    public function it_lets_a_cancel_quickpay_refuses_proceed_without_a_logger(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0));
+        $this->quickpay()->respond('POST', '/payments/501/cancel', self::quickpayError(400, 'Transaction in wrong state for this operation'));
+
+        ($this->processor())($payment, PaymentTransitions::TRANSITION_CANCEL);
+
+        self::assertSame(['POST /payments/501/cancel'], $this->operationsSentToQuickpay());
     }
 
     /**
@@ -581,6 +664,34 @@ final class PaymentProcessorTest extends FunctionalTestCase
     }
 
     /**
+     * The transition proceeds, and the warning tells the merchant to review the payment and capture or cancel it in the
+     * Quickpay manager
+     *
+     * @test
+     */
+    public function it_completes_a_fraud_suspected_payment_without_capturing_it_and_with_a_warning_when_the_fraud_guard_is_on(): void
+    {
+        self::bootKernel();
+        $this->configureProcessor(blockCaptureOnSuspectedFraud: true);
+        $logger = $this->recordProcessorLog();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0, fraudSuspected: true));
+        $transitions = $this->recordPaymentTransitions();
+
+        $this->applyTransition($payment, PaymentTransitions::TRANSITION_COMPLETE);
+
+        self::assertSame([PaymentTransitions::TRANSITION_COMPLETE], $transitions->getArrayCopy());
+        self::assertSame([], $this->operationsSentToQuickpay());
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+        self::assertSame([[
+            LogLevel::WARNING,
+            'Skipped the automatic capture: Quickpay reports the payment as fraud suspected. Review the payment and capture or cancel it manually',
+            ['quickpayPaymentId' => 501, 'paymentId' => $payment->getId()],
+        ]], $logger->records);
+    }
+
+    /**
      * @test
      */
     public function it_refuses_to_complete_a_fraud_suspected_payment_quickpay_holds_no_authorization_for_when_the_fraud_guard_is_on(): void
@@ -630,6 +741,34 @@ final class PaymentProcessorTest extends FunctionalTestCase
         ($this->processor(...[$operation => false]))($payment, $transition);
 
         self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * Only completing, refunding and cancelling a payment carry an operation out at Quickpay
+     *
+     * @test
+     *
+     * @dataProvider transitionsWithoutAnOperation
+     */
+    public function it_leaves_quickpay_alone_on_any_other_transition(string $transition): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+
+        ($this->processor())($payment, $transition);
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function transitionsWithoutAnOperation(): iterable
+    {
+        yield 'authorize' => [PaymentTransitions::TRANSITION_AUTHORIZE];
+
+        yield 'fail' => [PaymentTransitions::TRANSITION_FAIL];
     }
 
     /**
@@ -697,7 +836,7 @@ final class PaymentProcessorTest extends FunctionalTestCase
         bool $refund = true,
         bool $cancel = true,
         bool $blockCaptureOnSuspectedFraud = false,
-    ): PaymentProcessorInterface {
+    ): PaymentProcessor {
         $fraudChecker = self::getContainer()->get(FraudCheckerInterface::class);
         self::assertInstanceOf(FraudCheckerInterface::class, $fraudChecker);
 
@@ -735,6 +874,28 @@ final class PaymentProcessorTest extends FunctionalTestCase
         $processor->setLogger($logger);
 
         return $logger;
+    }
+
+    /**
+     * Quickpay's answer to an operation on payment 501 that the acquirer declined after the payment was authorized: a
+     * 2xx whose operation completed without being approved
+     */
+    private static function quickpayPaymentDeclining(string $operation): ResponseInterface
+    {
+        return new Response(202, ['Content-Type' => 'application/json'], json_encode([
+            'id' => 501,
+            'order_id' => self::ORDER_PREFIX . '000000001',
+            'currency' => self::CURRENCY,
+            'state' => 'new',
+            'merchant_id' => 1,
+            'accepted' => true,
+            'test_mode' => true,
+            'balance' => 0,
+            'operations' => [
+                ['id' => 1, 'type' => 'authorize', 'amount' => 10_000, 'pending' => false, 'qp_status_code' => '20000', 'qp_status_msg' => 'Approved'],
+                ['id' => 2, 'type' => $operation, 'amount' => 10_000, 'pending' => false, 'qp_status_code' => '40000', 'qp_status_msg' => 'Rejected By Acquirer'],
+            ],
+        ], \JSON_THROW_ON_ERROR));
     }
 
     /**

@@ -27,7 +27,7 @@ final class NoAuthorizationToCapture extends \RuntimeException
 
         parent::__construct(sprintf(
             'The Sylius payment %s can\'t be completed: Quickpay holds no authorization to capture for its Quickpay payment %d, whose status maps to the payment state "%s"',
-            is_scalar($paymentId) ? (string) $paymentId : '(not saved)',
+            is_scalar($paymentId) ? $paymentId : '(not saved)',
             $quickpayPaymentId,
             $targetState,
         ));

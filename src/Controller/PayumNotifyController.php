@@ -66,8 +66,8 @@ final class PayumNotifyController implements LoggerAwareInterface
             $this->logger?->warning(sprintf(
                 'The callback of Quickpay payment %s was not reconciled: its Sylius payment %s is no longer paid with a Quickpay gateway but with the payment method "%s". Retrying can\'t help; handle any money Quickpay holds for it in the Quickpay manager.',
                 $quickpayPaymentId ?? '(unknown)',
-                (string) $payment->getId(),
-                (string) $paymentMethod,
+                $payment->getId(),
+                $paymentMethod,
             ), ['paymentId' => $payment->getId(), 'paymentMethod' => $paymentMethod, 'quickpayPaymentId' => $quickpayPaymentId]);
 
             return new Response('', 204);

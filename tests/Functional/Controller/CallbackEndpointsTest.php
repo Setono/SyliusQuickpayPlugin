@@ -382,6 +382,95 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     }
 
     /**
+     * The warning names the Quickpay payment as the callback's unverified body names it: by a whole number, given as a
+     * number or a digit string, and as unknown otherwise
+     *
+     * @test
+     *
+     * @dataProvider quickpayPaymentIdsInTheCallbacksBody
+     */
+    public function the_payment_callback_urls_warning_names_the_quickpay_payment_the_callbacks_body_names(mixed $idInTheBody, string $named, ?int $logged): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        $callbackUrl = $this->callbackUrlOf($payment);
+        $payment->setMethod($this->createPaymentMethod('bank_transfer', [], factoryName: 'offline'));
+        $this->entityManager()->flush();
+        $logger = $this->recordPayumNotifyControllerLog();
+
+        $body = json_encode(['order_id' => 'qp_000000001'] + (null === $idInTheBody ? [] : ['id' => $idInTheBody]), \JSON_THROW_ON_ERROR);
+        $response = self::$kernel->handle(Request::create($callbackUrl, 'POST', server: ['CONTENT_TYPE' => 'application/json', 'HTTP_QUICKPAY_RESOURCE_TYPE' => 'Payment'], content: $body));
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([[
+            LogLevel::WARNING,
+            sprintf('The callback of Quickpay payment %s was not reconciled: its Sylius payment %d is no longer paid with a Quickpay gateway but with the payment method "bank_transfer". Retrying can\'t help; handle any money Quickpay holds for it in the Quickpay manager.', $named, (int) $payment->getId()),
+            ['paymentId' => $payment->getId(), 'paymentMethod' => 'bank_transfer', 'quickpayPaymentId' => $logged],
+        ]], $logger->records);
+    }
+
+    /**
+     * @return iterable<string, array{mixed, string, ?int}>
+     */
+    public static function quickpayPaymentIdsInTheCallbacksBody(): iterable
+    {
+        yield 'a digit string' => ['501', '501', 501];
+
+        yield 'digits followed by letters' => ['501abc', '(unknown)', null];
+
+        yield 'letters followed by digits' => ['abc501', '(unknown)', null];
+
+        yield 'no number' => ['abc', '(unknown)', null];
+
+        yield 'no id' => [null, '(unknown)', null];
+    }
+
+    /**
+     * A payment that lost its payment method is no Quickpay gateway's either: its callback is answered 204 so Quickpay
+     * stops retrying, and logged
+     *
+     * @test
+     */
+    public function a_callback_on_the_callback_url_of_a_payment_without_a_payment_method_is_answered_with_a_204_and_a_warning(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        $callbackUrl = $this->callbackUrlOf($payment);
+        $payment->setMethod(null);
+        $this->entityManager()->flush();
+        $transitions = $this->recordPaymentTransitions();
+        $logger = $this->recordPayumNotifyControllerLog();
+
+        $response = self::$kernel->handle(self::sentTo($callbackUrl, self::quickpayCallback(501)));
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([[
+            LogLevel::WARNING,
+            sprintf('The callback of Quickpay payment 501 was not reconciled: its Sylius payment %d is no longer paid with a Quickpay gateway but with the payment method "". Retrying can\'t help; handle any money Quickpay holds for it in the Quickpay manager.', (int) $payment->getId()),
+            ['paymentId' => $payment->getId(), 'paymentMethod' => null, 'quickpayPaymentId' => 501],
+        ]], $logger->records);
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame([], $transitions->getArrayCopy());
+        self::assertSame(PaymentInterface::STATE_NEW, $this->reload($payment)->getState());
+    }
+
+    /**
+     * Records what the controller behind the payment's callback url logs from now on
+     */
+    private function recordPayumNotifyControllerLog(): RecordingLogger
+    {
+        $logger = new RecordingLogger();
+
+        $controller = self::getContainer()->get(PayumNotifyController::class);
+        self::assertInstanceOf(PayumNotifyController::class, $controller);
+        $controller->setLogger($logger);
+
+        return $logger;
+    }
+
+    /**
      * Delivers Quickpay's callback about the payment to one of the callback endpoints: to the payment's callback url,
      * the one given (as Quickpay retries a callback on the url it was given) or else a newly minted one
      */
