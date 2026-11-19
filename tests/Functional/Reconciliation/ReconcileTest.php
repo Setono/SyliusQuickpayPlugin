@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Reconciliation;
 use Doctrine\Persistence\ManagerRegistry;
 use Nyholm\Psr7\Response;
 use Payum\Core\Exception\InvalidArgumentException;
-use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Setono\Quickpay\Exception\QuickpayException;
@@ -16,6 +15,7 @@ use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconciler;
 use Setono\SyliusQuickpayPlugin\Reconciliation\ReconcileOutcome;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Abstraction\StateMachine\StateMachineInterface;
 use Sylius\Component\Core\Inventory\Exception\NotEnoughUnitsOnHoldException;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -44,9 +44,13 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
         $transitions = $this->recordPaymentTransitions();
+        $connection = $this->entityManager()->getConnection();
+        $transactionNestingLevel = $connection->getTransactionNestingLevel();
 
         $result = $this->reconciler()->reconcile($payment);
 
+        // Committed: no transaction is left open for the process to roll back when it ends
+        self::assertSame($transactionNestingLevel, $connection->getTransactionNestingLevel());
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame(PaymentInterface::STATE_AUTHORIZED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
@@ -203,6 +207,8 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateBefore);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $result->stateAfter);
         self::assertSame([], $transitions->getArrayCopy());
+        // ...its order's change too, which a transition's callbacks read and change
+        self::assertSame(OrderPaymentStates::STATE_PAID, $payment->getOrder()?->getPaymentState());
 
         $payment = $this->reload($payment);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $payment->getState());
@@ -288,33 +294,30 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
 
-        // A store that cannot be reached, e.g. a Redis server that is down
-        $unavailableStore = new class() implements PersistingStoreInterface {
-            public function save(Key $key): void
-            {
-                throw new \RuntimeException('The lock store is unavailable');
-            }
-
-            public function delete(Key $key): void
-            {
-                throw new \RuntimeException('The lock store is unavailable');
-            }
-
-            public function exists(Key $key): bool
-            {
-                throw new \RuntimeException('The lock store is unavailable');
-            }
-
-            public function putOffExpiration(Key $key, float $ttl): void
-            {
-                throw new \RuntimeException('The lock store is unavailable');
-            }
-        };
-
-        $result = $this->reconcilerWithLockStore($unavailableStore)->reconcile($payment);
+        $result = $this->reconcilerWithLockStore(self::unavailableStore())->reconcile($payment);
 
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
         self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+    }
+
+    /**
+     * @test
+     */
+    public function a_broken_lock_store_is_logged_with_the_quickpay_payment_id(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $logger = new RecordingLogger();
+
+        $this->reconcilerWithLockStore(self::unavailableStore(), $logger)->reconcile($payment);
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertStringStartsWith('Could not use the lock store, reconciling the payment unguarded: ', $message);
+        self::assertSame(['quickpayPaymentId' => 501], $context);
     }
 
     /**
@@ -327,51 +330,9 @@ final class ReconcileTest extends FunctionalTestCase
         $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
         $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
 
-        // A store that takes the lock, then becomes unreachable before the lock is released
-        $storeLostOnRelease = new class() implements PersistingStoreInterface {
-            private readonly InMemoryStore $store;
+        $logger = new RecordingLogger();
 
-            public function __construct()
-            {
-                $this->store = new InMemoryStore();
-            }
-
-            public function save(Key $key): void
-            {
-                $this->store->save($key);
-            }
-
-            public function delete(Key $key): void
-            {
-                throw new \RuntimeException('The lock store is unavailable');
-            }
-
-            public function exists(Key $key): bool
-            {
-                return $this->store->exists($key);
-            }
-
-            public function putOffExpiration(Key $key, float $ttl): void
-            {
-                $this->store->putOffExpiration($key, $ttl);
-            }
-        };
-        $logger = new class() extends AbstractLogger {
-            /** @var list<array{mixed, string, array<array-key, mixed>}> */
-            public array $records = [];
-
-            /**
-             * @param mixed $level
-             * @param string|\Stringable $message
-             * @param array<array-key, mixed> $context
-             */
-            public function log($level, $message, array $context = []): void
-            {
-                $this->records[] = [$level, (string) $message, $context];
-            }
-        };
-
-        $result = $this->reconcilerWithLockStore($storeLostOnRelease, $logger)->reconcile($payment);
+        $result = $this->reconcilerWithLockStore(self::storeLostOnRelease(), $logger)->reconcile($payment);
 
         // The payment was reconciled, and is reported so: the lock just expires with its TTL
         self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
@@ -383,6 +344,47 @@ final class ReconcileTest extends FunctionalTestCase
         self::assertSame(LogLevel::WARNING, $level);
         self::assertStringStartsWith('Could not release the payment\'s lock', $message);
         self::assertSame(['quickpayPaymentId' => 501], $context);
+    }
+
+    /**
+     * @test
+     */
+    public function a_lock_that_cannot_be_released_does_not_fail_the_reconcile_without_a_logger_either(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+
+        $result = $this->reconcilerWithLockStore(self::storeLostOnRelease())->reconcile($payment);
+
+        self::assertSame(ReconcileOutcome::Transitioned, $result->outcome);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+    }
+
+    /**
+     * The reconcile command reads its payments ahead, and lets go of them a page at a time: one may be deleted, say
+     * with its order, before it is reconciled
+     *
+     * @test
+     */
+    public function a_payment_that_no_longer_exists_is_refused_with_an_error_saying_so_and_leaves_the_lock_free(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->entityManager()->clear();
+        $this->entityManager()->getConnection()->executeStatement('DELETE FROM sylius_payment WHERE id = ?', [$payment->getId()]);
+
+        try {
+            $this->reconciler()->reconcile($payment);
+            self::fail('A payment that no longer exists was reconciled');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame('The payment to reconcile no longer exists', $e->getMessage());
+        }
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+        $this->holdLockOf(501);
     }
 
     /**
@@ -435,6 +437,69 @@ final class ReconcileTest extends FunctionalTestCase
                 yield sprintf('%s, %s', $case, $operation) => [$case, $operation];
             }
         }
+    }
+
+    /**
+     * A lock store that cannot be reached, e.g. a Redis server that is down
+     */
+    private static function unavailableStore(): PersistingStoreInterface
+    {
+        return new class() implements PersistingStoreInterface {
+            public function save(Key $key): void
+            {
+                throw new \RuntimeException('The lock store is unavailable');
+            }
+
+            public function delete(Key $key): void
+            {
+                throw new \RuntimeException('The lock store is unavailable');
+            }
+
+            public function exists(Key $key): bool
+            {
+                throw new \RuntimeException('The lock store is unavailable');
+            }
+
+            public function putOffExpiration(Key $key, float $ttl): void
+            {
+                throw new \RuntimeException('The lock store is unavailable');
+            }
+        };
+    }
+
+    /**
+     * A lock store that takes the lock, then becomes unreachable before the lock is released
+     */
+    private static function storeLostOnRelease(): PersistingStoreInterface
+    {
+        return new class() implements PersistingStoreInterface {
+            private readonly InMemoryStore $store;
+
+            public function __construct()
+            {
+                $this->store = new InMemoryStore();
+            }
+
+            public function save(Key $key): void
+            {
+                $this->store->save($key);
+            }
+
+            public function delete(Key $key): void
+            {
+                throw new \RuntimeException('The lock store is unavailable');
+            }
+
+            public function exists(Key $key): bool
+            {
+                return $this->store->exists($key);
+            }
+
+            public function putOffExpiration(Key $key, float $ttl): void
+            {
+                $this->store->putOffExpiration($key, $ttl);
+            }
+        };
     }
 
     /**
