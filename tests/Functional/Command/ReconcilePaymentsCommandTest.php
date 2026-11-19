@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Command;
 use Nyholm\Psr7\Response;
 use Setono\SyliusQuickpayPlugin\Tests\Cache\RefusingArrayAdapter;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
+use SM\Event\SMEvents;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -14,6 +15,7 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Cache\Adapter\TraceableAdapter;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 final class ReconcilePaymentsCommandTest extends FunctionalTestCase
 {
@@ -259,6 +261,29 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     /**
      * @test
      */
+    public function a_dry_run_reports_every_payment_of_the_run(): void
+    {
+        self::bootKernel();
+
+        $authorized = [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED];
+        $transitioning = $this->createSyliusPayment(...$authorized, quickpayPaymentId: 501, orderNumber: '000000001');
+        $unchanged = $this->createSyliusPayment(...$authorized, quickpayPaymentId: 502, orderNumber: '000000002');
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, 502));
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $this->quickpay()->respond('GET', '/payments/502', self::quickpayPayment(502, 'new', ['authorize'], balance: 0));
+
+        $tester = $this->executeCommand(['--dry-run' => true]);
+
+        $tester->assertCommandIsSuccessful();
+        $display = $tester->getDisplay();
+        self::assertStringContainsString(sprintf('Payment %s: "authorized", would apply "complete" (Quickpay → "completed")', (string) $transitioning->getId()), $display);
+        self::assertStringContainsString(sprintf('Payment %s: "authorized", no transition (Quickpay → "authorized")', (string) $unchanged->getId()), $display);
+        self::assertStringContainsString('[OK] 2 checked, 1 transitioned (dry run), 1 unchanged, 0 skipped, 0 errored', $display);
+    }
+
+    /**
+     * @test
+     */
     public function it_reconciles_a_stuck_payment_quickpay_changed_and_asks_nothing_about_one_quickpay_did_not_change(): void
     {
         self::bootKernel();
@@ -336,6 +361,40 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * The callback reconciling a skipped payment may fail to, so the next run makes sure
+     *
+     * @test
+     */
+    public function a_skipped_payment_is_retried_on_the_next_run(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $callback = $this->holdLockOf(501);
+
+        $tester = $this->executeCommand([]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString(sprintf('Payment %s: skipped, a callback is reconciling it', (string) $payment->getId()), $tester->getDisplay());
+        self::assertStringContainsString('[OK] 1 checked, 0 transitioned, 0 unchanged, 1 skipped, 0 errored', $tester->getDisplay());
+
+        // The callback ended without reconciling it, and Quickpay changed nothing since
+        $callback->release();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+
+        $tester = $this->executeCommand([]);
+
+        $tester->assertCommandIsSuccessful();
+        $display = self::normalized($tester->getDisplay());
+        self::assertStringContainsString('1 payment(s) to retry', $display);
+        self::assertStringContainsString(sprintf('Payment %s: "authorized" -> "completed" (Quickpay → "completed")', (string) $payment->getId()), $display);
+        self::assertStringContainsString('[OK] 1 checked, 1 transitioned, 0 unchanged, 0 skipped, 0 errored', $display);
+        self::assertSame(PaymentInterface::STATE_COMPLETED, $this->reload($payment)->getState());
+    }
+
+    /**
      * @test
      */
     public function each_run_says_which_payments_quickpay_changed_it_looks_at(): void
@@ -363,6 +422,30 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         self::assertContains(self::windowLineIn($tester), [
             sprintf('Gateway(s) "quickpay": the payments Quickpay changed since %s (since the last run)', $before->modify('-5 minutes')->format('Y-m-d H:i')),
             sprintf('Gateway(s) "quickpay": the payments Quickpay changed since %s (since the last run)', $after->modify('-5 minutes')->format('Y-m-d H:i')),
+        ]);
+    }
+
+    /**
+     * `--since` is a period back from now, so a sign in front of it is the same period
+     *
+     * @test
+     */
+    public function a_since_period_given_with_a_sign_looks_back_that_period(): void
+    {
+        self::bootKernel();
+
+        $this->quickpayPaymentMethod();
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+
+        $before = new \DateTimeImmutable();
+        $tester = $this->executeCommand(['--since' => '-12 hours']);
+        $after = new \DateTimeImmutable();
+
+        $tester->assertCommandIsSuccessful();
+        self::assertContains(self::windowLineIn($tester), [
+            sprintf('Gateway(s) "quickpay": the payments Quickpay changed since %s (no earlier run: the last 12 hours)', $before->modify('-12 hours')->format('Y-m-d H:i')),
+            sprintf('Gateway(s) "quickpay": the payments Quickpay changed since %s (no earlier run: the last 12 hours)', $after->modify('-12 hours')->format('Y-m-d H:i')),
         ]);
     }
 
@@ -541,6 +624,44 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * An error the run can't put down to one payment, say a bug in a state-machine callback, ends the run: it stores
+     * nothing, and the run after it isn't skipped
+     *
+     * @test
+     */
+    public function a_run_ending_on_an_error_stores_nothing_and_releases_the_run_lock(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, quickpayPaymentId: 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'processed', ['authorize', 'capture'], balance: 10_000));
+        $eventDispatcher = self::getContainer()->get('event_dispatcher');
+        self::assertInstanceOf(EventDispatcherInterface::class, $eventDispatcher);
+        $eventDispatcher->addListener(SMEvents::POST_TRANSITION, static function (): void {
+            throw new \Error('A bug in a state-machine callback');
+        });
+
+        try {
+            $this->executeCommand([]);
+            self::fail('The run did not end on the error');
+        } catch (\Error $e) {
+            self::assertSame('A bug in a state-machine callback', $e->getMessage());
+        }
+
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $this->reload($payment)->getState());
+
+        // The next run is not skipped, and starts as if there had been no earlier run
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+
+        $tester = $this->executeCommand([]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('(no earlier run: the last 7 days)', self::windowLineIn($tester));
+        self::assertStringNotContainsString('to retry', $tester->getDisplay());
+    }
+
+    /**
      * A dry run and the fraud report change nothing, so a run reconciling payments never blocks them
      *
      * @test
@@ -598,6 +719,24 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
         self::assertSame(Command::INVALID, $tester->getStatusCode());
         self::assertStringContainsString('--full only applies to reconciling', self::normalized($tester->getDisplay()));
         self::assertSame([], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * @test
+     */
+    public function the_fraud_report_asks_quickpay_for_the_payments_it_flags_as_fraud_suspected(): void
+    {
+        self::bootKernel();
+
+        $this->quickpayPaymentMethod();
+        $this->entityManager()->flush();
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $this->executeCommand(['--fraud-suspected' => true])->assertCommandIsSuccessful();
+
+        $query = $this->quickpay()->sentRequestOptions()[0]['query'] ?? null;
+        self::assertIsArray($query);
+        self::assertSame('true', $query['fraud_suspected'] ?? null);
     }
 
     /**

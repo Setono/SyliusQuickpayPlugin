@@ -1,0 +1,6 @@
+# Each of Infection's parallel test processes (its TEST_TOKEN, 1 to the thread count) gets a test database of its own,
+# setono_sylius_quickpay_test1, _test2, ..., so their functional tests never share data or wait on each other's locks.
+# Without a token, the test database itself
+doctrine:
+    dbal:
+        dbname_suffix: '%env(string:default::TEST_TOKEN)%'

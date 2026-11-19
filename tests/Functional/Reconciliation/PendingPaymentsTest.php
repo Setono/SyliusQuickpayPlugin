@@ -153,6 +153,30 @@ final class PendingPaymentsTest extends FunctionalTestCase
     }
 
     /**
+     * Memory stays flat however many pending payments there are: the payments of a page are let go when the next page
+     * is read, and the reconciler loads a payment the entity manager no longer manages afresh
+     *
+     * @test
+     */
+    public function it_lets_go_of_the_payments_of_a_page_when_it_reads_the_next(): void
+    {
+        $this->payment(PaymentInterface::STATE_NEW, 501);
+        $this->payment(PaymentInterface::STATE_NEW, 502);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501, 502));
+
+        $yielded = [];
+        foreach ($this->start(pageSize: 1) as $payment) {
+            $yielded[] = $payment;
+            self::assertTrue($this->entityManager()->contains($payment));
+            if (2 === \count($yielded)) {
+                self::assertFalse($this->entityManager()->contains($yielded[0]));
+            }
+        }
+
+        self::assertCount(2, $yielded);
+    }
+
+    /**
      * Reconciling a payment moves it on: a stuck payment that becomes authorized is not yielded again
      *
      * @test
@@ -308,6 +332,21 @@ final class PendingPaymentsTest extends FunctionalTestCase
     /**
      * @test
      */
+    public function a_watermark_at_the_lookback_itself_is_not_older_than_it(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+        $this->finishedRun();
+        $watermark = $this->start(dryRun: true)->windows()[0]->changedSince;
+
+        $run = $this->start($watermark, dryRun: true);
+
+        self::assertEquals([new AccountWindow(['quickpay'], $watermark, WindowReason::SinceLastRun)], $run->windows());
+    }
+
+    /**
+     * @test
+     */
     public function a_full_run_lists_the_changes_since_the_lookback_whatever_the_watermark(): void
     {
         $this->storeQuickpayGateway();
@@ -402,6 +441,55 @@ final class PendingPaymentsTest extends FunctionalTestCase
         $stored = $this->cache()->getValues();
         self::assertNotEmpty($stored);
         self::assertStringNotContainsString('the-api-key', serialize($stored));
+
+        // An account's watermark is kept under the first 32 hex digits of its api key's sha256
+        $watermarks = $this->storedState()['watermarks'] ?? null;
+        self::assertIsArray($watermarks);
+        self::assertSame(['8d50189b762a2ceb6ce62f175bdeed3b'], array_keys($watermarks));
+    }
+
+    /**
+     * A watermark or a payment to retry the run can't read, say one another version of the plugin stored, is none
+     *
+     * @test
+     */
+    public function a_stored_watermark_or_payment_to_retry_it_cannot_read_is_none(): void
+    {
+        $payment = $this->payment(PaymentInterface::STATE_NEW, 501);
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->runRetrying($payment);
+        $item = $this->cache()->getItem('run_state');
+        $state = $item->get();
+        self::assertIsArray($state);
+        self::assertIsArray($state['watermarks'] ?? null);
+        self::assertIsArray($state['retry_list'] ?? null);
+        $state['watermarks'] = array_map(static fn (): string => '2026-11-16 10:00:00', $state['watermarks']);
+        $state['retry_list'] = array_map(static fn (): string => '2026-11-16 10:00:00', $state['retry_list']);
+        $this->cache()->save($item->set($state));
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+
+        $run = $this->start();
+
+        self::assertSame(WindowReason::NoEarlierRun, $run->windows()[0]->reason);
+        self::assertSame(0, $run->retryListSize());
+        self::assertSame([], self::idsOf($run));
+    }
+
+    /**
+     * PHP turns an api key of digits only into an integer array key; it is an account like any other
+     *
+     * @test
+     */
+    public function an_api_key_of_digits_only_is_listed_like_any_other(): void
+    {
+        $payment = $this->payment(PaymentInterface::STATE_NEW, 501, method: $this->createPaymentMethod('quickpay_digits', self::config('1234567890')));
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments(501));
+        $this->finishedRun();
+
+        $run = $this->start(dryRun: true);
+
+        self::assertSame(WindowReason::SinceLastRun, self::windowsByGateway($run)['quickpay_digits']->reason);
+        self::assertSame([$payment->getId()], self::idsOf($run));
     }
 
     /**
@@ -576,7 +664,8 @@ final class PendingPaymentsTest extends FunctionalTestCase
         try {
             $this->start();
             self::fail('The run started');
-        } catch (AnotherRunIsReconciling) {
+        } catch (AnotherRunIsReconciling $e) {
+            self::assertSame('Another run is reconciling payments.', $e->getMessage());
         }
 
         self::assertSame([], $this->quickpay()->sentRequests());
@@ -627,6 +716,8 @@ final class PendingPaymentsTest extends FunctionalTestCase
         }
 
         $run->release();
+        // ...nor does finishing it after that
+        self::assertTrue($run->finish());
 
         $this->holdRunLock()->release();
         $run = $this->start();
@@ -688,6 +779,26 @@ final class PendingPaymentsTest extends FunctionalTestCase
         self::assertSame(['exception'], array_keys($context));
         self::assertInstanceOf(LockReleasingException::class, $context['exception']);
         self::assertSame('The lock store is unavailable', $context['exception']->getMessage());
+    }
+
+    /**
+     * @test
+     */
+    public function a_run_whose_run_lock_cannot_be_released_finishes_without_a_logger_too(): void
+    {
+        $this->storeQuickpayGateway();
+        $this->quickpay()->respond('GET', '/payments', self::changedQuickpayPayments());
+        $pendingPayments = $this->pendingPayments(lockFactory: new LockFactory(new class() extends InMemoryStore {
+            public function delete(Key $key): void
+            {
+                throw new LockReleasingException('The lock store is unavailable');
+            }
+        }));
+
+        $run = $pendingPayments->start(new \DateTimeImmutable('-7 days'), false, false);
+        self::idsOf($run);
+
+        self::assertTrue($run->finish());
     }
 
     /**
@@ -841,6 +952,19 @@ final class PendingPaymentsTest extends FunctionalTestCase
         self::assertInstanceOf(ArrayAdapter::class, $cache);
 
         return $cache;
+    }
+
+    /**
+     * What the runs so far stored for the next run to start from, read from the cache pool
+     *
+     * @return array<array-key, mixed>
+     */
+    private function storedState(): array
+    {
+        $state = $this->cache()->getItem('run_state')->get();
+        self::assertIsArray($state);
+
+        return $state;
     }
 
     /**

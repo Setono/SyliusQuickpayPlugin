@@ -25,7 +25,7 @@ final class QuickpayHoldsCapturedMoney extends \RuntimeException
 
         parent::__construct(sprintf(
             'The Sylius payment %s can\'t be cancelled: Quickpay holds the captured money of its Quickpay payment %d. Reconcile the payment (the setono:sylius-quickpay:reconcile-payments command), so it is completed in Sylius, then refund it',
-            is_scalar($paymentId) ? (string) $paymentId : '(not saved)',
+            is_scalar($paymentId) ? $paymentId : '(not saved)',
             $quickpayPaymentId,
         ));
     }

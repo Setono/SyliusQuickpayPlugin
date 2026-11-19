@@ -63,4 +63,35 @@ final class PaymentLinkEmailManagerTest extends TestCase
 
         (new PaymentLinkEmailManager($sender->reveal()))->sendPaymentLinkEmail($payment, 'https://shop.example/da_DK/order/tok3n/pay');
     }
+
+    /**
+     * @test
+     *
+     * @dataProvider provideMissingEmails
+     */
+    public function it_refuses_to_send_when_the_customer_has_no_email(?string $email): void
+    {
+        $customer = new Customer();
+        $customer->setEmail($email);
+        $order = new Order();
+        $order->setCustomer($customer);
+        $payment = new Payment();
+        $order->addPayment($payment);
+
+        $sender = $this->prophesize(SenderInterface::class);
+        $sender->send(Argument::cetera())->shouldNotBeCalled();
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        (new PaymentLinkEmailManager($sender->reveal()))->sendPaymentLinkEmail($payment, 'https://shop.example/da_DK/order/tok3n/pay');
+    }
+
+    /**
+     * @return iterable<string, array{?string}>
+     */
+    public static function provideMissingEmails(): iterable
+    {
+        yield 'no email' => [null];
+        yield 'an empty email' => [''];
+    }
 }

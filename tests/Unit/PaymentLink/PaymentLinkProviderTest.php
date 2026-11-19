@@ -60,6 +60,16 @@ final class PaymentLinkProviderTest extends TestCase
     /**
      * @test
      */
+    public function it_falls_back_to_the_current_host_when_the_order_has_no_channel(): void
+    {
+        [$payment] = $this->createOrderWithPayment(inChannel: false);
+
+        self::assertSame('http://localhost/da_DK/order/tok3n/pay', $this->createProvider()->provide($payment));
+    }
+
+    /**
+     * @test
+     */
     public function it_provides_nothing_when_the_payment_cannot_be_paid_through_the_link(): void
     {
         $provider = $this->createProvider();
@@ -114,6 +124,7 @@ final class PaymentLinkProviderTest extends TestCase
         string $orderState = OrderInterface::STATE_NEW,
         ?string $tokenValue = 'tok3n',
         ?string $hostname = 'shop.example',
+        bool $inChannel = true,
     ): array {
         $method = new PaymentMethod();
         $method->setCode($factoryName);
@@ -127,7 +138,9 @@ final class PaymentLinkProviderTest extends TestCase
         $order->setState($orderState);
         $order->setTokenValue($tokenValue);
         $order->setLocaleCode('da_DK');
-        $order->setChannel($channel);
+        if ($inChannel) {
+            $order->setChannel($channel);
+        }
 
         $payment = $this->createPayment($method, $paymentState);
         $order->addPayment($payment);

@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Unit\DependencyInjection;
 
 use Matthias\SymfonyDependencyInjectionTest\PhpUnit\AbstractExtensionTestCase;
 use Setono\SyliusQuickpayPlugin\DependencyInjection\SetonoSyliusQuickpayExtension;
+use Sylius\Bundle\PayumBundle\DependencyInjection\Configuration as SyliusPayumConfiguration;
 use Symfony\Bundle\FrameworkBundle\DependencyInjection\Configuration as FrameworkConfiguration;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -175,6 +176,74 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
     }
 
     /**
+     * Where the reconcile command keeps its watermarks and retry list: on the application's cache unless the
+     * application points it at another adapter
+     *
+     * @test
+     */
+    public function it_prepends_the_cache_pool_of_the_reconcile_command(): void
+    {
+        self::assertSame(['cache.app'], self::reconcileCachePoolWithPrepended()['adapters'] ?? null);
+    }
+
+    /**
+     * @test
+     */
+    public function an_applications_framework_config_points_the_cache_pool_of_the_reconcile_command_at_another_adapter(): void
+    {
+        $pool = self::reconcileCachePoolWithPrepended([
+            'cache' => [
+                'pools' => [
+                    'setono_sylius_quickpay.reconcile' => ['adapter' => 'cache.adapter.redis'],
+                ],
+            ],
+        ]);
+
+        self::assertSame(['cache.adapter.redis'], $pool['adapters'] ?? null);
+    }
+
+    /**
+     * Sylius validates a Quickpay payment method's gateway config in the plugin's group too, where the plugin's save
+     * validation is
+     *
+     * @test
+     */
+    public function it_prepends_the_validation_groups_of_a_quickpay_gateway_config(): void
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class() extends Extension {
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return 'sylius_payum';
+            }
+        });
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        $config = (new Processor())->processConfiguration(new SyliusPayumConfiguration(), $container->getExtensionConfig('sylius_payum'));
+
+        $gatewayConfig = $config['gateway_config'] ?? null;
+        self::assertIsArray($gatewayConfig);
+        self::assertSame(['quickpay' => ['sylius', 'sylius_quickpay']], $gatewayConfig['validation_groups'] ?? null);
+    }
+
+    /**
+     * @test
+     */
+    public function it_does_not_prepend_the_validation_groups_when_the_sylius_payum_extension_is_not_registered(): void
+    {
+        $container = new ContainerBuilder();
+
+        (new SetonoSyliusQuickpayExtension())->prepend($container);
+
+        self::assertSame([], $container->getExtensionConfig('sylius_payum'));
+    }
+
+    /**
      * @test
      */
     public function it_prepends_the_payment_link_email(): void
@@ -306,6 +375,45 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
      */
     private static function scopedHttpClientWithPrepended(array ...$applicationConfigs): array
     {
+        $httpClients = self::frameworkConfigWithPrepended(...$applicationConfigs)['http_client'] ?? null;
+        self::assertIsArray($httpClients);
+        $scopedClients = $httpClients['scoped_clients'] ?? null;
+        self::assertIsArray($scopedClients);
+        $httpClient = $scopedClients['setono_sylius_quickpay.http_client'] ?? null;
+        self::assertIsArray($httpClient);
+
+        return $httpClient;
+    }
+
+    /**
+     * The cache pool `setono_sylius_quickpay.reconcile` as FrameworkBundle reads the framework config: the config the
+     * plugin prepends, then the application's own
+     *
+     * @param array<string, mixed> ...$applicationConfigs
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function reconcileCachePoolWithPrepended(array ...$applicationConfigs): array
+    {
+        $cache = self::frameworkConfigWithPrepended(...$applicationConfigs)['cache'] ?? null;
+        self::assertIsArray($cache);
+        $pools = $cache['pools'] ?? null;
+        self::assertIsArray($pools);
+        $pool = $pools['setono_sylius_quickpay.reconcile'] ?? null;
+        self::assertIsArray($pool);
+
+        return $pool;
+    }
+
+    /**
+     * The framework config as FrameworkBundle reads it: the config the plugin prepends, then the application's own
+     *
+     * @param array<string, mixed> ...$applicationConfigs
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function frameworkConfigWithPrepended(array ...$applicationConfigs): array
+    {
         $container = new ContainerBuilder();
         $container->registerExtension(new class() extends Extension {
             public function load(array $configs, ContainerBuilder $container): void
@@ -320,18 +428,9 @@ final class SetonoSyliusQuickpayExtensionTest extends AbstractExtensionTestCase
 
         (new SetonoSyliusQuickpayExtension())->prepend($container);
 
-        $config = (new Processor())->processConfiguration(
+        return (new Processor())->processConfiguration(
             new FrameworkConfiguration(false),
             [...$container->getExtensionConfig('framework'), ...$applicationConfigs],
         );
-
-        $httpClients = $config['http_client'] ?? null;
-        self::assertIsArray($httpClients);
-        $scopedClients = $httpClients['scoped_clients'] ?? null;
-        self::assertIsArray($scopedClients);
-        $httpClient = $scopedClients['setono_sylius_quickpay.http_client'] ?? null;
-        self::assertIsArray($httpClient);
-
-        return $httpClient;
     }
 }

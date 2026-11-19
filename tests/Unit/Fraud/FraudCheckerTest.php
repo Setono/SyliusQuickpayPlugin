@@ -92,6 +92,18 @@ final class FraudCheckerTest extends TestCase
     }
 
     /**
+     * The checker's logger is optional, as the plugin wires it: without one it still fails open
+     *
+     * @test
+     */
+    public function it_fails_open_without_a_logger_when_the_quickpay_payment_cannot_be_read(): void
+    {
+        $checker = $this->createChecker(new InternalServerErrorException(new Response(500, [], '{"message": "boom"}')));
+
+        self::assertFalse($checker->isFraudSuspected(self::createPayment()));
+    }
+
+    /**
      * @return iterable<string, array{\Throwable}>
      */
     public static function unreadableQuickpayPayments(): iterable

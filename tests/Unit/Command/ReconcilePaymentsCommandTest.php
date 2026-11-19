@@ -95,9 +95,11 @@ final class ReconcilePaymentsCommandTest extends TestCase
         $tester = $this->executeCommand(['--fraud-suspected' => true]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
-        self::assertStringContainsString('qp_000000123', $tester->getDisplay());
-        self::assertStringContainsString('1 payment(s) flagged as fraud suspected', $tester->getDisplay());
-        self::assertStringNotContainsString('stopped at the limit', $tester->getDisplay());
+        $display = self::normalized($tester->getDisplay());
+        self::assertStringContainsString('Gateway Quickpay id Order id State Created Test mode', $display);
+        self::assertStringContainsString('quickpay_credit_card 501 qp_000000123 new 2026-11-16 10:00:00 yes', $display);
+        self::assertStringContainsString('1 payment(s) flagged as fraud suspected', $display);
+        self::assertStringNotContainsString('stopped at the limit', $display);
     }
 
     /**
@@ -200,6 +202,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
                 'merchant_id' => 1,
                 'test_mode' => true,
                 'metadata' => ['fraud_suspected' => true],
+                'created_at' => '2026-11-16T10:00:00+00:00',
             ];
         }
 

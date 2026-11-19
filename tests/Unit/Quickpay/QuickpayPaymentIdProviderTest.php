@@ -65,9 +65,26 @@ final class QuickpayPaymentIdProviderTest extends TestCase
         self::assertNull($provider->tryIdOf($payment));
 
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('has no Quickpay payment yet');
+        $this->expectExceptionMessage('The Sylius payment (not saved yet) has no Quickpay payment yet: its details carry no Quickpay payment id.');
 
         $provider->idOf($payment);
+    }
+
+    /**
+     * Once saved, the Sylius payment is named by its id, so whoever reads the error can find it
+     *
+     * @test
+     */
+    public function it_names_a_saved_sylius_payment_by_its_id_when_it_has_no_quickpay_payment_yet(): void
+    {
+        $payment = $this->prophesize(PaymentInterface::class);
+        $payment->getId()->willReturn(7);
+        $payment->getDetails()->willReturn([]);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('The Sylius payment 7 has no Quickpay payment yet: its details carry no Quickpay payment id.');
+
+        $this->provider(quickpayGateway: true)->idOf($payment->reveal());
     }
 
     /**
@@ -136,7 +153,7 @@ final class QuickpayPaymentIdProviderTest extends TestCase
         self::assertNull($provider->tryIdOf($payment));
 
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('its payment method has no Quickpay gateway configuration');
+        $this->expectExceptionMessage('The Sylius payment (not saved yet) has no Quickpay payment: its payment method has no Quickpay gateway configuration.');
 
         $provider->idOf($payment);
     }
