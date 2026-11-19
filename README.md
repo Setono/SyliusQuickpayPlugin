@@ -4,6 +4,7 @@
 [![Software License][ico-license]](LICENSE)
 [![Build Status][ico-github-actions]][link-github-actions]
 [![Code Coverage][ico-code-coverage]][link-code-coverage]
+[![Mutation testing][ico-infection]][link-infection]
 
 Adds [Quickpay](https://quickpay.net) as a payment gateway to your Sylius store. The plugin integrates the
 [`setono/payum-quickpay`](https://github.com/Setono/payum-quickpay) Payum gateway into Sylius' checkout,
@@ -716,7 +717,9 @@ Run [the doctor](#checking-your-configuration) first — it detects every config
 [ico-license]: https://poser.pugx.org/setono/sylius-quickpay-plugin/license
 [ico-github-actions]: https://github.com/Setono/SyliusQuickpayPlugin/actions/workflows/build.yaml/badge.svg?branch=2.x
 [ico-code-coverage]: https://codecov.io/gh/Setono/SyliusQuickpayPlugin/branch/2.x/graph/badge.svg
+[ico-infection]: https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FSetono%2FSyliusQuickpayPlugin%2F2.x
 
 [link-packagist]: https://packagist.org/packages/setono/sylius-quickpay-plugin
 [link-github-actions]: https://github.com/Setono/SyliusQuickpayPlugin/actions
 [link-code-coverage]: https://codecov.io/gh/Setono/SyliusQuickpayPlugin
+[link-infection]: https://dashboard.stryker-mutator.io/reports/github.com/Setono/SyliusQuickpayPlugin/2.x
