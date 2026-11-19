@@ -51,12 +51,28 @@ CI (`.github/workflows/build.yaml`) is the bar a change must pass — jobs: codi
 `vendor/bin/rector process --dry-run`, `lint:yaml`, `lint:twig`), dependency-analysis (composer-dependency-analyser),
 static-code-analysis (`composer analyse`), unit-tests (the unit suite), integration-tests
 (`lint:container`, `doctrine:schema:create`, `doctrine:schema:validate -vvv`, the functional suite), mutation-tests
-(Infection, unit suite only via `testFrameworkOptions` in `infection.json.dist`) and code-coverage (MySQL, both
+(Infection over both suites, MySQL; *Mutation testing* below) and code-coverage (MySQL, both
 suites, Codecov). Matrix: PHP 8.1–8.3 × Symfony `~6.4.0` × deps lowest/highest. A separate
 `backwards-compatibility-check.yaml` runs Roave BC-check on PRs.
 
 PHPStan runs at `level: max` with **no baseline** — the error count is zero and must stay there; fix new
 errors rather than introducing a baseline.
+
+### Mutation testing
+Infection (`infection.json.dist`) mutates `src/` and runs both suites against each mutant, so a module tested only
+functionally counts as covered. Each of its parallel test processes gets Infection's `TEST_TOKEN` (1 to the thread
+count), and the test app gives each token its own test database (Doctrine's `dbname_suffix`:
+`setono_sylius_quickpay_test1`, ...) and kernel cache (`var/cache/test1`, ...); the initial run uses the plain test
+database. Create the databases first, for every thread you run with:
+`(cd tests/Application && for t in 1 2 3 4; do TEST_TOKEN=$t bin/console doctrine:database:create --env=test && TEST_TOKEN=$t bin/console doctrine:schema:create --env=test; done)`,
+then `vendor/bin/infection --threads=4`. CI does the same for `--threads=max`. The score goes to the Stryker dashboard
+for `2.x` (the README badge). It is about 94%, and CI fails below 90% (`minMsi`, `minCoveredMsi`): a change comes with
+tests that kill its mutants, and an escaped one that can't be killed (an equivalent mutant) is left, not hidden with
+an ignore. A mutant may run 60 seconds (`timeout`): a timeout counts as detected, so a slow
+functional run must not end in one. On PHP 8.4, API Platform's deprecations on stderr make Infection abort its
+initial run; run it on PHP 8.3, like CI, or with `error_reporting` excluding `E_DEPRECATED` and `log_errors` off in
+an ini file on `PHP_INI_SCAN_DIR`. An errored mutant also counts as detected: if a run reports errors, read why
+(`--log-verbosity=all`) before trusting the score; a broken test bootstrap once made every mutant error.
 
 ## Test application
 
