@@ -70,6 +70,10 @@ final class GatewayChecksTest extends TestCase
         self::assertNull($verdict->reason);
         self::assertSame('checked through /payments: the api user lacks the /ping permission, which is harmless', $verdict->note);
         self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay->sentRequests());
+        // A one-item read
+        $query = $this->quickpay->sentRequestOptions()[1]['query'] ?? null;
+        self::assertIsArray($query);
+        self::assertSame('1', $query['page_size'] ?? null);
     }
 
     /**
@@ -237,6 +241,26 @@ final class GatewayChecksTest extends TestCase
         self::assertNull($verdict->reason);
         self::assertSame(['POST /payments', 'PUT /payments/999/link', 'DELETE /payments/999/link'], $this->quickpay->sentRequests());
         self::assertSame(sprintf('test payment 999 with order id "%s" remains on the account — it never carries money', $this->sentTestOrderId()), $verdict->note);
+    }
+
+    /**
+     * A link needs an amount: 1.00 DKK, which nobody ever pays
+     *
+     * @test
+     */
+    public function it_puts_a_link_of_one_krone_on_the_test_payment(): void
+    {
+        $this->quickpay->respond('POST', '/payments', self::json(201, self::testPayment()));
+        $this->quickpay->respond('PUT', '/payments/999/link', self::json(200, ['url' => 'https://payment.quickpay.net/payments/the-link']));
+        $this->quickpay->respond('DELETE', '/payments/999/link', new Response(204));
+
+        $this->checks()->paymentLinkPermission(GatewayConfigurations::of([...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_']));
+
+        $body = $this->quickpay->sentRequestOptions()[1]['body'] ?? null;
+        self::assertIsString($body);
+        $link = json_decode($body, true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($link);
+        self::assertSame(100, $link['amount'] ?? null);
     }
 
     /**

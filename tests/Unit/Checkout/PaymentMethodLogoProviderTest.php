@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace Setono\SyliusQuickpayPlugin\Tests\Unit\Checkout;
 
 use PHPUnit\Framework\TestCase;
-use Prophecy\Argument;
 use Prophecy\PhpUnit\ProphecyTrait;
 use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogo;
 use Setono\SyliusQuickpayPlugin\Checkout\PaymentMethodLogoProvider;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\Tests\GatewayConfiguration\GatewayConfigurations;
+use Setono\SyliusQuickpayPlugin\Tests\Log\RecordingLogger;
 use Sylius\Component\Core\Model\PaymentMethod;
 
 final class PaymentMethodLogoProviderTest extends TestCase
@@ -43,6 +44,8 @@ final class PaymentMethodLogoProviderTest extends TestCase
     }
 
     /**
+     * Visa and Mastercard, unless configured otherwise
+     *
      * @test
      */
     public function it_expands_creditcard_to_the_configured_brands(): void
@@ -120,10 +123,27 @@ final class PaymentMethodLogoProviderTest extends TestCase
      */
     public function it_shows_no_logos_and_logs_a_warning_for_an_unusable_gateway_configuration(GatewayConfiguration $gatewayConfiguration): void
     {
-        $logger = $this->prophesize(LoggerInterface::class);
-        $logger->warning(Argument::containingString('"quickpay_credit_card"'), Argument::any())->shouldBeCalledOnce();
+        $logger = new RecordingLogger();
 
-        self::assertSame([], $this->provide($gatewayConfiguration, logger: $logger->reveal()));
+        self::assertSame([], $this->provide($gatewayConfiguration, logger: $logger));
+
+        self::assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        self::assertSame(LogLevel::WARNING, $level);
+        self::assertStringStartsWith('No payment method logos are shown for the Quickpay gateway "quickpay_credit_card": ', $message);
+        self::assertSame(['paymentMethod' => 'quickpay_credit_card'], $context);
+    }
+
+    /**
+     * The logger is optional, and the checkout page keeps working without one
+     *
+     * @test
+     *
+     * @dataProvider unusableGatewayConfigurations
+     */
+    public function it_shows_no_logos_for_an_unusable_gateway_configuration_without_a_logger(GatewayConfiguration $gatewayConfiguration): void
+    {
+        self::assertSame([], $this->provide($gatewayConfiguration));
     }
 
     /**
@@ -145,26 +165,29 @@ final class PaymentMethodLogoProviderTest extends TestCase
     }
 
     /**
-     * The logos for a payment method whose gateway configuration is the given one, or null for a payment
-     * method that isn't a Quickpay one
+     * The logos for the payment method `quickpay_credit_card`, whose gateway configuration is the given one, or null
+     * for a payment method that isn't a Quickpay one
      *
      * @param array<string, string|null> $images
-     * @param list<string> $creditcardBrands
+     * @param list<string>|null $creditcardBrands the brands `creditcard` stands for, or null for the provider's default
      *
      * @return list<PaymentMethodLogo>
      */
     private function provide(
         ?GatewayConfiguration $gatewayConfiguration,
         array $images = [],
-        array $creditcardBrands = ['visa', 'mastercard'],
+        ?array $creditcardBrands = null,
         ?LoggerInterface $logger = null,
     ): array {
         $paymentMethod = new PaymentMethod();
+        $paymentMethod->setCode('quickpay_credit_card');
 
         $gatewayConfigurationProvider = $this->prophesize(GatewayConfigurationProviderInterface::class);
         $gatewayConfigurationProvider->forPaymentMethod($paymentMethod)->willReturn($gatewayConfiguration);
 
-        $provider = new PaymentMethodLogoProvider($gatewayConfigurationProvider->reveal(), $images, $creditcardBrands);
+        $provider = null === $creditcardBrands
+            ? new PaymentMethodLogoProvider($gatewayConfigurationProvider->reveal(), $images)
+            : new PaymentMethodLogoProvider($gatewayConfigurationProvider->reveal(), $images, $creditcardBrands);
         if (null !== $logger) {
             $provider->setLogger($logger);
         }

@@ -6,10 +6,12 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Action;
 
 use Composer\InstalledVersions;
 use Nyholm\Psr7\Response;
+use Payum\Core\Exception\RequestNotSupportedException;
 use Payum\Core\Reply\HttpRedirect;
 use Payum\Core\Request\Capture;
 use Payum\Core\Request\Convert;
 use Payum\Core\Security\TokenInterface;
+use Setono\SyliusQuickpayPlugin\Action\ConvertPaymentAction;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Addressing\Model\ZoneInterface;
 use Sylius\Component\Core\Model\AddressInterface;
@@ -227,6 +229,74 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
     }
 
     /**
+     * Quickpay takes every address field as optional, so an order without a customer still reaches the payment window:
+     * its Quickpay payment is created with addresses without an email
+     *
+     * @test
+     */
+    public function a_sylius_payment_of_an_order_without_a_customer_converts(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createCheckoutPayment(withCustomer: false);
+
+        $this->quickpay()->respond('GET', '/payments', self::json([]));
+        $this->quickpay()->respond('POST', '/payments', self::quickpayPayment(1001, 'initial', [], balance: 0));
+
+        $convert = new Convert($payment, 'array');
+        $this->gatewayOf($payment)->execute($convert);
+
+        self::assertSame(['GET /payments', 'POST /payments'], $this->quickpay()->sentRequests());
+        $invoiceAddress = (array) ($this->sentBody('POST /payments')['invoice_address'] ?? null);
+        self::assertSame('Jane Doe', $invoiceAddress['name'] ?? null);
+        self::assertArrayNotHasKey('email', $invoiceAddress);
+        $result = $convert->getResult();
+        self::assertIsArray($result);
+        self::assertSame(1001, $result['quickpayPaymentId'] ?? null);
+    }
+
+    /**
+     * A customer back at checkout to pay a new Sylius payment again, whose details already carry its Quickpay payment
+     * id: payum-quickpay keeps that Quickpay payment, so nothing is asked of Quickpay
+     *
+     * @test
+     */
+    public function a_sylius_payment_with_a_quickpay_payment_converts_without_asking_quickpay(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, 1001);
+
+        $convert = new Convert($payment, 'array');
+        $this->gatewayOf($payment)->execute($convert);
+
+        self::assertSame([], $this->quickpay()->sentRequests());
+        self::assertSame(
+            ['quickpayPaymentId' => 1001, 'order_id' => 'qp_000000001', 'amount' => 10_000, 'currency' => 'DKK'],
+            $convert->getResult(),
+        );
+    }
+
+    /**
+     * Like every Payum action, it refuses a request it doesn't support when executed with one: a Convert of a Sylius
+     * payment to anything but an array
+     *
+     * @test
+     */
+    public function it_refuses_to_convert_a_sylius_payment_to_anything_but_an_array(): void
+    {
+        self::bootKernel();
+
+        $payment = $this->createCheckoutPayment();
+        $action = self::getContainer()->get(ConvertPaymentAction::class);
+        self::assertInstanceOf(ConvertPaymentAction::class, $action);
+
+        $this->expectException(RequestNotSupportedException::class);
+
+        $action->execute(new Convert($payment, 'json'));
+    }
+
+    /**
      * Runs the capture as Payum's capture controller does, which ends in the redirect to the payment window
      */
     private function capture(TokenInterface $token): HttpRedirect
@@ -251,11 +321,12 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
     /**
      * The new Sylius payment of a checked-out order of 2 mugs at 100.00 and a book at 150.00, with 25 % and 12 % VAT
      * included, shipped for 49.00 with 25 % VAT included, all persisted. The order totals 399.00, and the payment
-     * pays it in full. It is billed to Jane and, unless told otherwise, shipped to John.
+     * pays it in full. It is billed to Jane and, unless told otherwise, shipped to John and placed by Jane, a customer
+     * with an email.
      */
-    private function createCheckoutPayment(bool $withShippingAddress = true): PaymentInterface
+    private function createCheckoutPayment(bool $withShippingAddress = true, bool $withCustomer = true): PaymentInterface
     {
-        $order = $this->createCheckoutOrder($withShippingAddress);
+        $order = $this->createCheckoutOrder($withShippingAddress, $withCustomer);
         $order->addItem($this->createTaxedOrderItem('MUG_RED', 'Mug', 'Red', unitPrice: 10_000, quantity: 2, taxPerUnit: 2_000, vatRate: 0.25));
         $order->addItem($this->createTaxedOrderItem('BOOK_HC', 'Book', 'Hardcover', unitPrice: 15_000, quantity: 1, taxPerUnit: 1_607, vatRate: 0.12));
         $this->ship($order, price: 4_900, tax: 980, taxIncluded: true);
@@ -292,16 +363,19 @@ final class ConvertPaymentActionTest extends FunctionalTestCase
     }
 
     /**
-     * A checked-out order without items or shipment, billed to Jane and, unless told otherwise, shipped to John
+     * A checked-out order without items or shipment, billed to Jane and, unless told otherwise, shipped to John and
+     * placed by Jane
      */
-    private function createCheckoutOrder(bool $withShippingAddress = true): OrderInterface
+    private function createCheckoutOrder(bool $withShippingAddress = true, bool $withCustomer = true): OrderInterface
     {
         $order = $this->createOrder($this->channel(), OrderPaymentStates::STATE_AWAITING_PAYMENT, '000000001');
 
-        $customer = $this->createResource('sylius.factory.customer');
-        self::assertInstanceOf(CustomerInterface::class, $customer);
-        $customer->setEmail('jane@example.com');
-        $order->setCustomer($customer);
+        if ($withCustomer) {
+            $customer = $this->createResource('sylius.factory.customer');
+            self::assertInstanceOf(CustomerInterface::class, $customer);
+            $customer->setEmail('jane@example.com');
+            $order->setCustomer($customer);
+        }
 
         $order->setBillingAddress($this->createAddress('Jane', 'Doe', 'Vestergade 1', 'Aarhus C', '8000', company: 'Acme ApS', provinceName: 'Midtjylland', phoneNumber: '+4512345678'));
         if ($withShippingAddress) {

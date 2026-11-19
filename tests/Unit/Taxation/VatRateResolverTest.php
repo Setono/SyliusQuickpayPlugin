@@ -49,6 +49,43 @@ final class VatRateResolverTest extends TestCase
     }
 
     /**
+     * The totals are rounded minor units, so the rate derived from them only approximates the configured one: an item
+     * of 33 with 25 % VAT included carries a tax of 7, which gives 7 / 26
+     *
+     * @test
+     */
+    public function it_derives_the_rate_from_the_totals_to_four_decimals(): void
+    {
+        $orderItem = $this->createOrderItem([$this->createAdjustment([])], taxTotal: 7, total: 33);
+
+        self::assertSame(0.2692, (new VatRateResolver())->forOrderItem($orderItem));
+    }
+
+    /**
+     * Totals without tax, or whose tax isn't below the total (Sylius clamps a negative item total at 0), hold no rate
+     *
+     * @test
+     *
+     * @dataProvider totalsWithoutARate
+     */
+    public function it_derives_no_rate_from_totals_that_hold_none(int $taxTotal, int $total): void
+    {
+        $orderItem = $this->createOrderItem([$this->createAdjustment([])], taxTotal: $taxTotal, total: $total);
+
+        self::assertSame(0.0, (new VatRateResolver())->forOrderItem($orderItem));
+    }
+
+    /**
+     * @return iterable<string, array{int, int}>
+     */
+    public static function totalsWithoutARate(): iterable
+    {
+        yield 'no tax' => [0, 1_000];
+        yield 'a total that is all tax' => [250, 250];
+        yield 'a total clamped at 0' => [250, 0];
+    }
+
+    /**
      * @test
      */
     public function it_resolves_the_shipping_rate_from_the_shipment_tax_adjustment(): void

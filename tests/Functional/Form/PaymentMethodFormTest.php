@@ -7,6 +7,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\Form;
 use Nyholm\Psr7\Response;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Bundle\PaymentBundle\Form\Type\PaymentMethodType;
+use Sylius\Component\Core\Factory\PaymentMethodFactoryInterface;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Symfony\Component\Form\FormError;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -292,6 +293,32 @@ final class PaymentMethodFormTest extends FunctionalTestCase
 
         self::assertSame(['gatewayConfig.config.api_key' => 1], $errors);
         self::assertSame(['GET /ping', 'GET /payments'], $this->quickpay()->sentRequests());
+    }
+
+    /**
+     * Sylius names a new payment method's gateway after its code, so one submitted without a code has no gateway name
+     * yet: its gateway configuration is still checked, and the errors are Sylius' own, the missing code and the gateway
+     * name it would give
+     *
+     * @test
+     */
+    public function it_checks_the_gateway_configuration_of_a_new_payment_method_submitted_without_a_code(): void
+    {
+        self::bootKernel();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
+
+        $paymentMethodFactory = self::getContainer()->get('sylius.factory.payment_method');
+        self::assertInstanceOf(PaymentMethodFactoryInterface::class, $paymentMethodFactory);
+        $paymentMethod = $paymentMethodFactory->createWithGateway('quickpay');
+
+        $errors = $this->submit($paymentMethod, [
+            'api_key' => 'the-api-key',
+            'private_key' => 'the-private-key',
+        ]);
+
+        self::assertSame(['code' => 1, 'gatewayConfig' => 1], $errors);
+        self::assertSame(['GET /ping'], $this->quickpay()->sentRequests());
     }
 
     /**

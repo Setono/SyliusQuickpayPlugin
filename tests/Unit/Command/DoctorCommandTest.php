@@ -74,6 +74,64 @@ final class DoctorCommandTest extends TestCase
     /**
      * @test
      */
+    public function it_prints_the_registered_notify_route(): void
+    {
+        $tester = $this->executeCommand();
+
+        self::assertDisplayHasLine('✔ The notify endpoint for operations made outside the store is registered at "/payment/quickpay/notify"', $tester);
+    }
+
+    /**
+     * A sign-then-verify roundtrip of the callback checksum, which can't tell whether the key is the account's
+     *
+     * @test
+     */
+    public function it_self_tests_the_private_key(): void
+    {
+        $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
+
+        $tester = $this->executeCommand();
+
+        self::assertDisplayHasLine('✔ The private key signs and verifies callbacks (only a real callback proves it matches the account)', $tester);
+    }
+
+    /**
+     * Each gateway's checks are printed under its name, and an unusable one doesn't keep the doctor from checking the
+     * gateways after it
+     *
+     * @test
+     */
+    public function it_checks_every_gateway_under_its_own_name_also_after_an_unusable_one(): void
+    {
+        $usable = GatewayConfigurations::of(self::healthyConfig(), 'quickpay_b');
+        $this->configureGateways(
+            GatewayConfigurations::of(['api_key' => 'the-api-key', 'use_authorize' => true], 'quickpay_a'),
+            $usable,
+        );
+
+        $this->gatewayChecks->apiKey($usable)->shouldBeCalledOnce()->willReturn(Verdict::passed());
+
+        $tester = $this->executeCommand();
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $lines = array_map(trim(...), explode("\n", $tester->getDisplay()));
+        $gatewayA = array_search('Gateway "quickpay_a"', $lines, true);
+        $gatewayB = array_search('Gateway "quickpay_b"', $lines, true);
+        self::assertIsInt($gatewayA, 'The doctor did not print a section for the gateway "quickpay_a"');
+        self::assertIsInt($gatewayB, 'The doctor did not print a section for the gateway "quickpay_b"');
+
+        $linesOfA = array_slice($lines, $gatewayA, $gatewayB - $gatewayA);
+        self::assertContains('✖ The "private_key" option is required', $linesOfA);
+
+        $linesOfB = array_slice($lines, $gatewayB);
+        self::assertContains('✔ The api key is accepted by Quickpay', $linesOfB);
+        self::assertContains('✔ The order id of the latest order, "qp_000000123", is one Quickpay accepts', $linesOfB);
+        self::assertStringContainsString('1 check(s) failed', $tester->getDisplay());
+    }
+
+    /**
+     * @test
+     */
     public function it_runs_the_api_key_check_on_each_usable_gateway_configuration(): void
     {
         $configuration = GatewayConfigurations::of(self::healthyConfig(), 'quickpay_dk');
