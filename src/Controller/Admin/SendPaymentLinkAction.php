@@ -44,7 +44,7 @@ final class SendPaymentLinkAction
 
     public function __invoke(Request $request, int $id): Response
     {
-        if (!$this->csrfTokenManager->isTokenValid(new CsrfToken((string) $id, (string) $request->query->get('_csrf_token', '')))) {
+        if (!$this->csrfTokenManager->isTokenValid(new CsrfToken((string) $id, $request->query->getString('_csrf_token')))) {
             throw new HttpException(Response::HTTP_FORBIDDEN, 'Invalid csrf token.');
         }
 

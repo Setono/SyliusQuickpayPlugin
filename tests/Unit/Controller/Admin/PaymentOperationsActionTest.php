@@ -104,6 +104,23 @@ final class PaymentOperationsActionTest extends TestCase
     }
 
     /**
+     * The logger is optional: the action is wired without one when the app has none
+     *
+     * @test
+     */
+    public function it_renders_an_inline_notice_without_a_logger_when_the_quickpay_payment_cannot_be_read(): void
+    {
+        $twig = $this->prophesize(Environment::class);
+        $twig->render('@SetonoSyliusQuickpayPlugin/admin/order/show/payment/_operations_error.html.twig')
+            ->willReturn('<div>error</div>');
+
+        $response = $this->createAction(new UnauthorizedException(new PsrResponse(401)), $twig->reveal())(1);
+
+        self::assertSame(502, $response->getStatusCode());
+        self::assertSame('<div>error</div>', $response->getContent());
+    }
+
+    /**
      * @return iterable<string, array{\Throwable}>
      */
     public static function unreadableQuickpayPayments(): iterable

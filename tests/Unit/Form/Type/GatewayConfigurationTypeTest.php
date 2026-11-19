@@ -203,6 +203,37 @@ final class GatewayConfigurationTypeTest extends TypeTestCase
     }
 
     /**
+     * The agreement id's field holds an integer, so an agreement id the gateway rejects for not being positive is shown,
+     * and saved again, as stored: the admin sees the value saving refuses
+     *
+     * @test
+     *
+     * @dataProvider provideAgreementIdsTheGatewayRejects
+     */
+    public function it_shows_an_agreement_id_the_gateway_rejects_as_stored_when_it_is_an_integer(int $stored, string $expectedShown): void
+    {
+        $form = $this->factory->create(GatewayConfigurationType::class, [...GatewayConfigurations::USABLE, 'agreement_id' => $stored]);
+
+        $shown = self::shownValues($form);
+        self::assertSame($expectedShown, $shown['agreement_id']);
+
+        $form->submit($shown);
+
+        $saved = $form->getData();
+        self::assertIsArray($saved);
+        self::assertSame($stored, $saved['agreement_id']);
+    }
+
+    /**
+     * @return iterable<string, array{int, string}>
+     */
+    public static function provideAgreementIdsTheGatewayRejects(): iterable
+    {
+        yield 'zero' => [0, '0'];
+        yield 'a negative id' => [-5, '-5'];
+    }
+
+    /**
      * @test
      */
     public function it_shows_a_required_credential_that_is_not_stored_as_empty(): void

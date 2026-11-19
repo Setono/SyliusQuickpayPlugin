@@ -10,13 +10,118 @@ use Sylius\Bundle\PaymentBundle\Form\Type\PaymentMethodType;
 use Sylius\Component\Core\Model\PaymentMethodInterface;
 use Symfony\Component\Form\FormError;
 use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\Form\FormInterface;
+use Symfony\Component\Translation\TranslatorBagInterface;
+use Twig\Environment;
 
 /**
- * The admin's payment method form refuses a Quickpay gateway configuration the gateway would reject, with each error
- * on the field to fix
+ * The admin's payment method form shows the Quickpay gateway configuration's fields in the admin's language, and
+ * refuses a Quickpay gateway configuration the gateway would reject, with each error on the field to fix
  */
 final class PaymentMethodFormTest extends FunctionalTestCase
 {
+    /**
+     * Every field has a label and a help text of its own, translated into each locale the plugin ships
+     *
+     * @test
+     *
+     * @dataProvider locales
+     */
+    public function it_labels_and_explains_every_gateway_configuration_field_in_every_locale(string $locale): void
+    {
+        self::bootKernel();
+        $translator = self::getContainer()->get('translator');
+        self::assertInstanceOf(TranslatorBagInterface::class, $translator);
+        $catalogue = $translator->getCatalogue($locale);
+
+        $fields = $this->gatewayConfigurationFields();
+        self::assertSame(
+            ['api_key', 'private_key', 'agreement_id', 'payment_methods', 'use_authorize', 'synchronized', 'order_prefix', 'branding_id'],
+            array_keys($fields),
+        );
+
+        foreach ($fields as $field => $vars) {
+            // Twig translates the label and help text in the messages domain when the form names none
+            self::assertNull($vars['translation_domain']);
+
+            foreach (['label', 'help'] as $text) {
+                self::assertIsString($vars[$text], sprintf('The "%s" field has a %s', $field, $text));
+                self::assertTrue(
+                    $catalogue->defines($vars[$text], 'messages'),
+                    sprintf('The %s of the "%s" field, "%s", is translated into "%s"', $text, $field, $vars[$text], $locale),
+                );
+            }
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function locales(): iterable
+    {
+        foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
+            yield $locale => [$locale];
+        }
+    }
+
+    /**
+     * The admin's browser demands only what the gateway can't do without: the credentials, and the capture mode, which
+     * always has one chosen. A required checkbox couldn't be saved unchecked.
+     *
+     * @test
+     */
+    public function it_requires_only_the_credentials_and_the_capture_mode(): void
+    {
+        self::bootKernel();
+
+        self::assertSame([
+            'api_key' => true,
+            'private_key' => true,
+            'agreement_id' => false,
+            'payment_methods' => false,
+            'use_authorize' => true,
+            'synchronized' => false,
+            'order_prefix' => false,
+            'branding_id' => false,
+        ], array_map(static fn (array $vars): mixed => $vars['required'], $this->gatewayConfigurationFields()));
+    }
+
+    /**
+     * @test
+     */
+    public function it_shows_an_example_in_the_empty_payment_methods_and_order_prefix_fields(): void
+    {
+        self::bootKernel();
+
+        $fields = $this->gatewayConfigurationFields();
+
+        self::assertSame(['placeholder' => 'creditcard, mobilepay'], $fields['payment_methods']['attr']);
+        self::assertSame(['placeholder' => 'qp_'], $fields['order_prefix']['attr']);
+    }
+
+    /**
+     * Sylius' admin form theme escapes help texts, so the plugin's own form theme renders the payment methods help: its
+     * link to Quickpay's documentation is one the admin can follow
+     *
+     * @test
+     */
+    public function it_renders_the_link_in_the_payment_methods_help(): void
+    {
+        self::bootKernel();
+
+        $twig = self::getContainer()->get('twig');
+        self::assertInstanceOf(Environment::class, $twig);
+
+        $help = $twig->createTemplate('{{ form_help(form.gatewayConfig.config.payment_methods) }}')->render([
+            'form' => $this->paymentMethodForm()->createView(),
+        ]);
+
+        self::assertStringContainsString(
+            '<a href="https://learn.quickpay.net/tech-talk/appendixes/payment-methods/#payment-methods" target="_blank" rel="noopener">',
+            $help,
+        );
+    }
+
     /**
      * @test
      */
@@ -206,6 +311,36 @@ final class PaymentMethodFormTest extends FunctionalTestCase
         ]);
 
         self::assertSame(['gatewayConfig.config' => 1], $errors);
+    }
+
+    /**
+     * The admin's payment method form of a new Quickpay payment method
+     *
+     * @return FormInterface<mixed>
+     */
+    private function paymentMethodForm(): FormInterface
+    {
+        $formFactory = self::getContainer()->get('form.factory');
+        self::assertInstanceOf(FormFactoryInterface::class, $formFactory);
+
+        return $formFactory->create(PaymentMethodType::class, $this->createPaymentMethod('quickpay_dk', []), ['csrf_protection' => false]);
+    }
+
+    /**
+     * What the admin's payment method form of a new Quickpay payment method shows of each gateway configuration field:
+     * the variables of its view, by the field's name, in the form's order
+     *
+     * @return array<string, array<mixed>>
+     */
+    private function gatewayConfigurationFields(): array
+    {
+        $fields = [];
+        foreach ($this->paymentMethodForm()->createView()['gatewayConfig']['config'] as $field => $view) {
+            self::assertIsArray($view->vars);
+            $fields[(string) $field] = $view->vars;
+        }
+
+        return $fields;
     }
 
     /**
