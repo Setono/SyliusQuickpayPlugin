@@ -267,6 +267,15 @@ jobs:
                 dependencies:
                     - "highest"
 
+        services:
+            mysql:
+                image: "mysql:8.0"
+                env:
+                    MYSQL_ROOT_PASSWORD: "root"
+                ports:
+                    - "3306:3306"
+                options: "--health-cmd=\"mysqladmin ping -h 127.0.0.1 -proot\" --health-interval=5s --health-timeout=5s --health-retries=20"
+
         steps:
             -   name: "Checkout"
                 uses: "actions/checkout@v6"
@@ -283,8 +292,17 @@ jobs:
                 with:
                     dependency-versions: "${{ matrix.dependencies }}"
 
+            # The initial test run uses the test database; each parallel test process (TEST_TOKEN 1 to the thread count)
+            # one of its own
+            -   name: "Create the test databases"
+                run: |
+                    (cd tests/Application && bin/console doctrine:database:create && bin/console doctrine:schema:create)
+                    for token in $(seq 1 "$(nproc)"); do
+                        (cd tests/Application && TEST_TOKEN="$token" bin/console doctrine:database:create && TEST_TOKEN="$token" bin/console doctrine:schema:create)
+                    done
+
             -   name: "Run infection"
-                run: "vendor/bin/infection"
+                run: "vendor/bin/infection --threads=max"
                 env:
                     STRYKER_DASHBOARD_API_KEY: "${{ secrets.STRYKER_DASHBOARD_API_KEY }}"
 

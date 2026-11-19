@@ -15,9 +15,15 @@ final class Kernel extends BaseKernel
 
     private const CONFIG_EXTS = '.{php,xml,yaml,yml}';
 
+    /**
+     * Each of Infection's parallel test processes (its TEST_TOKEN) gets a cache of its own: a mutant can make a process
+     * rebuild the container, which the others must not use
+     */
     public function getCacheDir(): string
     {
-        return $this->getProjectDir() . '/var/cache/' . $this->environment;
+        $testToken = getenv('TEST_TOKEN');
+
+        return $this->getProjectDir() . '/var/cache/' . $this->environment . (false === $testToken ? '' : $testToken);
     }
 
     public function getLogDir(): string

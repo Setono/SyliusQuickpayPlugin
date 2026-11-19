@@ -4,6 +4,7 @@
             "src"
         ]
     },
+    "timeout": 60,
     "logs": {
         "text": "php://stderr",
         "github": true,
@@ -11,7 +12,6 @@
             "badge": "2.x"
         }
     },
-    "testFrameworkOptions": "--testsuite=unit",
     "minMsi": 0,
     "minCoveredMsi": 0
 }
