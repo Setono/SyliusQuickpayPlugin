@@ -3,4 +3,4 @@
 # Without a token, the test database itself
 doctrine:
     dbal:
-        dbname_suffix: '%env(default::TEST_TOKEN)%'
+        dbname_suffix: '%env(string:default::TEST_TOKEN)%'
