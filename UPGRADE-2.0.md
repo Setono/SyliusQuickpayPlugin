@@ -209,7 +209,7 @@ if you make those and want the store to notice. The README's *Callbacks* section
   `setono_sylius_quickpay.reconcile`, which a shop that deploys often points at a persistent adapter. See
   the README's *Reconciling missed callbacks* for options, the cache pool and a suggested cron cadence.
 - **New: a doctor command.** `setono:sylius-quickpay:doctor` verifies every configured gateway —
-  api key, private key self-test, agreement existence, the order id the order prefix gives the latest
+  api key, agreement existence, the order id the order prefix gives the latest
   order, and the notify route — and with `--live` probes the payment link permission. See the README's *Checking
   your configuration* section.
 - **New: Quickpay's fraud signals are surfaced.** The admin operation history shows a *Fraud suspected*
@@ -730,3 +730,14 @@ The service definitions changed accordingly; only a redefinition or decoration o
   payment is reconciled. That takes a payment Quickpay captured that Sylius shows unpaid for the whole expiry period,
   which in practice happens only when the reconciliation command isn't scheduled. The README's
   [Troubleshooting](README.md#troubleshooting) says how to recover.
+
+## Upgrading from `v2.0.0-beta.2`
+
+### Behavioural changes
+
+- **The doctor no longer passes a private key check.** It printed ✔ `The private key signs and verifies callbacks`
+  after signing a payload and verifying it with the same key, which passes for any private key, another Quickpay
+  account's included. Nothing the doctor may ask Quickpay proves the key is the account's, so it now prints a warning
+  (!) instead: `Only a callback can confirm the private key — a callback answered 400 in an order's "Quickpay
+  operations" panel means it isn't the account's (Settings → Integration in the Quickpay manager)`. Warnings don't
+  fail the run, so the exit code is unchanged. A missing private key is still a failed check.
