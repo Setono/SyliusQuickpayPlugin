@@ -136,7 +136,8 @@ final class PaymentProcessorTest extends FunctionalTestCase
         foreach (self::stateMachineAdapters() as $name => [$stateMachineAdapter]) {
             yield sprintf('never paid, %s', $name) => [$stateMachineAdapter, 'initial', [], PaymentInterface::STATE_NEW];
             // Capturing it used to replace the payment's link at Quickpay with an auto-capture link
-            yield sprintf('declined, %s', $name) => [$stateMachineAdapter, 'new', [], PaymentInterface::STATE_FAILED];
+            yield sprintf('declined, %s', $name) => [$stateMachineAdapter, 'rejected', [], PaymentInterface::STATE_NEW];
+            yield sprintf('invalid, %s', $name) => [$stateMachineAdapter, 'invalid', [], PaymentInterface::STATE_FAILED];
         }
     }
 

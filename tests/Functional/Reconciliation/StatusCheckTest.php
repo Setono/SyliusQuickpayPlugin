@@ -84,7 +84,8 @@ final class StatusCheckTest extends FunctionalTestCase
         yield 'authorized' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'new', ['authorize'], 0, 'authorized', 'authorize'];
         yield 'captured' => [PaymentInterface::STATE_PROCESSING, $awaitingPayment, 'processed', ['authorize', 'capture'], 10_000, 'completed', 'complete'];
         yield 'cancelled' => [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, 'processed', ['authorize', 'cancel'], 0, 'cancelled', 'cancel'];
-        yield 'rejected' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'rejected', [], null, 'failed', 'fail'];
+        yield 'a declined attempt leaves a new payment new' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'rejected', [], null, 'new', null];
+        yield 'invalid' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'invalid', [], null, 'failed', 'fail'];
         yield 'refunded' => [PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID, 'processed', ['authorize', 'capture', 'refund'], 0, 'refunded', 'refund'];
         yield 'already matching' => [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, 'new', ['authorize'], 0, 'authorized', null];
         yield 'unknown' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'processed', [], null, 'unknown', null];

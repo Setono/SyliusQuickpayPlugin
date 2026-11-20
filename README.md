@@ -178,6 +178,11 @@ configuration, so its checkout would capture immediately whatever the payment me
   before anything about the payment changes. A genuine callback then **reconciles** the payment: Sylius applies the
   state change its own mapping gives for the Quickpay payment's status (authorized, completed, refunded, ...), at
   most once.
+* A **declined card doesn't fail the payment**: Quickpay keeps the payment open, and the payment window takes the
+  customer's next try on it, so the payment stays awaiting payment until an attempt is approved. A customer who leaves
+  the window after a decline lands on the order's page with its Pay button and the message "Your payment was
+  declined. Please try again, or choose another payment method." (an error flash, `setono_sylius_quickpay.payment_declined`
+  in the `flashes` domain); paying again continues on the same payment.
 * When you **complete**, **refund**, or **cancel** a payment in the Sylius admin, the plugin performs the matching
   capture, refund, or cancel operation against Quickpay. A failed cancel at Quickpay (e.g. the customer never
   completed checkout, so there is nothing to cancel) is logged but does not block cancelling the order, and neither

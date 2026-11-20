@@ -1,3 +1,4 @@
 setono_sylius_quickpay:
     payment_link_sent: 'Betalingslenken ble sendt til %email%.'
     payment_link_not_sent: 'Betalingslenken kunne ikke sendes — betalingen venter ikke lenger på betaling, eller kunden har ingen e-postadresse.'
+    payment_declined: 'Betalingen din ble avvist. Prøv igjen, eller velg en annen betalingsmetode.'

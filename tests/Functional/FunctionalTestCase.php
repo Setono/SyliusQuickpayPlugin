@@ -78,6 +78,18 @@ abstract class FunctionalTestCase extends KernelTestCase
     }
 
     /**
+     * Every locale the plugin's translations ship in, for tests that every message is worded in each
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function locales(): iterable
+    {
+        foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
+            yield $locale => [$locale];
+        }
+    }
+
+    /**
      * Quickpay payments whose status makes Sylius transition the Sylius payment, whether a callback or the
      * reconcile command reconciles it: Sylius' payment-state mapping and its order payment state rules. Each
      * case is the payment's and its order's states, the Quickpay payment's state, approved operations and
@@ -95,8 +107,8 @@ abstract class FunctionalTestCase extends KernelTestCase
         yield 'refunded' => [PaymentInterface::STATE_COMPLETED, OrderPaymentStates::STATE_PAID, 'processed', ['authorize', 'capture', 'refund'], 0, PaymentInterface::STATE_REFUNDED, OrderPaymentStates::STATE_REFUNDED];
         // Sylius resolves no order payment state on cancel or fail
         yield 'cancelled' => [PaymentInterface::STATE_AUTHORIZED, OrderPaymentStates::STATE_AUTHORIZED, 'processed', ['authorize', 'cancel'], 0, PaymentInterface::STATE_CANCELLED, OrderPaymentStates::STATE_AUTHORIZED];
-        yield 'rejected' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'rejected', [], null, PaymentInterface::STATE_FAILED, $awaitingPayment];
-        yield 'authorization never approved' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'new', [], null, PaymentInterface::STATE_FAILED, $awaitingPayment];
+        // A declined attempt (Quickpay's `rejected`) leaves the payment new: the window takes another try on it
+        yield 'invalid' => [PaymentInterface::STATE_NEW, $awaitingPayment, 'invalid', [], null, PaymentInterface::STATE_FAILED, $awaitingPayment];
     }
 
     protected static function bootKernelWithStateMachineAdapter(string $adapter): void
@@ -355,6 +367,8 @@ abstract class FunctionalTestCase extends KernelTestCase
      * @param bool $fraudSuspected whether Quickpay's fraud filter flagged the payment
      * @param list<string> $pendingOperations operation types still in flight, in the order they were made, after the
      *                                        approved ones: Quickpay has no outcome for them yet
+     * @param list<string> $declinedOperations operation types Quickpay declined, in the order they were made, before
+     *                                         the approved ones: a declined attempt, then the approved retry
      */
     protected static function quickpayPayment(
         int $id,
@@ -363,18 +377,28 @@ abstract class FunctionalTestCase extends KernelTestCase
         ?int $balance = null,
         bool $fraudSuspected = false,
         array $pendingOperations = [],
+        array $declinedOperations = [],
     ): ResponseInterface {
+        // Each outcome's operations as Quickpay records them, in the order they happened
+        $outcomes = [
+            [$declinedOperations, false, '40000', 'Rejected test operation'],
+            [$approvedOperations, false, '20000', 'Approved'],
+            [$pendingOperations, true, null, null],
+        ];
+
         $operations = [];
-        foreach ([...$approvedOperations, ...$pendingOperations] as $i => $type) {
-            $pending = $i >= \count($approvedOperations);
-            $operations[] = [
-                'id' => $i + 1,
-                'type' => $type,
-                'amount' => 10_000,
-                'pending' => $pending,
-                'qp_status_code' => $pending ? null : '20000',
-                'qp_status_msg' => $pending ? null : 'Approved',
-            ];
+        foreach ($outcomes as [$types, $pending, $statusCode, $statusMessage]) {
+            foreach ($types as $type) {
+                $operations[] = [
+                    // Quickpay numbers a payment's operations from 1; the latest is the highest id
+                    'id' => \count($operations) + 1,
+                    'type' => $type,
+                    'amount' => 10_000,
+                    'pending' => $pending,
+                    'qp_status_code' => $statusCode,
+                    'qp_status_msg' => $statusMessage,
+                ];
+            }
         }
 
         return new Response(200, ['Content-Type' => 'application/json'], json_encode([

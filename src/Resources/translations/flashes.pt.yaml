@@ -1,3 +1,4 @@
 setono_sylius_quickpay:
     payment_link_sent: 'O link de pagamento foi enviado para %email%.'
     payment_link_not_sent: 'Não foi possível enviar o link de pagamento — o pagamento já não está pendente, ou o cliente não tem endereço de e-mail.'
+    payment_declined: 'O seu pagamento foi recusado. Tente novamente ou escolha outro método de pagamento.'

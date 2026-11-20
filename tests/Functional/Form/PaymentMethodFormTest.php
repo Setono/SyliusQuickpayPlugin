@@ -56,16 +56,6 @@ final class PaymentMethodFormTest extends FunctionalTestCase
     }
 
     /**
-     * @return iterable<string, array{string}>
-     */
-    public static function locales(): iterable
-    {
-        foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
-            yield $locale => [$locale];
-        }
-    }
-
-    /**
      * The admin's browser demands only what the gateway can't do without: the credentials, and the capture mode, which
      * always has one chosen. A required checkbox couldn't be saved unchecked.
      *

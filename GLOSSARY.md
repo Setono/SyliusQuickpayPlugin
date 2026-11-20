@@ -40,6 +40,10 @@ _Avoid_: peek, sync
 A Sylius payment of a Quickpay gateway that is new, processing or authorized and linked to a Quickpay payment, however old it is. A new or processing one is stuck; an authorized one mostly waits for its order to ship.
 _Avoid_: non-final payment, open payment
 
+**Declined attempt**:
+An attempt in Quickpay's payment window that the card issuer or acquirer refused. The Quickpay payment stays open for another attempt, in the same window or a new one, so a declined attempt doesn't fail the Sylius payment: it stays new until an attempt is approved or the order is cancelled.
+_Avoid_: failed payment, rejected payment
+
 **Gateway configuration**:
 The settings a Quickpay gateway is built from (api key, private key, order prefix, ...), stored with a payment method and edited in the admin.
 _Avoid_: gateway config, payment method settings, credentials

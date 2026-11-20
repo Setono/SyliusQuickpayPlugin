@@ -1,3 +1,4 @@
 setono_sylius_quickpay:
     payment_link_sent: 'Linkul de plată a fost trimis la %email%.'
     payment_link_not_sent: 'Linkul de plată nu a putut fi trimis — plata nu mai este în așteptare sau clientul nu are adresă de e-mail.'
+    payment_declined: 'Plata dumneavoastră a fost refuzată. Încercați din nou sau alegeți altă metodă de plată.'
