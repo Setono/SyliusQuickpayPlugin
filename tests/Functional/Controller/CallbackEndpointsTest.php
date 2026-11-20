@@ -62,6 +62,63 @@ final class CallbackEndpointsTest extends FunctionalTestCase
     }
 
     /**
+     * A declined attempt (see GLOSSARY.md) leaves the Quickpay payment open: the payment window takes the customer's
+     * next try on it. So the decline's callback, which arrives within the second, leaves the Sylius payment new, and
+     * the approved retry's callback authorizes that same payment
+     *
+     * @test
+     *
+     * @dataProvider callbackEndpointsUnderBothAdapters
+     */
+    public function a_declined_attempt_leaves_the_payment_new_and_the_approved_retry_authorizes_it(string $endpoint, string $stateMachineAdapter): void
+    {
+        self::bootKernelWithStateMachineAdapter($stateMachineAdapter);
+
+        $payment = $this->createSyliusPayment(PaymentInterface::STATE_NEW, OrderPaymentStates::STATE_AWAITING_PAYMENT, quickpayPaymentId: 501);
+        // Both callbacks are about the same Quickpay payment, so Quickpay sends them to the same url
+        $callbackUrl = $this->callbackUrlOf($payment);
+        $transitions = $this->recordPaymentTransitions();
+
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'rejected', [], declinedOperations: ['authorize']));
+
+        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment, $callbackUrl);
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([], $transitions->getArrayCopy());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_NEW, $payment->getState());
+        $order = $payment->getOrder();
+        self::assertNotNull($order);
+        self::assertSame(OrderPaymentStates::STATE_AWAITING_PAYMENT, $order->getPaymentState());
+        self::assertCount(1, $order->getPayments());
+
+        $this->quickpay()->respond('GET', '/payments/501', self::quickpayPayment(501, 'new', ['authorize'], balance: 0, declinedOperations: ['authorize']));
+
+        $response = $this->deliver(self::quickpayCallback(501), $endpoint, $payment, $callbackUrl);
+
+        self::assertSame(204, $response->getStatusCode(), (string) $response->getContent());
+        self::assertSame([PaymentTransitions::TRANSITION_AUTHORIZE], $transitions->getArrayCopy());
+        $payment = $this->reload($payment);
+        self::assertSame(PaymentInterface::STATE_AUTHORIZED, $payment->getState());
+        $order = $payment->getOrder();
+        self::assertNotNull($order);
+        self::assertSame(OrderPaymentStates::STATE_AUTHORIZED, $order->getPaymentState());
+        self::assertCount(1, $order->getPayments());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function callbackEndpointsUnderBothAdapters(): iterable
+    {
+        foreach (self::callbackEndpoints() as $endpointName => [$endpoint]) {
+            foreach (self::stateMachineAdapters() as $adapterName => [$stateMachineAdapter]) {
+                yield sprintf('%s, %s', $endpointName, $adapterName) => [$endpoint, $stateMachineAdapter];
+            }
+        }
+    }
+
+    /**
      * Under the capture mode "immediately", Quickpay sends the authorize and the capture callback moments apart. The
      * authorize callback holds the payment's lock, having read the payment before the capture, when the capture
      * callback arrives: it is answered 409, so Quickpay retries it, and the retry reconciles from a fresh read

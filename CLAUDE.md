@@ -14,8 +14,8 @@ client (`Setono\Quickpay\Client\*`), request/response DTOs (`Setono\Quickpay\Req
 state machine, and admin.
 
 Targets PHP 8.1+, Symfony ^6.4, Sylius ~1.14. The active development branch is `2.x` (also the default/PR
-base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.4`, the first release with
-`OrderId`; rc.3 was the first whose
+base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.5`, the first release reporting a
+declined attempt as new, not failed; rc.4 was the first with `OrderId`, rc.3 the first whose
 convert takes an order description; the SDK is stable, `^1.4`, the first release typing an operation's callback fields).
 The 2.x line itself is published as pre-release tags: `v2.0.0-alpha.1` and `alpha.2`, then `v2.0.0-beta.1`
 (2026-11-17) and `v2.0.0-beta.2` (2026-11-18). The Roave BC check compares a PR against its base branch, so a break it flags is real once the symbol
@@ -153,7 +153,11 @@ order of your own, as a checkout needs one with addresses, taxes and a shipment,
 `quickpayPaymentMethod()` and `createResource($factoryId)` (`ConvertPaymentActionTest::createCheckoutPayment()` is
 one); a Quickpay request's JSON body is its `sentRequestOptions()` entry's `body`. A variant with fewer units on hold
 than ordered makes Sylius' sale throw mid-transition, a real failing state-machine callback. `$this->reconciler()` is
-the module as wired; `transitioningQuickpayStatuses` is the shared Quickpay status → transition data provider.
+the module as wired; `transitioningQuickpayStatuses` is the shared Quickpay status → transition data provider, and
+`locales` the shared provider of the 16 locales the translations ship in.
+`self::quickpayPayment($id, $state, $approvedOperations, ...)` builds `GET /payments/{id}`'s answer; its
+`declinedOperations:` come before the approved ones (a declined attempt, then the approved retry) and its
+`pendingOperations:` after them.
 `self::quickpayCallback($quickpayPaymentId)` builds Quickpay's signed callback for
 the shared endpoint (pass `privateKey:` to forge one): `self::$kernel->handle()` it to POST it, or
 `$this->receiveCallback()` it to make it the request being handled when calling the module directly (Payum reads
@@ -736,6 +740,23 @@ rendered by `shop/checkout/select_payment/_payment_method_logos.html.twig`, a `s
 `sylius.shop.checkout.select_payment.choice_item_content`. The SVGs in
 `Resources/public/images/payment-methods/` are Shopify's MIT-licensed payment_icons (attribution README
 in that folder) and need `assets:install` in the host app.
+
+`Checkout/DeclinedAttemptFlashSubscriber` (an event subscriber; args `payum`, `QuickpayClientProviderInterface`,
+`QuickpayPaymentIdProviderInterface`; logger-aware via `setLogger()`) tells a customer who leaves the payment window
+after a **declined attempt** (`GLOSSARY.md`) that their payment was declined. payum-quickpay reports a declined
+attempt as new (Quickpay keeps the payment open and the window takes another try on it), so Sylius leaves the
+payment new; Quickpay sends the customer to its cancel url, Sylius' after-pay page (route
+`sylius_shop_order_after_pay`), which adds no flash for a new payment and redirects to the order with its Pay button.
+On that route's main request, `kernel.controller` reads the payment the Payum token names (verifying the token as
+Sylius does, without invalidating it, since Sylius' `PayumController` invalidates it and is `final`, so it isn't
+decorated); `kernel.response`, once Sylius' page has read the status, reads the Quickpay payment through
+`quickpayPaymentOf()` only when the payment is still new, and adds the `error` flash `DeclinedAttemptFlashSubscriber::MESSAGE`
+(`setono_sylius_quickpay.payment_declined`, `flashes` domain, 16 locales) when Quickpay's state is `rejected`. A
+window cancelled without an attempt stays `initial`: no flash. Any error of that read (`\Throwable`, as in the fraud
+check) is a warning with `paymentId`, `quickpayPaymentId` (`tryIdOf()`) and `exception`, and no flash: the return
+never fails because of it. Sylius' after-pay page itself reads the Quickpay payment twice (its status request, then
+its payment-state extension's), so a declined return costs three reads. `tests/Functional/Checkout/DeclinedAttemptFlashSubscriberTest`
+requests the route with a Payum token minted as Sylius does.
 
 ### Gateway config & language
 - `Form/Type/GatewayConfigurationType` is the admin form for the gateway (tagged

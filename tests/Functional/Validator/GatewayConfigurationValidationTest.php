@@ -581,16 +581,6 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
-     * @return iterable<string, array{string}>
-     */
-    public static function locales(): iterable
-    {
-        foreach (['cs', 'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'nl', 'no', 'pl', 'pt', 'ro', 'sv', 'uk'] as $locale) {
-            yield $locale => [$locale];
-        }
-    }
-
-    /**
      * Orders carrying the numbers, in the order given, so the last is the latest
      */
     private function createNumberedOrders(string ...$numbers): void

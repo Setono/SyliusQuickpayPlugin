@@ -733,6 +733,13 @@ The service definitions changed accordingly; only a redefinition or decoration o
 
 ## Upgrading from `v2.0.0-beta.2`
 
+### Added
+
+- **`Checkout\DeclinedAttemptFlashSubscriber`**, an event subscriber on Sylius' after-pay page (route
+  `sylius_shop_order_after_pay`) that tells a customer returning after a declined attempt that their payment was
+  declined (below). Its flash message's translation key is `DeclinedAttemptFlashSubscriber::MESSAGE`,
+  `setono_sylius_quickpay.payment_declined` in the `flashes` domain, shipped in all 16 locales.
+
 ### Behavioural changes
 
 - **The doctor no longer passes a private key check.** It printed ✔ `The private key signs and verifies callbacks`
@@ -741,3 +748,17 @@ The service definitions changed accordingly; only a redefinition or decoration o
   (!) instead: `Only a callback can confirm the private key — a callback answered 400 in an order's "Quickpay
   operations" panel means it isn't the account's (Settings → Integration in the Quickpay manager)`. Warnings don't
   fail the run, so the exit code is unchanged. A missing private key is still a failed check.
+- **A declined attempt no longer fails the payment.** When the customer's card was declined, Quickpay's callback, which
+  arrives within the second, failed the Sylius payment, and Sylius added a new payment to the order. But Quickpay keeps
+  the payment open, and the payment window takes the customer's next try on it. When the retry was approved, its
+  callback still landed on the failed payment, which Sylius can't move on, so the order stayed awaiting payment while
+  Quickpay held the money, and paying the order again failed. Now a declined attempt leaves the payment new, and the
+  approved retry authorizes it (or completes it under the capture mode "immediately"). Only a Quickpay payment in the
+  state `invalid` still fails the payment. This comes from `setono/payum-quickpay` `^2.0.0-rc.5`, which the plugin now
+  requires: its `StatusAction` reports a declined attempt as new. A Sylius payment that already failed this way stays
+  failed; the authorized money is in the Quickpay manager.
+- **A customer who leaves the payment window after a declined attempt is told so.** Quickpay sends them to Sylius'
+  after-pay page, which shows the order with its Pay button and, for a payment still new, no message. The plugin now
+  adds an error flash: "Your payment was declined. Please try again, or choose another payment method." To find out,
+  it reads the Quickpay payment once more on that return, only when the payment is still new; when that read fails,
+  the customer gets no flash and a warning is logged.
