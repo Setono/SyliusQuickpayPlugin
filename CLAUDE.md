@@ -18,14 +18,14 @@ base), tracking payum-quickpay 2.x (pre-release: the plugin requires `^2.0.0-rc.
 `OrderId`; rc.3 was the first whose
 convert takes an order description; the SDK is stable, `^1.4`, the first release typing an operation's callback fields).
 The 2.x line itself is published as pre-release tags: `v2.0.0-alpha.1` and `alpha.2`, then `v2.0.0-beta.1`
-(2026-11-17). The Roave BC check compares a PR against its base branch, so a break it flags is real once the symbol
+(2026-11-17) and `v2.0.0-beta.2` (2026-11-18). The Roave BC check compares a PR against its base branch, so a break it flags is real once the symbol
 shipped in one of those tags. The `1.x` branch carries the payum-quickpay 1.5 line. Payment details are **scalar-only** in 2.x —
 `quickpayPaymentId` is the source of truth and the payment is re-fetched from Quickpay when needed; it is read only
 through `Quickpay\QuickpayPaymentIdProviderInterface` (ADR 0006).
-`UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x, and (its last
-section) from an earlier 2.0 alpha, up to `v2.0.0-beta.1`: removed/changed classes, services, constructor signatures
-and behaviour — keep it updated when further 2.x breaks land. A break landing after `v2.0.0-beta.1` goes in a new
-section for upgrading from that beta, not in the alpha section. Domain terms are defined in `GLOSSARY.md`, settled decisions in
+`UPGRADE-2.0.md` (repo root) is the authority on what changed for stores upgrading from 1.x, and (its later
+sections) from an earlier 2.0 alpha or beta: removed/changed classes, services, constructor signatures and behaviour —
+keep it updated when further 2.x breaks land. A break landing after the latest beta (`v2.0.0-beta.2`) goes in the
+section for upgrading from that beta, not in an earlier one. Domain terms are defined in `GLOSSARY.md`, settled decisions in
 `docs/adr/`.
 
 All dev tooling (PHPStan, PHPUnit, Rector, Infection, ECS, composer-dependency-analyser, composer-normalize) is
@@ -594,8 +594,11 @@ store a shared prefix only means the same order id for the same order, which the
 one it also runs, on the typed options:
 api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
 reason, counted as a failure, undetermined a warning with its reason; the agreement check of an agreement id and the
-`--live` check run only when it passed, each skipped with a warning otherwise), private key HMAC self-test
-(`CallbackValidator`), the agreement (`checkAgreement()` reads the agreement id from the typed options: none prints ✔
+`--live` check run only when it passed, each skipped with a warning otherwise), a warning in place of a private key
+check (nothing proves the key is the account's: Quickpay's `GET /account/private-key` answers 401 to an api user
+without that permission, verified live, and a sign-then-verify round trip can't fail; only a callback's checksum
+proves it, so the warning points to the callback outcome, 400 in the operations panel), the agreement
+(`checkAgreement()` reads the agreement id from the typed options: none prints ✔
 `No agreement id configured — Quickpay uses the account's default Payment Window agreement` whatever the api key's
 verdict, since there is nothing to ask; an id gets the gateway checks' `agreement()` verdict, printed by `report()` as
 `Agreement N exists on the account`), and notify-route

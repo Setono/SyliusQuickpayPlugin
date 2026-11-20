@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\Command;
 use Setono\Payum\Quickpay\Exception\InvalidOrderId;
 use Setono\Payum\Quickpay\GatewayOptions;
 use Setono\Payum\Quickpay\OrderId;
-use Setono\Quickpay\Callback\CallbackValidator;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
@@ -26,9 +25,9 @@ use Symfony\Component\Routing\RouterInterface;
 /**
  * Runs the checks that otherwise surface as support cases (see the README's Troubleshooting
  * section) against every configured Quickpay gateway: its gateway options, read through the
- * gateway configuration module by the rules the gateway is built from, then the api key and
- * private key, the api user's permissions, the agreement, the order id the order prefix gives the latest
- * order, and the notify route.
+ * gateway configuration module by the rules the gateway is built from, then the api key, the api
+ * user's permissions, the agreement, the order id the order prefix gives the latest order, and the
+ * notify route. The private key can't be checked: the doctor says where a wrong one shows.
  * Read-only unless --live is passed.
  */
 #[AsCommand(
@@ -96,7 +95,7 @@ final class DoctorCommand extends Command
                 'The api key is accepted by Quickpay',
                 'Could not check the api key',
             );
-            $this->checkPrivateKey($io, $options->privateKey);
+            $this->hintAtPrivateKey($io);
             $this->checkAgreement($io, $gatewayConfiguration, $apiKeyAccepted);
             $this->checkOrderId($io, $options->orderPrefix, $latestOrderNumber);
 
@@ -187,15 +186,14 @@ final class DoctorCommand extends Command
         }
     }
 
-    private function checkPrivateKey(SymfonyStyle $io, string $privateKey): void
+    /**
+     * Nothing the doctor may ask proves that the private key is the account's: Quickpay serves it only to an api user
+     * allowed to read it, which a store's api user needn't be. A callback's checksum proves it, and the plugin answers
+     * a wrong one with 400, which the operations panel shows as the callback's outcome.
+     */
+    private function hintAtPrivateKey(SymfonyStyle $io): void
     {
-        // Exercise the sign/verify path the callbacks depend on; a sign-then-verify roundtrip with
-        // the same key cannot report false, so the self-test's failure mode is an exception
-        $validator = new CallbackValidator($privateKey);
-        $payload = '{"doctor": "self-test"}';
-        $validator->isValid($payload, $validator->sign($payload));
-
-        $this->ok($io, 'The private key signs and verifies callbacks (only a real callback proves it matches the account)');
+        $this->warn($io, 'Only a callback can confirm the private key — a callback answered 400 in an order\'s "Quickpay operations" panel means it isn\'t the account\'s (Settings → Integration in the Quickpay manager)');
     }
 
     /**

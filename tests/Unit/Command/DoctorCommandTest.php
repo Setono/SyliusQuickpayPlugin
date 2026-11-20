@@ -82,17 +82,20 @@ final class DoctorCommandTest extends TestCase
     }
 
     /**
-     * A sign-then-verify roundtrip of the callback checksum, which can't tell whether the key is the account's
+     * Nothing the doctor can ask proves the private key is the account's, so it says where the proof shows instead of
+     * passing a check that can't fail. A missing private key is a gateway option violation of its own.
      *
      * @test
      */
-    public function it_self_tests_the_private_key(): void
+    public function it_points_to_the_callback_outcome_for_the_private_key(): void
     {
         $this->configureGateways(GatewayConfigurations::of(self::healthyConfig()));
 
         $tester = $this->executeCommand();
 
-        self::assertDisplayHasLine('✔ The private key signs and verifies callbacks (only a real callback proves it matches the account)', $tester);
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertDisplayHasLine('! Only a callback can confirm the private key — a callback answered 400 in an order\'s "Quickpay operations" panel means it isn\'t the account\'s (Settings → Integration in the Quickpay manager)', $tester);
+        self::assertStringNotContainsString('✔ The private key', $tester->getDisplay());
     }
 
     /**

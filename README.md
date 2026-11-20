@@ -573,8 +573,8 @@ bin/console setono:sylius-quickpay:doctor          # read-only
 bin/console setono:sylius-quickpay:doctor --live   # also checks the payment link permission
 ```
 
-For every configured Quickpay gateway it verifies the api key against Quickpay, self-tests the private
-key's checksum computation, checks that a configured agreement id exists on the account, and checks that the
+For every configured Quickpay gateway it verifies the api key against Quickpay, checks that a configured agreement id
+exists on the account, and checks that the
 `order_id` the order prefix gives your latest order (Sylius' default first order number `000000001` while there are
 no orders) is one Quickpay accepts, by payum-quickpay's own rule, so an order number format of your own counts too —
 plus that the notify route is registered at all. With `--live` it also creates a money-less test payment and attempts the payment
@@ -587,6 +587,10 @@ A check against Quickpay prints as passed (✔), failed (✖, failing the run) o
 (it didn't answer, answered with an error, or the API user may not ask), as a warning (!) saying why. The checks of
 an agreement id and of the payment link permission run only once Quickpay accepts the api key; without an agreement
 id there is nothing to ask, and Quickpay uses the account's default Payment Window agreement.
+
+The private key can't be checked from the store: Quickpay hands it only to an API user allowed to read it, which yours
+needn't be. Only a callback proves it, so the doctor prints a reminder (!) of where a wrong one shows (see
+[Troubleshooting](#troubleshooting)).
 
 First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
 means the gateway can be built:
@@ -616,7 +620,8 @@ behavioral changes around refunds and callbacks. Coming from an earlier 2.0 alph
 
 ## Troubleshooting
 
-Run [the doctor](#checking-your-configuration) first — it detects every configuration problem below.
+Run [the doctor](#checking-your-configuration) first — it detects most configuration problems below. A wrong private
+key only shows in a callback, and an order prefix another store or environment shares only at Quickpay.
 
 - `Not authorized: Not authorized to PUT /payments/:id/link`
   at a `/payment/authorize/...` url:
@@ -625,6 +630,16 @@ Run [the doctor](#checking-your-configuration) first — it detects every config
   `PUT` checkbox checked for *Create or update payment link*. Also make sure the **Api key** field of your
   payment method holds the **API user's** key (*Settings* → *Users*) — not the api key of a Payment Window
   agreement (*Settings* → *Integration*).
+
+- A callback answered `400` in an order's *Quickpay operations* panel (see
+  [Operation history in the admin](#operation-history-in-the-admin))
+
+  The callback's checksum didn't match the payment method's **Private key**, so the store rejected the callback and
+  changed nothing, and it rejects the callbacks after it the same way until the key is fixed. Copy the private key of
+  the Quickpay account the API key belongs to (*Settings* → *Integration* in the Quickpay manager) into the payment
+  method and save it. Then run the [reconciliation command](#reconciling-missed-callbacks), with `--full --since
+  <period>` when the rejected callbacks are older than its lookback: it reconciles the payments still pending in the
+  store.
 
 - `This agreement doesn't exist on your Quickpay account` when saving a payment method, or `Agreement 12345 does not
   exist on this Quickpay account` from the doctor
