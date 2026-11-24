@@ -50,7 +50,10 @@ final class GatewayChecks implements GatewayChecksInterface
     {
         $agreementId = $gatewayConfiguration->options()->agreementId;
         if (null === $agreementId) {
-            return Verdict::passed('Quickpay uses the account\'s default Payment Window agreement');
+            throw new \LogicException(sprintf(
+                'The Quickpay gateway "%s" sends no agreement id, so Quickpay uses the account\'s default agreement and there is nothing to check',
+                $gatewayConfiguration->gatewayName,
+            ));
         }
 
         $client = $this->clientProvider->forGatewayConfiguration($gatewayConfiguration);
