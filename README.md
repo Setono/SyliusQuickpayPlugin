@@ -13,7 +13,8 @@ state machine, and admin.
 ## Requirements
 
 * PHP 8.1 or higher
-* Sylius 1.x on Symfony ^6.4 (tested against Sylius 1.14)
+* Sylius 1.13 or later on Symfony ^6.4 (tested against Sylius 1.14): the plugin uses Sylius' state machine abstraction,
+  which 1.13 introduced
 * PSR-17 factories discoverable by `php-http/discovery` (e.g. `nyholm/psr7`) — the plugin itself
   brings `symfony/http-client` as its PSR-18 client
 
@@ -77,7 +78,9 @@ setono_sylius_quickpay:
 
 This registers the callback endpoint (`POST /payment/quickpay/notify`) that receives the callbacks of operations
 made *outside* your store — in the Quickpay manager, or by anything else talking to the API. Everything the store
-itself does is confirmed without configuration; see [Callbacks](#callbacks).
+itself does is confirmed without configuration; see [Callbacks](#callbacks). It also registers the admin routes
+behind the [payment link](#payment-link-in-the-admin) and [operation history](#operation-history-in-the-admin)
+panels, which the admin order page needs, so import it even if you never make operations outside the store.
 
 ### 5. Install the assets
 
@@ -152,9 +155,9 @@ configuration, so its checkout would capture immediately whatever the payment me
 * During checkout the customer is redirected to the Quickpay payment window through a payment link. What happens to
   the money is the payment method's **capture mode**: *on completion* (the default) only **authorizes** the payment
   and the plugin captures it when the payment is completed in Sylius; *immediately* has Quickpay **capture** the
-  moment the card is authorized. Under the hood the mode is Sylius core's `use_authorize` gateway option — the
-  plugin runs Payum's `Authorize` or `Capture` accordingly, which is how the gateway library expresses the two
-  flows since 2.0.
+  moment the card is authorized. Under the hood the mode is Sylius core's `use_authorize` gateway option — Sylius
+  core runs Payum's `Authorize` or `Capture` accordingly, which is how the gateway library expresses the two flows
+  since 2.0.
 * When checkout creates the Quickpay payment, the plugin describes the order to Quickpay: the invoice and shipping
   addresses, the basket with each line's VAT rate, shipping, and the plugin and its version as the shop system. The
   Quickpay manager shows them on the payment, and they never change what is charged, but some payment methods check
@@ -327,7 +330,7 @@ payment made under an order prefix you have since changed, it answers 204 (retry
 naming the `order_id` and the Quickpay payment id: that payment is left to you. A payment switched to another payment
 method since (see [Troubleshooting](#troubleshooting)) is no Quickpay payment any more, so it never matches either;
 its own callback url answers a callback about it the same way. While one of the payment methods has a
-gateway configuration the gateway can't be built from (written by fixtures, the Admin API or the database directly),
+gateway configuration the gateway can't be built from (written by fixtures, the console or the database directly),
 it answers every callback with a 500 and Quickpay retries it once that is fixed.
 A Quickpay account has exactly one such url, so when
 several environments share an account, only the one it points at receives those callbacks. Quickpay retries
@@ -502,8 +505,9 @@ another one is going exits 0.
 ## HTTP policy
 
 Every request to Quickpay, the gateway's (checkout, capture, refund, cancel, callbacks, reconciling) and the plugin's
-own (the fraud check, the operation history, listing the payments Quickpay changed, the fraud report, the doctor,
-checking the api key and agreement on save), goes through one
+own (the fraud check, the operation history, the declined-attempt check when a customer returns from the payment
+window, listing the payments Quickpay changed, the fraud report, the doctor, checking the api key and agreement on
+save), goes through one
 [scoped HTTP client](https://symfony.com/doc/current/http_client.html#scoping-client) that the plugin adds to your
 framework configuration: `setono_sylius_quickpay.http_client`. Its defaults:
 
@@ -628,8 +632,8 @@ It also warns, without failing the run, about two things that work but surprise 
 
 See [UPGRADE-2.0.md](UPGRADE-2.0.md) for the full list of changes an upgrading store has to make —
 gateway configuration keys, removed imports, renamed routes and classes, the Klarna removal, and the
-behavioral changes around refunds and callbacks. Coming from an earlier 2.0 alpha, read its
-*Upgrading from an earlier 2.0 alpha* section.
+behavioral changes around refunds and callbacks. Coming from a 2.0 pre-release, read the sections from your version
+on: *Upgrading from an earlier 2.0 alpha*, *Upgrading from `v2.0.0-beta.1`* and *Upgrading from `v2.0.0-beta.2`*.
 
 ## Troubleshooting
 
@@ -672,8 +676,8 @@ key only shows in a callback, and an order prefix another store or environment s
     to Quickpay — bump the `<date>` part;
   - several projects or environments share the same Quickpay (developer) account credentials.
 
-- `Validation error: order_id must have length between 4 and 20`, `The Quickpay order id "…" is not one Quickpay
-  accepts` at checkout or from the doctor, or the payment method's *Order prefix* refused when saving
+- `Validation error: order_id must have length between 4 and 20`, `The Quickpay order id "…" (… characters) is not
+  one Quickpay accepts` at checkout or from the doctor, or the payment method's *Order prefix* refused when saving
 
   The `order_id` is the *Order prefix* followed by the order number, and Quickpay accepts 4–20 letters, digits,
   spaces, `.`, `_` and `-`. Saving the payment method checks the `order_id` your latest order would get, and so does
