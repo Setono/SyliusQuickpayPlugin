@@ -417,19 +417,25 @@ final class GatewayChecksTest extends TestCase
     }
 
     /**
-     * The gateway then sends no agreement id, and Quickpay uses the account's default agreement
+     * The gateway then sends no agreement id, and Quickpay uses the account's default agreement: there is nothing to
+     * check, which the diagnosis says without asking
      *
      * @test
      *
      * @dataProvider withoutAgreementId
      */
-    public function it_passes_the_agreement_without_asking_quickpay_when_no_agreement_id_is_set(GatewayConfiguration $gatewayConfiguration): void
+    public function it_refuses_to_check_the_agreement_when_no_agreement_id_is_set(GatewayConfiguration $gatewayConfiguration): void
     {
-        $verdict = $this->checks()->agreement($gatewayConfiguration);
+        try {
+            $this->checks()->agreement($gatewayConfiguration);
+            self::fail('The agreement of a gateway that sends no agreement id was checked');
+        } catch (\LogicException $e) {
+            self::assertSame(
+                'The Quickpay gateway "quickpay" sends no agreement id, so Quickpay uses the account\'s default agreement and there is nothing to check',
+                $e->getMessage(),
+            );
+        }
 
-        self::assertSame(VerdictOutcome::Passed, $verdict->outcome);
-        self::assertNull($verdict->reason);
-        self::assertSame('Quickpay uses the account\'s default Payment Window agreement', $verdict->note);
         self::assertSame([], $this->quickpay->sentRequests());
     }
 

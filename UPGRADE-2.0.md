@@ -739,6 +739,20 @@ The service definitions changed accordingly; only a redefinition or decoration o
   `sylius_shop_order_after_pay`) that tells a customer returning after a declined attempt that their payment was
   declined (below). Its flash message's translation key is `DeclinedAttemptFlashSubscriber::MESSAGE`,
   `setono_sylius_quickpay.payment_declined` in the `flashes` domain, shipped in all 16 locales.
+- **`Diagnosis\DiagnoserInterface`** (service `Diagnoser`, args `GatewayChecksInterface` and
+  `LatestOrderNumberProviderInterface`), with the values `Diagnosis\Finding`, `Diagnosis\FindingKind` and
+  `Diagnosis\FindingOutcome`. `diagnose(GatewayConfiguration $gatewayConfiguration, bool $live = false): list<Finding>`
+  finds out what the doctor and save validation both check about a gateway configuration, in the order the checks
+  depend on each other; the doctor prints the findings, and save validation refuses a configuration with a failed one.
+
+### Changed constructors
+
+| Class | `v2.0.0-beta.2` | Now |
+|---|---|---|
+| `Command\DoctorCommand` | `(GatewayChecksInterface $gatewayChecks, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router, LatestOrderNumberProviderInterface $latestOrderNumberProvider)` | `(DiagnoserInterface $diagnoser, GatewayConfigurationProviderInterface $gatewayConfigurationProvider, RouterInterface $router)` |
+| `Validator\Constraints\UsableGatewayConfigurationValidator` | `(GatewayChecksInterface $gatewayChecks, LatestOrderNumberProviderInterface $latestOrderNumberProvider)` | `(DiagnoserInterface $diagnoser)` |
+
+The service definitions changed accordingly; only a redefinition or decoration of these services needs updating.
 
 ### Behavioural changes
 
@@ -762,3 +776,17 @@ The service definitions changed accordingly; only a redefinition or decoration o
   adds an error flash: "Your payment was declined. Please try again, or choose another payment method." To find out,
   it reads the Quickpay payment once more on that return, only when the payment is still new; when that read fails,
   the customer gets no flash and a warning is logged.
+- **`GatewayChecksInterface::agreement()` takes a gateway configuration with an agreement id.** Without one it throws a
+  `\LogicException` and sends nothing; it passed it before. Quickpay then uses the account's default agreement, which the
+  diagnosis passes without asking. A caller of its own checks the agreement id first.
+- **The doctor prints each gateway's checks in the order they depend on each other**: its gateway options, the stored
+  options that surprise, the `order_id` its order prefix gives the latest order, then the api key, the agreement and,
+  with `--live`, the payment link permission. The order id now comes before the api key. The reminder about the
+  private key and the hint to run with `--live` are printed once per run, before the gateways, instead of once per
+  gateway. Every line's wording is unchanged.
+- **Save validation logs every check that didn't pass**, at info level, in English: a refused api key, agreement or
+  order id, a rejected gateway option (with payum-quickpay's reason, as before), an undetermined check (as before), a
+  skipped one, and a stored deprecated option or unset capture mode. Each record's context has `gatewayName` and the
+  finding's `kind`, plus `option` for a rejected option. The messages read `Refused the gateway configuration of the
+  Quickpay gateway "<name>": …` or `A warning about the gateway configuration of the Quickpay gateway "<name>": …`.
+  What is refused, and the admin's messages, are unchanged.

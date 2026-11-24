@@ -96,7 +96,7 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
 
     /**
      * The admin reads what the field accepts; payum-quickpay's reason, which says what was wrong with the value, is
-     * kept in the log
+     * kept in the log, as is every other finding that didn't pass
      *
      * @test
      */
@@ -105,13 +105,42 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         self::bootKernel();
         $logger = $this->recordValidatorLogs();
 
-        $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand']));
+        $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'branding_id' => 'Our brand', 'use_authorize' => true]));
 
-        self::assertCount(1, $logger->records);
-        [$level, $message, $context] = $logger->records[0];
-        self::assertSame(LogLevel::INFO, $level);
-        self::assertStringContainsString('The "branding_id" option must be a positive integer (or an integer string), got \'Our brand\'', $message);
-        self::assertSame('branding_id', $context['option'] ?? null);
+        self::assertSame([
+            [
+                LogLevel::INFO,
+                'Refused the gateway configuration of the Quickpay gateway "quickpay_dk": The "branding_id" option must be a positive integer (or an integer string), got \'Our brand\'',
+                ['gatewayName' => 'quickpay_dk', 'kind' => 'rejected_option', 'option' => 'branding_id'],
+            ],
+            [
+                LogLevel::INFO,
+                'A warning about the gateway configuration of the Quickpay gateway "quickpay_dk": Skipped the checks against Quickpay of this gateway — they need a gateway configuration the gateway can be built from',
+                ['gatewayName' => 'quickpay_dk', 'kind' => 'quickpay_checks_skipped'],
+            ],
+        ], $logger->records);
+    }
+
+    /**
+     * The admin reads that the api key is refused in their language; why, in English, is in the log
+     *
+     * @test
+     */
+    public function it_logs_why_it_refused_an_api_key(): void
+    {
+        self::bootKernel();
+        $logger = $this->recordValidatorLogs();
+
+        $this->quickpay()->respond('GET', '/ping', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+        $this->quickpay()->respond('GET', '/payments', new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'));
+
+        $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'use_authorize' => true]));
+
+        self::assertSame([[
+            LogLevel::INFO,
+            'Refused the gateway configuration of the Quickpay gateway "quickpay_dk": Quickpay rejects the api key — use the API user\'s key (Settings → Users in the Quickpay manager), not a Payment Window agreement\'s',
+            ['gatewayName' => 'quickpay_dk', 'kind' => 'api_key'],
+        ]], $logger->records);
     }
 
     /**
@@ -206,76 +235,6 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
     }
 
     /**
-     * A store numbering its orders its own way is held to its own numbers, not to Sylius' 9 digits
-     *
-     * @test
-     */
-    public function it_accepts_an_order_prefix_that_fits_the_stores_own_order_numbers(): void
-    {
-        self::bootKernel();
-        $this->createNumberedOrders('1234');
-
-        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
-
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_']);
-
-        self::assertSame([], $this->violationsOf($paymentMethod));
-    }
-
-    /**
-     * An order number format with a character Quickpay refuses makes every order id one it refuses
-     *
-     * @test
-     */
-    public function it_refuses_an_order_prefix_whatever_it_is_when_the_latest_order_number_has_a_character_quickpay_refuses(): void
-    {
-        self::bootKernel();
-        $this->createNumberedOrders('2026/123');
-
-        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
-
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_']);
-
-        self::assertSame(['gatewayConfig.config[order_prefix]'], array_keys($this->violationsOf($paymentMethod)));
-    }
-
-    /**
-     * Before the first order, Sylius' default first order number stands in
-     *
-     * @test
-     */
-    public function it_checks_sylius_default_first_order_number_while_there_are_no_orders(): void
-    {
-        self::bootKernel();
-
-        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
-
-        self::assertSame([], $this->violationsOf($this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_26_'])));
-        self::assertSame([
-            'gatewayConfig.config[order_prefix]' => 'With this prefix, order 000000001 would get the Quickpay order id "qp_shop_2026_000000001", which Quickpay refuses: it accepts 4 to 20 letters, digits, spaces, ".", "_" or "-".',
-        ], $this->messagesOf($this->createPaymentMethod('quickpay_se', [...GatewayConfigurations::USABLE, 'order_prefix' => 'qp_shop_2026_'])));
-    }
-
-    /**
-     * The order id needs only the order prefix, so a configuration refused for another option gets its order id
-     * checked too: fixing one field keeps the other error visible
-     *
-     * @test
-     */
-    public function it_checks_the_order_id_of_a_configuration_refused_for_another_option(): void
-    {
-        self::bootKernel();
-
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', ['api_key' => 'the-api-key', 'order_prefix' => 'qp_shop_2026_']);
-
-        self::assertEqualsCanonicalizing([
-            'gatewayConfig.config[private_key]',
-            'gatewayConfig.config[order_prefix]',
-        ], array_keys($this->violationsOf($paymentMethod)));
-        self::assertSame([], $this->quickpay()->sentRequests());
-    }
-
-    /**
      * Quickpay answers 401 on /ping for a valid key whose api user lacks the /ping permission too, so only a
      * rejected /payments read as well rejects the key
      *
@@ -345,85 +304,15 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
         $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
         $this->quickpay()->respond('GET', '/agreements/12345', $response);
 
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345]);
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345, 'use_authorize' => true]);
 
         self::assertSame([], $this->violationsOf($paymentMethod));
         self::assertSame(['GET /ping', 'GET /agreements/12345'], $this->quickpay()->sentRequests());
         self::assertSame([[
             LogLevel::INFO,
-            sprintf('Accepted agreement 12345 of the Quickpay gateway "quickpay_dk", whose check is undetermined: %s', $why),
-            ['gatewayName' => 'quickpay_dk'],
+            sprintf('A warning about the gateway configuration of the Quickpay gateway "quickpay_dk": Could not check agreement 12345: %s', $why),
+            ['gatewayName' => 'quickpay_dk', 'kind' => 'agreement'],
         ]], $logger->records);
-    }
-
-    /**
-     * Quickpay then uses the account's default Payment Window agreement
-     *
-     * @test
-     *
-     * @dataProvider withoutAgreementId
-     */
-    public function it_asks_quickpay_nothing_about_the_agreement_without_an_agreement_id(mixed $agreementId): void
-    {
-        self::bootKernel();
-
-        $this->quickpay()->respond('GET', '/ping', new Response(200, ['Content-Type' => 'application/json'], '{"msg":"Pong from QuickPay API V10"}'));
-
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => $agreementId]);
-
-        self::assertSame([], $this->violationsOf($paymentMethod));
-        self::assertSame(['GET /ping'], $this->quickpay()->sentRequests());
-    }
-
-    /**
-     * @return iterable<string, array{mixed}>
-     */
-    public static function withoutAgreementId(): iterable
-    {
-        yield 'none' => [null];
-        yield 'an empty one' => [''];
-    }
-
-    /**
-     * Quickpay's answer about the agreement would prove nothing, and a rejected api key is one error, not two
-     *
-     * @test
-     *
-     * @dataProvider apiKeysNotAccepted
-     *
-     * @param array<string, Response> $responses
-     * @param list<string> $violations
-     */
-    public function it_asks_quickpay_nothing_about_the_agreement_unless_it_accepts_the_api_key(array $responses, array $violations): void
-    {
-        self::bootKernel();
-
-        foreach ($responses as $path => $response) {
-            $this->quickpay()->respond('GET', $path, $response);
-        }
-
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'agreement_id' => 12345]);
-
-        self::assertSame($violations, array_keys($this->violationsOf($paymentMethod)));
-        self::assertSame(array_map(static fn (string $path): string => 'GET ' . $path, array_keys($responses)), $this->quickpay()->sentRequests());
-    }
-
-    /**
-     * @return iterable<string, array{array<string, Response>, list<string>}>
-     */
-    public static function apiKeysNotAccepted(): iterable
-    {
-        yield 'rejected' => [
-            [
-                '/ping' => new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'),
-                '/payments' => new Response(401, ['Content-Type' => 'application/json'], '{"message":"Invalid API key"}'),
-            ],
-            ['gatewayConfig.config[api_key]'],
-        ];
-        yield 'undetermined' => [
-            ['/ping' => new Response(500, ['Content-Type' => 'application/json'], '{"message":"Internal server error"}')],
-            [],
-        ];
     }
 
     /**
@@ -482,14 +371,14 @@ final class GatewayConfigurationValidationTest extends FunctionalTestCase
             $this->quickpay()->respond('GET', $path, $response);
         }
 
-        $paymentMethod = $this->createPaymentMethod('quickpay_dk', GatewayConfigurations::USABLE);
+        $paymentMethod = $this->createPaymentMethod('quickpay_dk', [...GatewayConfigurations::USABLE, 'use_authorize' => true]);
 
         self::assertSame([], $this->violationsOf($paymentMethod));
         self::assertSame($requests, $this->quickpay()->sentRequests());
         self::assertSame([[
             LogLevel::INFO,
-            sprintf('Accepted the api key of the Quickpay gateway "quickpay_dk", whose check is undetermined: %s', $quickpaysError),
-            ['gatewayName' => 'quickpay_dk'],
+            sprintf('A warning about the gateway configuration of the Quickpay gateway "quickpay_dk": Could not check the api key: %s', $quickpaysError),
+            ['gatewayName' => 'quickpay_dk', 'kind' => 'api_key'],
         ]], $logger->records);
     }
 
