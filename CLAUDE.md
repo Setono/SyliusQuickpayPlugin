@@ -106,10 +106,11 @@ helper. A caller of the Quickpay payment id (the shared endpoint, the fraud chec
 `QuickpayPaymentIdProvider` over that doubled `GatewayConfigurationProviderInterface`, never a double of the id provider.
 A caller reading a Quickpay payment (the fraud check, the operations panel) doubles
 `QuickpayClientProviderInterface` and returns the SDK's `Payment` objects or throws, never an SDK client (the fraud
-report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); a
-caller of the gateway checks (the doctor) doubles `GatewayChecksInterface` and returns verdicts, and its latest order
-number by doubling `LatestOrderNumberProviderInterface` (save validation's functional tests create numbered orders
-instead, flushed, since the provider queries the database). The order describer's
+report, which asks for a client per gateway configuration, gets real SDK clients on Symfony's `MockHttpClient`); the
+diagnoser, the one caller of the gateway checks, doubles `GatewayChecksInterface` and returns verdicts, and its latest
+order number by doubling `LatestOrderNumberProviderInterface`; a caller of the diagnoser (the doctor) doubles
+`DiagnoserInterface` and returns findings (save validation's functional tests run the real diagnoser and create
+numbered orders instead, flushed, since the provider queries the database). The order describer's
 unit test builds real Sylius orders (items, units, adjustments, addresses, customers, shipments) and uses the real VAT
 rate resolver; each case asserts that the basket and shipping add up to the order total. The convert action is glue
 around payum-quickpay's convert, which the library tests, so it is tested only functionally, through the real gateway.
@@ -291,14 +292,14 @@ module's lookups can't do.
   provider (*Quickpay client and HTTP policy* below), so building the gateway of an unusable configuration throws
   `UnusableGatewayConfiguration` (not payum-quickpay's `InvalidGatewayOptions`, a Payum `ExceptionInterface`; the
   message names "a Quickpay gateway", since Payum passes no gateway name with the config).
-- The doctor (`all()`): an unusable configuration is one failed check per violation (an unreadable one is a single
-  failed check with the exception's message) and its checks against Quickpay are skipped, while the order id a readable
-  one's order prefix gives is still checked; a usable one's checks run on the typed `GatewayOptions` (see
-  *Command/DoctorCommand* below).
+- The diagnoser (the doctor diagnoses each of `all()`, save validation the configuration being saved): an unusable
+  configuration is one failed finding per violation (an unreadable one is a single failed finding with the exception's
+  message) and its checks against Quickpay are skipped, while the order id a readable one's order prefix gives is still
+  checked; a usable one's checks run on the typed `GatewayOptions` (see *Gateway configuration diagnosis* below).
 - **The order prefix the gateway sends**, `GatewayConfiguration::orderPrefix(): ?string`, read through
   `optionsWithRejectedAsStored()` even when the library rejects other options: null for an unreadable configuration or
-  one whose order prefix the library rejects (its violation says so). Save validation and the doctor check the order
-  id it gives (*The order id* below).
+  one whose order prefix the library rejects (its violation says so). The diagnosis checks the order id it gives
+  (*The order id* below).
 
 ### The order id (`src/OrderId/`)
 Read `GLOSSARY.md` (Order id, Order prefix) first. payum-quickpay owns the order id both ways (`OrderId::of($prefix,
@@ -310,10 +311,10 @@ violation, so the plugin re-implements none of it. What only the store knows is 
   `%sylius.model.order.class%`): `getLatestOrderNumber(): ?string`, the newest order's number among those that have
   one (carts have none), null when there is none; `STAND_IN_ORDER_NUMBER` (`000000001`, Sylius' default first number)
   stands in then.
-- **Save validation** (`UsableGatewayConfigurationValidator`) and **the doctor** run `OrderId::of()` on the
-  configuration's `orderPrefix()` and the latest order number (or the stand-in), whenever `orderPrefix()` isn't null, so
-  also for a configuration rejected for other options. No fixed length budget anywhere: a store numbering its orders its
-  own way is held to its own numbers.
+- **The diagnosis** (`Diagnosis\Diagnoser`, for save validation and the doctor) runs `OrderId::of()` on the
+  configuration's `orderPrefix()` and the latest order number (or the stand-in, read on every `diagnose()`), whenever
+  `orderPrefix()` isn't null, so also for a configuration rejected for other options. No fixed length budget anywhere:
+  a store numbering its orders its own way is held to its own numbers.
 - **The shared endpoint** reads the candidate order numbers with `OrderId::numberIn()` (*Callbacks* below).
 
 ### Quickpay client and HTTP policy (`src/Quickpay/`)
@@ -376,7 +377,8 @@ exceptions or interpret Quickpay's status codes themselves.
   the HTTP policy): `apiKey(GatewayConfiguration): Verdict`, `agreement(GatewayConfiguration): Verdict`,
   `paymentLinkPermission(GatewayConfiguration): Verdict`.
   Each check takes a usable configuration: the provider throws `UnusableGatewayConfiguration` for an unusable one,
-  before any request. New checks are methods here, each returning a `Verdict`.
+  before any request. New checks are methods here, each returning a `Verdict`. The diagnoser is their one caller
+  (*Gateway configuration diagnosis* below): it decides which check runs when.
 - **`Verdict`**: `outcome` (`VerdictOutcome`: `Passed`, `Failed`, `Undetermined` when Quickpay's answer proves
   neither), `reason` (why it failed or proves nothing; null on a pass) and `note` (a caveat, on any outcome, e.g. how a
   pass was proven or what a check left on the account). Built with `Verdict::passed(?note)`, `failed(reason, ?note)`
@@ -390,9 +392,10 @@ exceptions or interpret Quickpay's status codes themselves.
   Quickpay answers 401 on `/ping` both for an invalid key and for a valid key whose api user lacks the `/ping`
   permission (verified live): accepted → passed with the note that the api user lacks `/ping`; 401/403 → failed.
 - **Agreement** (`agreement()`): the agreement id the gateway sends (typed options, so the 1.x `agreement` and a blank
-  id count as payum-quickpay reads them). None → passed without a request, with the note that Quickpay uses the
-  account's default Payment Window agreement. Otherwise `GET /agreements/{id}`: accepted → passed; 404 → failed;
-  401/403 → undetermined (the api user may lack the `/agreements` permission); any other error → undetermined.
+  id count as payum-quickpay reads them). It takes a configuration with one: none → `\LogicException`, nothing sent
+  (Quickpay then uses the account's default agreement, which the diagnosis passes without asking). `GET
+  /agreements/{id}`: accepted → passed; 404 → failed; 401/403 → undetermined (the api user may lack the `/agreements`
+  permission); any other error → undetermined.
 - **Payment link permission** (`paymentLinkPermission()`, the doctor's `--live` check; the one check that writes to the
   account): creates a money-less test payment (`POST /payments`, DKK, order id = `OrderId::of()` of the gateway's order
   prefix and `dr` + 6 random hex digits; an `InvalidOrderId` there, a prefix leaving no room for it, is undetermined
@@ -400,7 +403,44 @@ exceptions or interpret Quickpay's status codes themselves.
   401/403 → failed (may not create payment links), accepted → passed. Then deletes the link, best effort (its errors are
   ignored). Once the test payment exists, every verdict's note names it (id and order id): it stays on the account.
 - Tested at the HTTP seam in `tests/Unit/Quickpay/GatewayCheck/GatewayChecksTest` (the real provider over
-  `ScriptedHttpClient` in Symfony's `MockHttpClient`). Callers' unit tests double `GatewayChecksInterface` and return verdicts.
+  `ScriptedHttpClient` in Symfony's `MockHttpClient`). The diagnoser's unit test doubles `GatewayChecksInterface` and
+  returns verdicts.
+
+### Gateway configuration diagnosis (`src/Diagnosis/`)
+Read `GLOSSARY.md` (Diagnosis, Finding, Gateway check, Verdict) first. A diagnosis is everything the plugin can find out
+about whether one gateway configuration works, as a list of findings; the doctor prints them and save validation refuses
+a configuration with a failed one. Which check runs when lives here only: neither caller asks a gateway check, reads
+the latest order number or interprets a gateway configuration's options itself.
+- **`DiagnoserInterface`** (service `Diagnoser`, args `GatewayChecksInterface`, `LatestOrderNumberProviderInterface`):
+  `diagnose(GatewayConfiguration, bool $live = false): list<Finding>`. An unusable configuration is diagnosed, not
+  thrown; errors the gateway checks let through still propagate.
+- **`Finding`** (value): `kind` (`FindingKind`), `outcome` (`FindingOutcome`: `Passed`, `Failed`, `Warning`: a check
+  that was skipped or proved nothing, or a setting that works but surprises), `text` (English, for the console and
+  logs) and the data a caller words it from in another language: `option` (a rejected option's current name),
+  `orderId` and `orderNumber`, `agreementId`. A gateway check's verdict becomes one finding with its note: passed →
+  passed, failed → failed (its reason), undetermined → a warning (what couldn't be found out, then its reason).
+- **The findings, in order:**
+  1. An unreadable configuration (`isUnreadable()`): one failed finding (`UnusableGatewayConfiguration`'s message),
+     then the skipped-checks warning, and nothing else.
+  2. One failed finding per option payum-quickpay rejects (`getViolations()`, its English reason as the text).
+  3. The stored-option warnings, for any readable configuration: a deprecated option (`usesDeprecatedOptions()`: re-save
+     the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout captures immediately).
+  4. The order id, whenever `orderPrefix()` isn't null (none when the library rejects the order prefix itself, whose
+     violation is the failure): `OrderId::of()` of the prefix and the latest order number, read on every `diagnose()`,
+     or the stand-in (`STAND_IN_ORDER_NUMBER`) while there is no order; `InvalidOrderId` → failed, saying whose number
+     it is. An empty prefix that gives a valid order id adds a passed reminder that order numbers must be unique on the
+     Quickpay account. There is no cross-gateway prefix check: within one store a shared prefix only means the same
+     order id for the same order, which the library's pick-up handles.
+  5. An unusable configuration ends with the warning that its checks against Quickpay were skipped (their errors would
+     only follow from the configuration's).
+  6. The api key (`apiKey()`).
+  7. The agreement: no agreement id → passed (Quickpay uses the account's default Payment Window agreement), whatever
+     the api key's verdict and without asking; an id and an api key that didn't pass → a skipped warning; otherwise
+     `agreement()`.
+  8. With `$live` only, the payment link permission (`paymentLinkPermission()`, which leaves a test payment on the
+     account): a skipped warning when the api key didn't pass.
+- `tests/Unit/Diagnosis/DiagnoserTest` owns these rules (order, gating, wording, data); the doctor's and save
+  validation's tests cover only how they show the findings.
 
 ### Reconciling payments (`src/Reconciliation/`)
 Read `GLOSSARY.md` (Sylius payment, Quickpay payment, Callback, Reconcile, Status check; use these terms in code,
@@ -583,34 +623,16 @@ requests the route as a logged-in administrator (a `TestBrowserToken` stored in 
 does; browser-kit isn't installed), reads each row's callback cell with ext-dom's `DOMXPath` (dom-crawler isn't
 installed either), and renders the template with the container's Twig to check when the placeholder is there.
 
-`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `GatewayChecksInterface`,
-`GatewayConfigurationProviderInterface`, `router`, `LatestOrderNumberProviderInterface`) machine-checks the README's Troubleshooting
-section per Quickpay gateway configuration from the module's `all()`. It checks what the gateway checks: each
-violation payum-quickpay finds is a failed check, an unreadable (encrypted) configuration is one failed check
-printing `UnusableGatewayConfiguration`'s message, and an unusable configuration's checks against Quickpay are skipped.
-The order id check needs no gateway, so it runs on every readable configuration whose `orderPrefix()` isn't null (none
-when the library rejects the order prefix itself, whose violation is the failure): `OrderId::of()` of the prefix and
-the latest order number, read once per run (✔ `The order id of the latest order, "qp_000000123", is one Quickpay
-accepts`, or with no order the stand-in's ✔ `No orders yet: a Sylius order number like "000000001" gives …`;
-`InvalidOrderId` → ✖ with its message, saying whose number it is), plus ✔ `No order prefix configured — make sure order
-numbers are unique on the Quickpay account` for an empty prefix. There is no cross-gateway prefix check: within one
-store a shared prefix only means the same order id for the same order, which the library's pick-up handles. On a usable
-one it also runs, on the typed options:
-api key (the gateway checks' `apiKey()` verdict, printed by `report()`: passed ✔ with its note, failed ✖ with its
-reason, counted as a failure, undetermined a warning with its reason; the agreement check of an agreement id and the
-`--live` check run only when it passed, each skipped with a warning otherwise), a warning in place of a private key
-check (nothing proves the key is the account's: Quickpay's `GET /account/private-key` answers 401 to an api user
-without that permission, verified live, and a sign-then-verify round trip can't fail; only a callback's checksum
-proves it, so the warning points to the callback outcome, 400 in the operations panel), the agreement
-(`checkAgreement()` reads the agreement id from the typed options: none prints ✔
-`No agreement id configured — Quickpay uses the account's default Payment Window agreement` whatever the api key's
-verdict, since there is nothing to ask; an id gets the gateway checks' `agreement()` verdict, printed by `report()` as
-`Agreement N exists on the account`), and notify-route
-registration; `--live` prints the gateway checks' `paymentLinkPermission()`
-verdict with its note naming the test payment (skipped with a warning when the api key didn't pass). It warns, without failing, about a stored deprecated gateway option
-(`usesDeprecatedOptions()`: re-save the payment method) and an unset capture mode (`isCaptureModeSet()`: checkout
-captures immediately), for a readable configuration even when it is invalid. Non-zero exit on any failed check;
-warnings don't fail. Its output is English console text, like the other commands', so it has no translations.
+`Command/DoctorCommand` (`setono:sylius-quickpay:doctor`; args `DiagnoserInterface`,
+`GatewayConfigurationProviderInterface`, `router`) machine-checks the README's Troubleshooting section. It prints, in
+order: the notify route registration (✔, or ✖ failing the run); when no Quickpay gateway is configured, a warning and
+nothing else; otherwise, once per run, a warning in place of a private key check (nothing proves the key is the
+account's: Quickpay's `GET /account/private-key` answers 401 to an api user without that permission, verified live, and a
+sign-then-verify round trip can't fail; only a callback's checksum proves it, so the warning points to the callback
+outcome, 400 in the operations panel) and, without `--live`, the hint to run with `--live`; then a section per gateway
+configuration from the module's `all()` with its diagnosis (`diagnose($configuration, $live)`, *Gateway configuration
+diagnosis* above): passed ✔, failed ✖ (counted), warning !. Non-zero exit on any failed finding or a missing notify
+route; warnings don't fail. Its output is English console text, like the other commands', so it has no translations.
 
 `Command/ReconcilePaymentsCommand` (`setono:sylius-quickpay:reconcile-payments`; args `PendingPaymentsInterface`,
 `PaymentReconcilerInterface`, `QuickpayClientProviderInterface`, `GatewayConfigurationProviderInterface`) is the
@@ -786,24 +808,20 @@ requests the route with a Payum token minted as Sylius does.
   Admin API alike (the payment method's `Valid` cascade reaches the gateway config; the pattern Sylius' Stripe and
   PayPal gateways use). The plugin's validation mapping (`Resources/config/validation/GatewayConfig.xml`) declares
   `Validator/Constraints/UsableGatewayConfiguration` (class constraint on Sylius' `GatewayConfig`, group
-  `sylius_quickpay`): its validator reads the config through the gateway configuration module and adds a violation per
-  option payum-quickpay rejects, at `config[<option>]` (lands on the form field; an option without a field, like
-  `language`, on the config form). The admin never sees the library's English: each violation is the plugin's own
-  message saying what the option accepts (the constraint's `optionMessages`, keys
-  `setono_sylius_quickpay.gateway_configuration.gateway_option.<option>`), or, for an option without one (a later
-  payum-quickpay's), the generic `invalid_gateway_option` naming it; the library's reason is logged at info level with
-  the option name (`setLogger`). When payum-quickpay adds an option, add its message. An unreadable/encrypted config
-  (`isUnreadable()`) gets the plugin's `unreadable` message on `config`. Every message is a `validators` key shipped in
-  all 16 locales (the functional test checks each locale). The doctor still prints the library's text: console output is
-  English. Whenever `orderPrefix()` isn't null, it then checks the order id that prefix gives the latest order
-  (*The order id* above): an `InvalidOrderId` is a violation at `config[order_prefix]`, message
-  `order_id.refused` with `{{ order_id }}` and `{{ number }}`. Only on a usable configuration
-  does it then run the api key gateway check (`GatewayChecksInterface::apiKey()`, shared with the doctor command; see
-  *Gateway checks*): failed → a violation at `config[api_key]` (translated `validators` message); undetermined → the
-  save goes through, logged at info level with the reason; passed → nothing. Only when the api key passed and an
-  agreement id is set does it then run the agreement gateway check (`agreement()`): failed → a violation at
-  `config[agreement_id]` (translated `validators` message `agreement_id.not_found`); undetermined → the save goes
-  through, logged at info level with the reason. Tested functionally in `tests/Functional/Validator/` (the
+  `sylius_quickpay`): its validator (arg `DiagnoserInterface`) diagnoses the config (*Gateway configuration diagnosis*
+  above; never live, so saving leaves no test payment on the account) and turns each failed finding into a violation
+  in the admin's language on its field. A rejected option → the plugin's own message saying what the option accepts
+  (the constraint's `optionMessages`, keys `setono_sylius_quickpay.gateway_configuration.gateway_option.<option>`) or,
+  for an option without one (a later payum-quickpay's), the generic `invalid_gateway_option` naming it, at
+  `config[<option>]` (lands on the form field; an option without a field, like `language`, on the config form); an
+  unreadable/encrypted config → `unreadable` on `config`; the order id → `order_id.refused` with `{{ order_id }}` and
+  `{{ number }}` at `config[order_prefix]`; a refused api key → `config[api_key]`; an agreement Quickpay doesn't find →
+  `agreement_id.not_found` at `config[agreement_id]`. A failed finding of another kind (only the live payment link
+  check can be one) is a `\LogicException`. When payum-quickpay adds an option, add its message. Every message is a
+  `validators` key shipped in all 16 locales (the functional test checks each locale). The admin never sees the
+  diagnosis' English: every finding that didn't pass (failed or warning, an undetermined check included) is logged at
+  info level with its text, context `gatewayName`, `kind` and, for a rejected option, `option` (`setLogger`). A
+  warning never refuses the save. Tested functionally in `tests/Functional/Validator/` (the
   container's validator with the generator's groups) and `tests/Functional/Form/PaymentMethodFormTest` (the real
   payment method form type).
 - `FactoryBuilder/QuickpayGatewayFactoryBuilder` injects a guessed UI `language` into the gateway default config at

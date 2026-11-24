@@ -135,8 +135,10 @@ doesn't find it. Quickpay accepts a payment link with an agreement id it doesn't
 only shows when a customer's payment window fails to open. The lookup needs the API user's permission to read
 agreements (`GET /agreements/:id`); grant it, or the check can't tell. It fails open the same way as the API key: an
 API user without the `/agreements` permission, or an unreachable Quickpay, never blocks saving, and why the agreement
-couldn't be checked is logged at info level (the doctor prints it as a warning). Fixtures, the console and writes straight to the database skip
-this validation.
+couldn't be checked is logged at info level (the doctor prints it as a warning). Saving and the doctor run the same
+checks in the same order, so a configuration the doctor passes is one saving accepts; saving logs, in English at info
+level, every one that didn't pass, including the reason payum-quickpay rejected an option. Fixtures, the console and
+writes straight to the database skip this validation.
 
 **Encrypting gateway configurations is not supported.** Don't switch on PayumBundle's encryption of stored gateway
 configurations (`payum.dynamic_gateways.encryption.defuse_secret_key`) in a store that uses this plugin. Only Payum's
@@ -595,10 +597,13 @@ id there is nothing to ask, and Quickpay uses the account's default Payment Wind
 
 The private key can't be checked from the store: Quickpay hands it only to an API user allowed to read it, which yours
 needn't be. Only a callback proves it, so the doctor prints a reminder (!) of where a wrong one shows (see
-[Troubleshooting](#troubleshooting)).
+[Troubleshooting](#troubleshooting)), once per run, before the gateways, together with the hint to run with `--live`
+when you didn't.
 
-First, it reads each gateway configuration by the same rules the gateway is built from, so "All checks passed"
-means the gateway can be built:
+Each gateway's checks are printed in the order they depend on each other: its gateway options, then the `order_id` its
+order prefix gives your latest order, then the checks against Quickpay (the api key, the agreement and, with `--live`,
+the payment link permission). First, it reads each gateway configuration by the same rules the gateway is built from, so
+"All checks passed" means the gateway can be built:
 
 - every gateway option the gateway would reject is a failed check of its own, e.g. a missing api key or private key,
   an agreement or branding id that isn't a positive whole number, or a `synchronized` that isn't a yes/no value. Only

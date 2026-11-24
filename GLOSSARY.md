@@ -71,3 +71,11 @@ _Avoid_: probe, verification, doctor check
 **Verdict**:
 The outcome of a gateway check: passed, failed, or undetermined when Quickpay's answer proves neither.
 _Avoid_: result, verification
+
+**Diagnosis**:
+Everything the plugin can find out about whether a gateway configuration works: the gateway options it rejects, the order id it gives the latest order, its gateway checks, and what its stored options say that works but surprises. A diagnosis is a list of findings.
+_Avoid_: health check, doctor check, validation
+
+**Finding**:
+One thing a diagnosis says about a gateway configuration: passed, failed, or a warning (a check that was skipped or proved nothing, or a setting that works but surprises). Each gateway check's verdict becomes one finding.
+_Avoid_: check result, issue, problem
