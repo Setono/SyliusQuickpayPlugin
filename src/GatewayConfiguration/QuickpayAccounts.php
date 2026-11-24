@@ -6,8 +6,8 @@ namespace Setono\SyliusQuickpayPlugin\GatewayConfiguration;
 
 /**
  * The Quickpay accounts of the stored gateway configurations ({@see GatewayConfigurationProviderInterface::accounts()}),
- * and the gateway configurations that belong to no known account because they are unusable: an api key can't be read
- * from one, so it can't be placed.
+ * and the gateway configurations that belong to no known account because they are unusable: no option of one is read,
+ * its api key included, so it can't be placed.
  */
 final class QuickpayAccounts
 {

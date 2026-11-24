@@ -6,14 +6,17 @@ which replaces its hand-rolled API client with [`setono/quickpay-php-sdk`](https
 [`docs/UPGRADE-2.0.md`](https://github.com/Setono/payum-quickpay/blob/2.x/docs/UPGRADE-2.0.md) for the
 gateway-level background; this document covers what a **Sylius shop upgrading this plugin** has to do.
 
-Already on a 2.0 alpha? [Upgrading from an earlier 2.0 alpha](#upgrading-from-an-earlier-20-alpha) lists what
-changed from `v2.0.0-alpha.2` to `v2.0.0-beta.1`, and [Upgrading from v2.0.0-beta.1](#upgrading-from-v200-beta1)
-what changed since.
+Already on a 2.0 pre-release? Read the sections from your version on:
+[Upgrading from an earlier 2.0 alpha](#upgrading-from-an-earlier-20-alpha) lists what changed from `v2.0.0-alpha.2` to
+`v2.0.0-beta.1`, [Upgrading from v2.0.0-beta.1](#upgrading-from-v200-beta1) what changed in `v2.0.0-beta.2`, and
+[Upgrading from v2.0.0-beta.2](#upgrading-from-v200-beta2) what changed since.
 
 ## Requirements
 
-- Your project needs a PSR-18 HTTP client and PSR-17 factories discoverable by `php-http/discovery`
-  (e.g. `composer require symfony/http-client nyholm/psr7`).
+- **Sylius 1.13 or later on Symfony 6.4.** 1.x also ran on Symfony 5.4; 2.x uses Sylius' state machine abstraction,
+  which Sylius 1.13 introduced, and is tested on Sylius 1.14. PHP stays at 8.1 or higher.
+- Your project needs PSR-17 factories discoverable by `php-http/discovery` (e.g. `composer require nyholm/psr7`). The
+  plugin brings `symfony/http-client` as its PSR-18 client.
 - Until the plugin's 2.x line and the gateway library have stable releases, allow the pre-release
   versions in your **root** `composer.json`:
 
@@ -27,7 +30,7 @@ Your `GatewayConfig` rows carry values written by the 1.x admin form. After upgr
 
 - **`merchant` is gone — and was never used.** Quickpay API v10 authenticates with the API key alone,
   so the value was inert even on 1.x (where the form required it). Stale `merchant` keys in existing
-  configs are harmless and are dropped the next time you save the payment method.
+  configs are harmless: nothing reads them, and re-saving the payment method keeps them as stored.
 - **`apikey`/`privatekey` are now `api_key`/`private_key`.** The old spellings keep working as
   deprecated aliases in the gateway library, so stored configs survive the upgrade untouched — and the
   admin form migrates them: editing an existing Quickpay payment method shows the stored credentials,
@@ -123,11 +126,10 @@ street splitting, the country/currency matcher, and the Klarna fixtures.
 | `Action\StatusAction` | removed — the gateway library's balance-aware status action is used |
 | `Action\NotifyAction` | removed — the gateway library validates the callback HMAC itself |
 | `Exception\UnsupportedPaymentTransitionException` | removed — has not been thrown since 2018 |
-| `Checker\*`, `Validator\*`, `Klarna\*`, `Fixture\KlarnaTestShopUserFixture` | removed with Klarna support |
+| `Checker\*`, `Validator\AddressStreetEligibilityValidator`, `Validator\Constraints\AddressStreetEligibility`, `Klarna\*`, `Fixture\KlarnaTestShopUserFixture` | removed with Klarna support |
 | `Form\Type\QuickPayGatewayConfigurationType` | `Form\Type\GatewayConfigurationType` |
 | `Guesser\QuickpayLanguageGuesser(Interface)` | `Guesser\LanguageGuesser(Interface)` |
 | `Action\ConvertPaymentAction`'s order mapping (`getRelatedOrderDetails()`, `convertAddress()`, `convertOrderItems()`) | `OrderDescription\OrderDescriber(Interface)` — the convert action only hands its order description to the gateway library's convert |
-| `Provider\PaymentProvider(Interface)` (`findByQuickpayPaymentId()`) | `Quickpay\QuickpayPaymentIdProvider(Interface)` — `tryIdOf()` gives a payment's Quickpay payment id, which the shared callback endpoint compares among an order's payments |
 
 ## The account-wide callback url is only needed for outside operations
 
@@ -216,13 +218,35 @@ if you make those and want the store to notice. The README's *Callbacks* section
   badge, the reconciliation command gains a `--fraud-suspected` report mode, and an opt-in
   `fraud.block_capture` config flag skips the automatic capture on completion for fraud suspected
   payments, leaving them for manual review.
-- **New: the API key is verified at form-save time.** Saving a Quickpay payment method verifies the
-  submitted key against the Quickpay API and rejects the form when Quickpay rejects it. A valid key
-  whose API user lacks the `/ping` permission is verified through a `/payments` read instead, and an
-  unreachable Quickpay skips the check — neither a locked-down API user nor an outage blocks saving.
+- **New: saving validates the gateway configuration, in the admin and through the Admin API.** Saving a Quickpay
+  payment method refuses every gateway option the gateway rejects, an order prefix whose order id Quickpay refuses for
+  your latest order number, an api key Quickpay rejects and an agreement id the account doesn't have, each on its field
+  in the admin's language. A valid key whose API user lacks the `/ping` permission is verified through a `/payments`
+  read instead, and an API user that may not read agreements or an unreachable Quickpay never blocks saving. Saving
+  runs the doctor's checks, all but `--live`. A stored configuration the gateway rejects (written before the upgrade, by
+  fixtures or straight to the database) makes that payment method's operations and callbacks fail until it is fixed:
+  run the doctor after upgrading.
 - **New: live operation history on the admin order view.** Each Quickpay payment shows its operations
-  (type, amount, status, timestamp), captured balance and test-mode flag, fetched from Quickpay after
-  the page has rendered — no storage, no migrations.
+  (type, amount, status, timestamp, and how its callback was answered), captured balance and test-mode flag, fetched
+  from Quickpay after the page has rendered — no storage, no migrations.
+- **New: a payment link panel on the admin order view.** A Quickpay payment awaiting payment shows a copy-able link to
+  pay the order and a button that emails it to the customer (email code `setono_sylius_quickpay_payment_link`,
+  template `@SetonoSyliusQuickpayPlugin/email/payment_link.html.twig`). See the README's *Payment link in the admin*.
+- **New: payment method logos at checkout.** Each Quickpay payment method shows the logos of the payment methods its
+  window offers, from its *Payment methods* field. Run `bin/console assets:install` to publish them, and see the
+  README's *Payment method logos on the checkout* for the `checkout.payment_method_logos` and
+  `checkout.creditcard_brands` config.
+- **Every request to Quickpay gives up after 10 seconds and is never retried.** The gateway's requests and the
+  plugin's own go through one scoped HTTP client, `setono_sylius_quickpay.http_client`, which you can tune in your
+  framework configuration; see the README's *HTTP policy*.
+- **Completing a payment captures only an authorization Quickpay holds.** 1.x sent a capture on every `complete`. Now
+  the plugin first reads the Quickpay payment's status: a payment Quickpay already captured completes with nothing
+  sent, and completing one Quickpay holds no authorization for (never paid, or declined) fails with
+  `StateMachine\NoAuthorizationToCapture`, naming the payment, with nothing sent to Quickpay.
+- **A Quickpay payment in the state `invalid` fails the Sylius payment**, which 1.x never did. A declined attempt still
+  leaves the payment new, since Quickpay keeps the payment open for another try, and a customer who leaves the
+  payment window after one now sees an error flash saying their payment was declined
+  (`setono_sylius_quickpay.payment_declined` in the `flashes` domain).
 
 ## Upgrading from an earlier 2.0 alpha
 
@@ -738,16 +762,22 @@ The service definitions changed accordingly; only a redefinition or decoration o
 - **`Checkout\DeclinedAttemptFlashSubscriber`**, an event subscriber on Sylius' after-pay page (route
   `sylius_shop_order_after_pay`) that tells a customer returning after a declined attempt that their payment was
   declined (below). Its flash message's translation key is `DeclinedAttemptFlashSubscriber::MESSAGE`,
-  `setono_sylius_quickpay.payment_declined` in the `flashes` domain, shipped in all 16 locales.
-- **`Diagnosis\DiagnoserInterface`** (service `Diagnoser`, args `GatewayChecksInterface` and
-  `LatestOrderNumberProviderInterface`), with the values `Diagnosis\Finding`, `Diagnosis\FindingKind` and
-  `Diagnosis\FindingOutcome`. `diagnose(GatewayConfiguration $gatewayConfiguration, bool $live = false): list<Finding>`
+  `setono_sylius_quickpay.payment_declined` in the `flashes` domain, shipped in all 16 locales. Service
+  `Setono\SyliusQuickpayPlugin\Checkout\DeclinedAttemptFlashSubscriber`, constructor `(Payum $payum,
+  QuickpayClientProviderInterface $quickpayClientProvider, QuickpayPaymentIdProviderInterface
+  $quickpayPaymentIdProvider)`, logger-aware, tagged `kernel.event_subscriber`.
+- **`Diagnosis\DiagnoserInterface`** (service `Setono\SyliusQuickpayPlugin\Diagnosis\Diagnoser`, constructor
+  `(GatewayChecksInterface $gatewayChecks, LatestOrderNumberProviderInterface $latestOrderNumberProvider)`, aliased by
+  the interface, which the doctor and save validation inject: decorating it changes both), with the values
+  `Diagnosis\Finding`, `Diagnosis\FindingKind` and `Diagnosis\FindingOutcome`. `diagnose(GatewayConfiguration $gatewayConfiguration, bool $live = false): list<Finding>`
   finds out what the doctor and save validation both check about a gateway configuration, in the order the checks
   depend on each other; the doctor prints the findings, and save validation refuses a configuration with a failed one.
 - **`GatewayConfigurationProviderInterface::accounts(): QuickpayAccounts`**, the Quickpay accounts of the stored gateway
-  configurations: the configurations sharing an api key are one account (`GatewayConfiguration\QuickpayAccount`: its
-  `key`, derived from the api key, its `gatewayConfigurations` and `gatewayNames()`), and the unusable ones, whose api
-  key can't be read, are returned apart. A class of your own implementing the interface needs the method; return
+  configurations. `QuickpayAccounts` holds `accounts`, a `GatewayConfiguration\QuickpayAccount` per distinct api key
+  (its `key`, its `gatewayConfigurations`, `gatewayConfiguration()` to reach it with, and `gatewayNames()`), and
+  `unusable`, the `UnusableGatewayConfiguration` of each unusable configuration, which can't be placed in an account.
+  `QuickpayAccount::keyOf()` derives the key from the api key as the reconcile run already did for its watermarks, so
+  stored watermarks stay valid. A class of your own implementing the interface needs the method; return
   `QuickpayAccounts::of($this->all())`.
 
 ### Changed constructors
@@ -788,13 +818,18 @@ The service definitions changed accordingly; only a redefinition or decoration o
   options that surprise, the `order_id` its order prefix gives the latest order, then the api key, the agreement and,
   with `--live`, the payment link permission. The order id now comes before the api key. The reminder about the
   private key and the hint to run with `--live` are printed once per run, before the gateways, instead of once per
-  gateway. Every line's wording is unchanged.
+  gateway: the `--live` hint whatever the api key's verdict (it followed an accepted api key only), and the private
+  key reminder also when no gateway configuration is usable. Every line's wording is unchanged.
 - **Save validation logs every check that didn't pass**, at info level, in English: a refused api key, agreement or
-  order id, a rejected gateway option (with payum-quickpay's reason, as before), an undetermined check (as before), a
-  skipped one, and a stored deprecated option or unset capture mode. Each record's context has `gatewayName` and the
-  finding's `kind`, plus `option` for a rejected option. The messages read `Refused the gateway configuration of the
-  Quickpay gateway "<name>": …` or `A warning about the gateway configuration of the Quickpay gateway "<name>": …`.
-  What is refused, and the admin's messages, are unchanged.
+  order id, an unreadable configuration, a rejected gateway option (with payum-quickpay's reason), an undetermined
+  check, a skipped one, and a stored deprecated option or unset capture mode. The messages read `Refused the gateway
+  configuration of the Quickpay gateway "<name>": …` or `A warning about the gateway configuration of the Quickpay
+  gateway "<name>": …`, each record's context has `gatewayName` and the finding's `kind`, plus `option` for a
+  rejected option. The two logs it wrote before changed: an undetermined check read `Accepted the api key of the
+  Quickpay gateway "<name>", whose check is undetermined: …` (or `Accepted agreement N of …`) with only `gatewayName`
+  in its context, and now reads `A warning about …: Could not check the api key: …`; a rejected option read `Refused
+  the gateway configuration of the Quickpay gateway "<name>": <reason>` with only `option`. Adjust a log alert matching
+  the old text. What is refused, and the admin's messages, are unchanged.
 - **The fraud report asks each Quickpay account once.** It queried Quickpay once per gateway configuration, but
   Quickpay lists an account's payments together, so payment methods sharing an api key (card and MobilePay, the usual
   setup) reported every flagged payment once per payment method, each copy under another gateway's name, and
