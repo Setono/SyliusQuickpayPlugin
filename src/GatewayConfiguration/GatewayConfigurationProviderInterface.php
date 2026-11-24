@@ -22,6 +22,13 @@ interface GatewayConfigurationProviderInterface
     public function all(): array;
 
     /**
+     * The Quickpay accounts of every stored Quickpay gateway configuration (see GLOSSARY.md): the gateway configurations
+     * sharing an api key belong to one account, and Quickpay lists their payments together. An unusable configuration
+     * can't be placed and is returned apart. Never throws.
+     */
+    public function accounts(): QuickpayAccounts;
+
+    /**
      * The gateway configuration of the named gateway, or null when no gateway of that name is stored or it
      * isn't a Quickpay one
      */

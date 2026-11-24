@@ -6,6 +6,7 @@ namespace Setono\SyliusQuickpayPlugin\Tests\Functional\GatewayConfiguration;
 
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\QuickpayAccount;
 use Setono\SyliusQuickpayPlugin\Tests\Functional\FunctionalTestCase;
 use Sylius\Component\Core\Model\PaymentInterface;
 use Sylius\Component\Core\OrderPaymentStates;
@@ -32,6 +33,27 @@ final class GatewayConfigurationProviderTest extends FunctionalTestCase
 
         self::assertSame(['quickpay_dk', 'quickpay_se'], array_keys($configurations));
         self::assertSame('the-dk-api-key', $configurations['quickpay_dk']->options()->apiKey);
+    }
+
+    /**
+     * @test
+     */
+    public function it_groups_the_stored_quickpay_gateway_configurations_into_quickpay_accounts(): void
+    {
+        self::bootKernel();
+
+        $this->createPaymentMethod('quickpay_credit_card', ['api_key' => 'the-dk-api-key', 'private_key' => 'the-private-key']);
+        $this->createPaymentMethod('quickpay_mobilepay', ['api_key' => 'the-dk-api-key', 'private_key' => 'the-private-key']);
+        $this->createPaymentMethod('quickpay_se', ['api_key' => 'the-se-api-key', 'branding_id' => 'Our brand']);
+        $this->createPaymentMethod('bank_transfer', [], factoryName: 'offline');
+
+        $accounts = $this->provider()->accounts();
+
+        self::assertCount(1, $accounts->accounts);
+        self::assertEqualsCanonicalizing(['quickpay_credit_card', 'quickpay_mobilepay'], $accounts->accounts[0]->gatewayNames());
+        self::assertSame(QuickpayAccount::keyOf('the-dk-api-key'), $accounts->accounts[0]->key);
+        self::assertCount(1, $accounts->unusable);
+        self::assertSame('quickpay_se', $accounts->unusable[0]->gatewayName);
     }
 
     /**

@@ -7,7 +7,6 @@ namespace Setono\SyliusQuickpayPlugin\Command;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AccountWindow;
 use Setono\SyliusQuickpayPlugin\Reconciliation\AnotherRunIsReconciling;
@@ -255,29 +254,36 @@ final class ReconcilePaymentsCommand extends Command
 
     /**
      * Unlike reconciling, which reconciles the pending payments Quickpay changed, this only reports:
-     * every configured Quickpay gateway is queried for payments flagged fraud suspected within the
-     * period, whatever the state of their Sylius payments. Nothing is transitioned or persisted.
-     * A gateway that can't be queried, its gateway configuration unusable included, is reported and
-     * fails the run, so a gap in the report is never silent. Neither is a limit: without one, every
-     * flagged payment is reported; with one, it caps the payments reported across gateways, and once
-     * the report holds that many, it says so and names the gateways it didn't query. Reaching the
-     * limit isn't a failure.
+     * every Quickpay account (see GLOSSARY.md) of the configured gateways is queried once for the
+     * payments flagged fraud suspected within the period, whatever the state of their Sylius payments;
+     * Quickpay lists an account's payments together, whichever of its gateways took them. Nothing is
+     * transitioned or persisted. A gateway configuration that is unusable, so it can't be placed in an
+     * account, and an account that can't be queried are reported and fail the run, so a gap in the
+     * report is never silent. Neither is a limit: without one, every flagged payment is reported; with
+     * one, it caps the payments reported across accounts, and once the report holds that many, it says
+     * so and names the gateways of the accounts it didn't query. Reaching the limit isn't a failure.
      */
     private function reportFraudSuspected(SymfonyStyle $io, \DateTimeImmutable $createdSince, ?int $limit): int
     {
         $rows = [];
-        $errored = false;
         $notQueried = [];
+        $accounts = $this->gatewayConfigurationProvider->accounts();
 
-        foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
+        foreach ($accounts->unusable as $unusable) {
+            $io->warning(sprintf('Gateway(s) %s: %s', self::quoted([$unusable->gatewayName]), $unusable->getMessage()));
+        }
+
+        $errored = [] !== $accounts->unusable;
+
+        foreach ($accounts->accounts as $account) {
             if (null !== $limit && \count($rows) >= $limit) {
-                $notQueried[] = $gatewayConfiguration->gatewayName;
+                array_push($notQueried, ...$account->gatewayNames());
 
                 continue;
             }
 
             try {
-                $payments = $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->payments()->paginate(new PaymentsQuery(
+                $payments = $this->clientProvider->forGatewayConfiguration($account->gatewayConfiguration())->payments()->paginate(new PaymentsQuery(
                     minTime: $createdSince,
                     fraudSuspected: true,
                     sortBy: 'created_at',
@@ -286,7 +292,7 @@ final class ReconcilePaymentsCommand extends Command
 
                 foreach ($payments as $payment) {
                     $rows[] = [
-                        $gatewayConfiguration->gatewayName,
+                        implode(', ', $account->gatewayNames()),
                         (string) $payment->id,
                         $payment->orderId,
                         $payment->state,
@@ -298,16 +304,17 @@ final class ReconcilePaymentsCommand extends Command
                         break;
                     }
                 }
-            } catch (UnusableGatewayConfiguration|QuickpayException $e) {
+            } catch (QuickpayException $e) {
+                // An account's gateway configurations are usable, so a client is built; only Quickpay can fail
                 $errored = true;
-                $io->warning(sprintf('Gateway "%s": %s', $gatewayConfiguration->gatewayName, $e->getMessage()));
+                $io->warning(sprintf('Gateway(s) %s: %s', self::quoted($account->gatewayNames()), $e->getMessage()));
             }
         }
 
         $stopped = null !== $limit && \count($rows) >= $limit;
 
         if ([] !== $rows) {
-            $io->table(['Gateway', 'Quickpay id', 'Order id', 'State', 'Created', 'Test mode'], $rows);
+            $io->table(['Gateways', 'Quickpay id', 'Order id', 'State', 'Created', 'Test mode'], $rows);
             $io->warning(sprintf('%d payment(s) flagged as fraud suspected. Review them in the Quickpay manager before capturing.', \count($rows)));
         } elseif (!$stopped) {
             $io->success('Quickpay reports no fraud suspected payments in the period.');

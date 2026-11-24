@@ -11,8 +11,9 @@ use Prophecy\Prophecy\ObjectProphecy;
 use Setono\Quickpay\Client\Client;
 use Setono\Quickpay\Client\ClientInterface;
 use Setono\SyliusQuickpayPlugin\Command\ReconcilePaymentsCommand;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
+use Setono\SyliusQuickpayPlugin\GatewayConfiguration\QuickpayAccounts;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PaymentReconcilerInterface;
 use Setono\SyliusQuickpayPlugin\Reconciliation\PendingPaymentsInterface;
@@ -70,7 +71,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
      */
     public function it_rejects_a_fraud_report_limit_that_is_no_whole_number_of_payments(): void
     {
-        $this->gatewayConfigurationProvider->all()->shouldNotBeCalled();
+        $this->gatewayConfigurationProvider->accounts()->shouldNotBeCalled();
 
         foreach (['0', 'ten', '2.5'] as $limit) {
             $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => $limit]);
@@ -86,7 +87,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
     public function it_reports_fraud_suspected_payments_without_touching_any_payment(): void
     {
         $gatewayConfiguration = GatewayConfigurations::of(gatewayName: 'quickpay_credit_card');
-        $this->gatewayConfigurationProvider->all()->willReturn([$gatewayConfiguration]);
+        $this->configureGateways($gatewayConfiguration);
         $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->willReturn(self::clientAnswering('qp_000000123'));
 
         $this->pendingPayments->start(Argument::cetera())->shouldNotBeCalled();
@@ -96,7 +97,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         $display = self::normalized($tester->getDisplay());
-        self::assertStringContainsString('Gateway Quickpay id Order id State Created Test mode', $display);
+        self::assertStringContainsString('Gateways Quickpay id Order id State Created Test mode', $display);
         self::assertStringContainsString('quickpay_credit_card 501 qp_000000123 new 2026-11-16 10:00:00 yes', $display);
         self::assertStringContainsString('1 payment(s) flagged as fraud suspected', $display);
         self::assertStringNotContainsString('stopped at the limit', $display);
@@ -108,7 +109,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
     public function it_caps_the_fraud_report_at_the_limit_and_says_it_may_be_incomplete(): void
     {
         $gatewayConfiguration = GatewayConfigurations::of(gatewayName: 'quickpay_credit_card');
-        $this->gatewayConfigurationProvider->all()->willReturn([$gatewayConfiguration]);
+        $this->configureGateways($gatewayConfiguration);
         $this->clientProvider->forGatewayConfiguration($gatewayConfiguration)->willReturn(self::clientAnswering('qp_000000123', 'qp_000000124'));
 
         $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => '1']);
@@ -121,17 +122,44 @@ final class ReconcilePaymentsCommandTest extends TestCase
     }
 
     /**
+     * Quickpay lists an account's payments together, so one query reports the payments of every gateway sharing its
+     * api key, each once
+     *
      * @test
      */
-    public function it_names_every_gateway_the_fraud_report_did_not_query_once_it_reached_the_limit(): void
+    public function it_queries_a_quickpay_account_once_however_many_gateways_share_its_api_key(): void
     {
         $creditCard = GatewayConfigurations::of(gatewayName: 'quickpay_credit_card');
         $mobilePay = GatewayConfigurations::of(gatewayName: 'quickpay_mobilepay');
         $viaBill = GatewayConfigurations::of(gatewayName: 'quickpay_viabill');
-        $this->gatewayConfigurationProvider->all()->willReturn([$creditCard, $mobilePay, $viaBill]);
+        $this->configureGateways($creditCard, $mobilePay, $viaBill);
+        $this->clientProvider->forGatewayConfiguration($creditCard)->shouldBeCalledOnce()->willReturn(self::clientAnswering('qp_000000123'));
+        $this->clientProvider->forGatewayConfiguration($mobilePay)->shouldNotBeCalled();
+        $this->clientProvider->forGatewayConfiguration($viaBill)->shouldNotBeCalled();
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+        $display = self::normalized($tester->getDisplay());
+        self::assertStringContainsString('quickpay_credit_card, quickpay_mobilepay, quickpay_viabill 501 qp_000000123 new', $display);
+        self::assertSame(1, substr_count($display, 'qp_000000123'));
+        self::assertStringContainsString('1 payment(s) flagged as fraud suspected', $display);
+    }
+
+    /**
+     * @test
+     */
+    public function it_names_every_gateway_of_the_accounts_the_fraud_report_did_not_query_once_it_reached_the_limit(): void
+    {
+        $creditCard = GatewayConfigurations::of(gatewayName: 'quickpay_credit_card');
+        $mobilePay = GatewayConfigurations::of(self::withApiKey('another-api-key'), 'quickpay_mobilepay');
+        $viaBill = GatewayConfigurations::of(self::withApiKey('another-api-key'), 'quickpay_viabill');
+        $anyday = GatewayConfigurations::of(self::withApiKey('a-third-api-key'), 'quickpay_anyday');
+        $this->configureGateways($creditCard, $mobilePay, $viaBill, $anyday);
         $this->clientProvider->forGatewayConfiguration($creditCard)->willReturn(self::clientAnswering('qp_000000123', 'qp_000000124'));
         $this->clientProvider->forGatewayConfiguration($mobilePay)->shouldNotBeCalled();
         $this->clientProvider->forGatewayConfiguration($viaBill)->shouldNotBeCalled();
+        $this->clientProvider->forGatewayConfiguration($anyday)->shouldNotBeCalled();
 
         $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => '2']);
 
@@ -140,29 +168,50 @@ final class ReconcilePaymentsCommandTest extends TestCase
         $display = self::normalized($tester->getDisplay());
         self::assertStringContainsString('2 payment(s) flagged as fraud suspected', $display);
         self::assertStringContainsString(
-            'The report stopped at the limit of 2 payment(s) and didn\'t query the gateway(s) "quickpay_mobilepay", "quickpay_viabill". Raise --limit to see more.',
+            'The report stopped at the limit of 2 payment(s) and didn\'t query the gateway(s) "quickpay_mobilepay", "quickpay_viabill", "quickpay_anyday". Raise --limit to see more.',
             $display,
         );
     }
 
     /**
+     * Its api key can't be read, so nothing says which account it belongs to: its payments may be missing from the report
+     *
      * @test
      */
     public function it_reports_a_gateway_with_an_unusable_gateway_configuration_in_the_fraud_report(): void
     {
         $unusable = GatewayConfigurations::encrypted('quickpay_credit_card');
         $usable = GatewayConfigurations::of(gatewayName: 'quickpay_mobilepay');
-        $this->gatewayConfigurationProvider->all()->willReturn([$unusable, $usable]);
-        $this->clientProvider->forGatewayConfiguration($unusable)->willThrow(UnusableGatewayConfiguration::unreadable('quickpay_credit_card'));
+        $this->configureGateways($unusable, $usable);
+        $this->clientProvider->forGatewayConfiguration($unusable)->shouldNotBeCalled();
         $this->clientProvider->forGatewayConfiguration($usable)->willReturn(self::clientAnswering())->shouldBeCalledOnce();
 
         $tester = $this->executeCommand(['--fraud-suspected' => true]);
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         $display = self::normalized($tester->getDisplay());
-        self::assertStringContainsString('Gateway "quickpay_credit_card": The gateway configuration of the Quickpay gateway "quickpay_credit_card" reads as empty', $display);
+        self::assertStringContainsString('Gateway(s) "quickpay_credit_card": The gateway configuration of the Quickpay gateway "quickpay_credit_card" reads as empty', $display);
         // The other gateway is still queried
         self::assertStringContainsString('no fraud suspected payments', $display);
+    }
+
+    /**
+     * Reaching the limit isn't a failure, but a gateway the report could never have queried is
+     *
+     * @test
+     */
+    public function it_reports_a_gateway_with_an_unusable_gateway_configuration_whatever_the_limit(): void
+    {
+        $usable = GatewayConfigurations::of(gatewayName: 'quickpay_mobilepay');
+        $this->configureGateways($usable, GatewayConfigurations::encrypted('quickpay_credit_card'));
+        $this->clientProvider->forGatewayConfiguration($usable)->willReturn(self::clientAnswering('qp_000000123'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true, '--limit' => '1']);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        $display = self::normalized($tester->getDisplay());
+        self::assertStringContainsString('Gateway(s) "quickpay_credit_card": The gateway configuration of the Quickpay gateway "quickpay_credit_card" reads as empty', $display);
+        self::assertStringContainsString('The report stopped at the limit of 1 payment(s) and may be incomplete.', $display);
     }
 
     /**
@@ -171,8 +220,8 @@ final class ReconcilePaymentsCommandTest extends TestCase
     public function it_reports_a_gateway_quickpay_fails_to_answer_and_still_queries_the_others(): void
     {
         $failing = GatewayConfigurations::of(gatewayName: 'quickpay_credit_card');
-        $answering = GatewayConfigurations::of(gatewayName: 'quickpay_mobilepay');
-        $this->gatewayConfigurationProvider->all()->willReturn([$failing, $answering]);
+        $answering = GatewayConfigurations::of(self::withApiKey('another-api-key'), 'quickpay_mobilepay');
+        $this->configureGateways($failing, $answering);
         $this->clientProvider->forGatewayConfiguration($failing)->willReturn(self::client(new MockResponse('{"message": "boom"}', [
             'http_code' => 500,
             'response_headers' => ['Content-Type' => 'application/json'],
@@ -183,7 +232,7 @@ final class ReconcilePaymentsCommandTest extends TestCase
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         $display = self::normalized($tester->getDisplay());
-        self::assertStringContainsString('Gateway "quickpay_credit_card":', $display);
+        self::assertStringContainsString('Gateway(s) "quickpay_credit_card":', $display);
         self::assertStringContainsString('quickpay_mobilepay 501 qp_000000123', $display);
     }
 
@@ -214,6 +263,19 @@ final class ReconcilePaymentsCommandTest extends TestCase
     private static function client(MockResponse $response): ClientInterface
     {
         return new Client('the-api-key', new Psr18Client(new MockHttpClient($response, 'https://api.quickpay.net')));
+    }
+
+    private function configureGateways(GatewayConfiguration ...$gatewayConfigurations): void
+    {
+        $this->gatewayConfigurationProvider->accounts()->willReturn(QuickpayAccounts::of(array_values($gatewayConfigurations)));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function withApiKey(string $apiKey): array
+    {
+        return ['api_key' => $apiKey] + GatewayConfigurations::USABLE;
     }
 
     private static function normalized(string $display): string

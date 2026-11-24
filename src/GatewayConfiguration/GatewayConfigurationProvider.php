@@ -34,6 +34,11 @@ final class GatewayConfigurationProvider implements GatewayConfigurationProvider
         return $configurations;
     }
 
+    public function accounts(): QuickpayAccounts
+    {
+        return QuickpayAccounts::of($this->all());
+    }
+
     /**
      * Looked up the way Payum finds the gateway it builds for a gateway name: among the stored gateway configs
      */
