@@ -764,6 +764,30 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
     }
 
     /**
+     * Quickpay lists an account's payments together, so the payment methods of one account (card and MobilePay on one
+     * api key, the usual setup) are queried once, and each flagged payment is reported once, under both
+     *
+     * @test
+     */
+    public function the_fraud_report_queries_each_quickpay_account_once(): void
+    {
+        self::bootKernel();
+
+        $this->createPaymentMethod('quickpay_credit_card', ['api_key' => 'the-dk-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->createPaymentMethod('quickpay_mobilepay', ['api_key' => 'the-dk-api-key', 'private_key' => self::PRIVATE_KEY]);
+        $this->quickpay()->respond('GET', '/payments', self::fraudSuspectedQuickpayPayments('000000001'));
+
+        $tester = $this->executeCommand(['--fraud-suspected' => true]);
+
+        $tester->assertCommandIsSuccessful();
+        $display = self::normalized($tester->getDisplay());
+        self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
+        self::assertSame(1, substr_count($display, 'qp_000000001'));
+        self::assertMatchesRegularExpression('/quickpay_(credit_card|mobilepay), quickpay_(credit_card|mobilepay) 501 qp_000000001/', $display);
+        self::assertStringContainsString('1 payment(s) flagged as fraud suspected', $display);
+    }
+
+    /**
      * `--limit` is the number of payments reported across gateways: once the report holds that many, the gateways
      * after it go unqueried, and the report says so
      *
@@ -818,7 +842,7 @@ final class ReconcilePaymentsCommandTest extends FunctionalTestCase
 
         self::assertSame(Command::FAILURE, $tester->getStatusCode());
         $display = (string) preg_replace('/\s+/', ' ', $tester->getDisplay());
-        self::assertStringContainsString('Gateway "quickpay_se": The gateway configuration of the Quickpay gateway "quickpay_se" is invalid: The "branding_id" option', $display);
+        self::assertStringContainsString('Gateway(s) "quickpay_se": The gateway configuration of the Quickpay gateway "quickpay_se" is invalid: The "branding_id" option', $display);
         self::assertStringContainsString('quickpay_dk 501 qp_000000001', $display);
         self::assertSame(['GET /payments'], $this->quickpay()->sentRequests());
         self::assertSame(['Authorization: Basic ' . base64_encode(':the-dk-api-key')], self::authorizationOf($this->quickpay()->sentRequestOptions()[0]));

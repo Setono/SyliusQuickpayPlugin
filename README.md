@@ -290,16 +290,19 @@ Quickpay flags payments it suspects of fraud, and the plugin surfaces that in th
   and fails open: an unreachable Quickpay, or an unusable gateway configuration, never blocks the payment flow. It costs one extra API call per
   automatic capture, which is why it is off by default.
 - A **report mode** on the reconciliation command that asks Quickpay for every payment flagged in the period,
-  whatever the state of its Sylius payment — report only, nothing is transitioned. A gateway it can't query, because Quickpay
-  fails or its gateway configuration is unusable, is reported by name and makes the run exit non-zero:
+  whatever the state of its Sylius payment — report only, nothing is transitioned. It asks each Quickpay account once:
+  payment methods sharing an api key (card and MobilePay, say) share an account, whose payments Quickpay lists
+  together, so each row names the account's gateways and each payment is reported once. A gateway it can't query,
+  because Quickpay fails or its gateway configuration is unusable, is reported by name and makes the run exit
+  non-zero:
 
 ```bash
 bin/console setono:sylius-quickpay:reconcile-payments --fraud-suspected --since="7 days"
 ```
 
 `--since` (default `7 days`) is the period the payments were created in. Without `--limit`, every flagged payment is
-reported; `--limit` caps the payments reported across all gateways. A report that reaches it says so and names the
-gateways it didn't query; raise `--limit` to see the rest.
+reported; `--limit` caps the payments reported across all accounts. A report that reaches it says so and names the
+gateways of the accounts it didn't query; raise `--limit` to see the rest.
 
 ## Callbacks
 

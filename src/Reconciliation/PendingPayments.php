@@ -12,9 +12,7 @@ use Setono\Doctrine\ORMTrait;
 use Setono\Payum\Quickpay\QuickpayGatewayFactory;
 use Setono\Quickpay\Exception\QuickpayException;
 use Setono\Quickpay\Request\Payment\PaymentsQuery;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\GatewayConfiguration\GatewayConfigurationProviderInterface;
-use Setono\SyliusQuickpayPlugin\GatewayConfiguration\UnusableGatewayConfiguration;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayClientProviderInterface;
 use Setono\SyliusQuickpayPlugin\Quickpay\QuickpayPaymentIdProviderInterface;
 use Sylius\Component\Core\Model\PaymentInterface;
@@ -104,20 +102,16 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
         $failures = [];
 
         // A Quickpay account is a distinct api key, however many gateways share it
-        $accounts = [];
-        foreach ($this->gatewayConfigurationProvider->all() as $gatewayConfiguration) {
-            try {
-                $accounts[$gatewayConfiguration->options()->apiKey][] = $gatewayConfiguration;
-            } catch (UnusableGatewayConfiguration $e) {
-                $failures[] = new ListingFailure([$gatewayConfiguration->gatewayName], $e->getMessage());
-            }
+        $accounts = $this->gatewayConfigurationProvider->accounts();
+        foreach ($accounts->unusable as $unusable) {
+            $failures[] = new ListingFailure([$unusable->gatewayName], $unusable->getMessage());
         }
 
         $changed = [];
         $windows = [];
         $listed = [];
-        foreach ($accounts as $apiKey => $gatewayConfigurations) {
-            $accountKey = self::accountKey((string) $apiKey);
+        foreach ($accounts->accounts as $account) {
+            $accountKey = $account->key;
             $watermark = $watermarks[$accountKey] ?? null;
             $reason = match (true) {
                 $full => WindowReason::Full,
@@ -127,7 +121,7 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
             };
 
             $window = new AccountWindow(
-                array_map(static fn (GatewayConfiguration $gatewayConfiguration): string => $gatewayConfiguration->gatewayName, $gatewayConfigurations),
+                $account->gatewayNames(),
                 WindowReason::SinceLastRun === $reason && null !== $watermark ? $watermark : $lookbackFrom,
                 $reason,
             );
@@ -136,7 +130,7 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
             try {
                 // Every payment Quickpay changed since then, however long ago it was created. Quickpay can't sort them
                 // by when they changed, so they are listed by id, which pages steadily while payments change
-                $payments = $this->clientProvider->forGatewayConfiguration($gatewayConfigurations[0])->payments();
+                $payments = $this->clientProvider->forGatewayConfiguration($account->gatewayConfiguration())->payments();
                 $query = new PaymentsQuery(
                     minTime: $window->changedSince,
                     sortBy: 'id',
@@ -161,7 +155,8 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
                 }
 
                 $listed[] = $accountKey;
-            } catch (UnusableGatewayConfiguration|QuickpayException $e) {
+            } catch (QuickpayException $e) {
+                // An account's gateway configurations are usable, so a client is built; only Quickpay can fail
                 $failures[] = new ListingFailure($window->gatewayNames, $e->getMessage());
             }
         }
@@ -224,14 +219,6 @@ final class PendingPayments implements PendingPaymentsInterface, LoggerAwareInte
                 $e->getMessage(),
             ), ['exception' => $e]);
         }
-    }
-
-    /**
-     * The key of an account's watermark in the run's state: derived from its api key, which is never stored
-     */
-    private static function accountKey(string $apiKey): string
-    {
-        return substr(hash('sha256', $apiKey), 0, 32);
     }
 
     /**
