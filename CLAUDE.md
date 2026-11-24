@@ -251,6 +251,14 @@ module's lookups can't do.
   `all()`, `forGatewayName()` (looked up by name among the stored configs, as Payum's dynamic registry does),
   `forPaymentMethod()` and `forPayment()` (through its method). A lookup answers null for a missing or non-Quickpay
   configuration. Listing and lookup never throw for an unusable configuration.
+- **Quickpay accounts** (`GLOSSARY.md`): `accounts(): QuickpayAccounts` groups `all()` by api key, the one place that
+  rule lives (`QuickpayAccounts::of()`, which a caller's unit test uses to build what its doubled provider returns).
+  `QuickpayAccounts` holds `accounts` (a `QuickpayAccount` per distinct api key, in the order its first gateway
+  configuration comes: `key`, the first 32 hex digits of the api key's sha256 via `QuickpayAccount::keyOf()`, never the
+  api key itself; `gatewayConfigurations`; `gatewayConfiguration()`, the first, to reach the account with;
+  `gatewayNames()`) and `unusable` (an `UnusableGatewayConfiguration` per configuration whose api key can't be read, so
+  it belongs to no known account). Whatever lists Quickpay payments (`GET /payments` is account-wide) asks each account
+  once: the pending payments module and the fraud report.
 - **`GatewayConfiguration`** (value; `fromGatewayConfig()` for the entity, `fromConfig($config)` for a bare stored
   array such as the admin form's `config` field, which has no gateway name): `gatewayName`; `options(): GatewayOptions`
   (the library's typed, normalized options); `captureMode(): CaptureMode` (`OnCompletion`/`Immediately`, the
@@ -286,8 +294,8 @@ module's lookups can't do.
   `PaymentMethodLogoProvider` (`forPaymentMethod()`; unusable → no logos and a warning log), the client provider's
   `quickpayPaymentOf()` (`forPayment()`; none → null, unusable → throws) and through it `FraudChecker` (null → no
   fraud, unusable → fails open with a warning log) and `PaymentOperationsAction` (null → 404, unusable → the inline
-  error, 502, and a warning log), and the reconcile command's fraud report (`all()`;
-  unusable → a warning naming the gateway and a non-zero exit, the other gateways are still queried). The gateway
+  error, 502, and a warning log), and the reconcile command's fraud report (`accounts()`;
+  unusable → a warning naming the gateway and a non-zero exit, the accounts are still queried). The gateway
   factory builder's `quickpay.client` closure reads each gateway's own config through `fromConfig()` and the client
   provider (*Quickpay client and HTTP policy* below), so building the gateway of an unusable configuration throws
   `UnusableGatewayConfiguration` (not payum-quickpay's `InvalidGatewayOptions`, a Payum `ExceptionInterface`; the
@@ -519,8 +527,8 @@ windows and listing happen in `start()`; matching runs lazily as the run is iter
   ending the run unfinished), and released by `finish()` or `release()`, or by `start()` itself when it throws. A
   release error is logged as a warning, never thrown: the lock expires with its TTL. A dry run takes no lock, so it
   runs alongside a run that writes.
-- **Accounts and windows.** An account is a distinct api key among the module's `all()`; an unusable configuration is
-  a `ListingFailure` before any request. Each account gets an `AccountWindow` (`gatewayNames`, `changedSince`,
+- **Accounts and windows.** The accounts are the module's `accounts()`; each unusable configuration is a
+  `ListingFailure` before any request, and an account's watermark is kept under its `key`. Each account gets an `AccountWindow` (`gatewayNames`, `changedSince`,
   `reason`, a `WindowReason`): its watermark (`SinceLastRun`), or `$lookbackFrom` when there is none (`NoEarlierRun`),
   it is older than `$lookbackFrom` (`LastRunTooLongAgo`, clamped) or `$full` is set (`Full`).
 - **Listing.** Per account, on `forGatewayConfiguration()` of its first gateway configuration, page after page
@@ -721,12 +729,16 @@ passed to the processor as container parameters). An opt-in `fraud.block_capture
 `metadata.fraud_suspected`; null → no fraud, and it fails open, with a warning log, on any error, an unusable gateway
 configuration included) before the automatic capture and skip it with a warning when fraud is suspected — the
 transition itself proceeds. The operation-history admin panel shows a fraud badge from the same metadata, and the
-reconcile command has a `--fraud-suspected` report mode that queries each configured gateway's account directly
-(`PaymentsQuery`, one per gateway configuration from the module's `all()`, on the client provider's
-`forGatewayConfiguration()`), transitioning nothing; a gateway that can't be queried, an unusable gateway
-configuration included, prints a warning naming it and fails the run. Without `--limit` it reports every flagged
-payment; `--limit` caps the payments reported across gateways: once reached, the gateways after it aren't queried, and
-the report says it stopped and names them (or says it may be incomplete); reaching the limit doesn't fail the run.
+reconcile command has a `--fraud-suspected` report mode that queries each Quickpay account directly
+(`PaymentsQuery`, one per account from the module's `accounts()`, on the client provider's `forGatewayConfiguration()`
+of the account's `gatewayConfiguration()`), transitioning nothing. Quickpay lists an account's payments together and
+can't say which payment method took one, so each row is labelled with the account's gateway names (column
+`Gateways`), and a payment is reported once however many gateways share the api key. An unusable gateway
+configuration (printed first, whatever the limit) and an account that can't be queried each print a warning naming
+the gateway(s) (`Gateway(s) "…": <message>`) and fail the run. Without `--limit` it reports every flagged payment;
+`--limit` caps the payments reported across accounts: once reached, the accounts after it aren't queried, and the
+report says it stopped and names their gateways (or says it may be incomplete); reaching the limit doesn't fail the
+run.
 
 ### Payment link (admin)
 `PaymentLink/PaymentLinkProvider` returns Sylius' `sylius_shop_order_pay` url (built for the order's channel

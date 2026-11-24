@@ -48,6 +48,10 @@ _Avoid_: failed payment, rejected payment
 The settings a Quickpay gateway is built from (api key, private key, order prefix, ...), stored with a payment method and edited in the admin.
 _Avoid_: gateway config, payment method settings, credentials
 
+**Quickpay account**:
+The merchant's account at Quickpay that an api key belongs to. The gateway configurations sharing an api key share one Quickpay account, and Quickpay lists their payments together, whichever payment method took them.
+_Avoid_: merchant, shop, api key (what identifies it)
+
 **Gateway option**:
 One named setting of a gateway configuration, such as the order prefix.
 _Avoid_: config key, parameter

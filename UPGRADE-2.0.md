@@ -744,6 +744,11 @@ The service definitions changed accordingly; only a redefinition or decoration o
   `Diagnosis\FindingOutcome`. `diagnose(GatewayConfiguration $gatewayConfiguration, bool $live = false): list<Finding>`
   finds out what the doctor and save validation both check about a gateway configuration, in the order the checks
   depend on each other; the doctor prints the findings, and save validation refuses a configuration with a failed one.
+- **`GatewayConfigurationProviderInterface::accounts(): QuickpayAccounts`**, the Quickpay accounts of the stored gateway
+  configurations: the configurations sharing an api key are one account (`GatewayConfiguration\QuickpayAccount`: its
+  `key`, derived from the api key, its `gatewayConfigurations` and `gatewayNames()`), and the unusable ones, whose api
+  key can't be read, are returned apart. A class of your own implementing the interface needs the method; return
+  `QuickpayAccounts::of($this->all())`.
 
 ### Changed constructors
 
@@ -790,3 +795,10 @@ The service definitions changed accordingly; only a redefinition or decoration o
   finding's `kind`, plus `option` for a rejected option. The messages read `Refused the gateway configuration of the
   Quickpay gateway "<name>": …` or `A warning about the gateway configuration of the Quickpay gateway "<name>": …`.
   What is refused, and the admin's messages, are unchanged.
+- **The fraud report asks each Quickpay account once.** It queried Quickpay once per gateway configuration, but
+  Quickpay lists an account's payments together, so payment methods sharing an api key (card and MobilePay, the usual
+  setup) reported every flagged payment once per payment method, each copy under another gateway's name, and
+  `--limit` counted the copies. Now each payment is reported once, and the table's `Gateway` column is `Gateways`,
+  listing the account's gateway names (Quickpay can't say which payment method took a payment). The warning for a
+  gateway it can't query reads `Gateway(s) "…": …`, naming every gateway of the account, and an unusable gateway
+  configuration is reported before the accounts are queried, also when `--limit` is reached; it still fails the run.
